@@ -1,0 +1,5 @@
+# Runtime dependencies for the OpenATC helper (Windows sim PC).
+aiohttp>=3.9,<4
+cryptography>=42
+# SimConnect wrapper (bundles SimConnect.dll). Only needed on Windows.
+SimConnect==0.4.26; sys_platform == "win32"

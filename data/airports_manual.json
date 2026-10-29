@@ -1,0 +1,89 @@
+{
+  "_comment": "Manual airports. Entries here override or add to OurAirports. Copy this file to userdata/airports_manual.json for your own entries (that file is not overwritten by updates). XDEP/XARR are FICTIONAL demo airports for the mock aircraft.",
+  "airports": {
+    "XDEP": {
+      "name": "OpenATC Demo Departure",
+      "municipality": "Demo City",
+      "country": "XX",
+      "lat": 10.0,
+      "lon": 150.0,
+      "elevation_ft": 120,
+      "runways": [
+        {
+          "le_ident": "09",
+          "he_ident": "27",
+          "length_ft": 10000,
+          "surface": "ASP",
+          "le_lat": 10.0,
+          "le_lon": 149.986083,
+          "le_heading": 90,
+          "he_lat": 10.0,
+          "he_lon": 150.013917,
+          "he_heading": 270
+        },
+        {
+          "le_ident": "36",
+          "he_ident": "18",
+          "length_ft": 7000,
+          "surface": "ASP",
+          "le_lat": 10.000406,
+          "le_lon": 150.02,
+          "le_heading": 0,
+          "he_lat": 10.019594,
+          "he_lon": 150.02,
+          "he_heading": 180
+        }
+      ],
+      "frequencies": {
+        "ATIS": "127.850",
+        "DEL": "121.650",
+        "GND": "121.900",
+        "TWR": "118.700",
+        "DEP": "124.350",
+        "APP": "119.250"
+      },
+      "names": {
+        "DEL": "Demo Delivery",
+        "GND": "Demo Ground",
+        "TWR": "Demo Tower",
+        "DEP": "Demo Departure",
+        "APP": "Demo Approach"
+      }
+    },
+    "XARR": {
+      "name": "OpenATC Demo Arrival",
+      "municipality": "Harbour Town",
+      "country": "XX",
+      "lat": 11.5,
+      "lon": 151.5,
+      "elevation_ft": 40,
+      "runways": [
+        {
+          "le_ident": "04",
+          "he_ident": "22",
+          "length_ft": 9000,
+          "surface": "ASP",
+          "le_lat": 11.490551,
+          "le_lon": 151.491909,
+          "le_heading": 40,
+          "he_lat": 11.509449,
+          "he_lon": 151.508092,
+          "he_heading": 220
+        }
+      ],
+      "frequencies": {
+        "ATIS": "128.650",
+        "GND": "121.750",
+        "TWR": "118.300",
+        "APP": "120.800",
+        "CTR": "132.600"
+      },
+      "names": {
+        "GND": "Harbour Ground",
+        "TWR": "Harbour Tower",
+        "APP": "Harbour Approach",
+        "CTR": "Oceanic Control"
+      }
+    }
+  }
+}

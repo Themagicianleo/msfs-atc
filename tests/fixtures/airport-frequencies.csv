@@ -1,0 +1,8 @@
+"id","airport_ref","airport_ident","type","description","frequency_mhz"
+1,1,"TSTA","TWR","ALPHA TWR",118.7
+2,1,"TSTA","GND","ALPHA GND",121.9
+3,1,"TSTA","CLD","ALPHA DEL",121.975
+4,1,"TSTA","APP","ALPHA APP",119.725
+5,1,"TSTA","ATIS","ATIS",128.075
+6,2,"TSTB","A/G","BRAVO RADIO",122.8
+7,2,"TSTB","MISC","Bravo Radar",125.25
