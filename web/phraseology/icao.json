@@ -1,0 +1,125 @@
+{
+  "id": "icao",
+  "name": "ICAO generic",
+  "about": "Generic ICAO-style (Doc 4444 / Doc 9432 flavour) phraseology for simulation. Edit freely. {placeholders} are filled in by OpenATC; a part in [square brackets] is left out when any placeholder inside it has no value. To customise without losing changes on update, copy this file to userdata/phraseology/icao.json.",
+
+  "units": {
+    "altitude": "feet",
+    "transitionAltitudeFt": 5000,
+    "decimalWord": "decimal",
+    "metersWord": "meters"
+  },
+  "numberWords": { "0": "zero", "1": "one", "2": "two", "3": "three", "4": "four", "5": "five", "6": "six", "7": "seven", "8": "eight", "9": "niner" },
+
+  "unitNames": { "DEL": "Delivery", "GND": "Ground", "TWR": "Tower", "DEP": "Departure", "APP": "Approach", "CTR": "Control" },
+
+  "defaults": {
+    "initialClimbFt": 5000,
+    "departureClimbFt": 15000,
+    "descentFt": 10000,
+    "approachAltFt": 3000,
+    "towerFrequency": "118.100",
+    "centerFrequency": "127.500",
+    "squawkMin": 2001,
+    "squawkMax": 6777,
+    "goodDay": "good day"
+  },
+
+  "atc": {
+    "clearance": "{callsign}, {unit}, cleared to {arrival}[ via {sid} departure], flight planned route, runway {runway}, climb {initial_alt}, squawk {squawk}.",
+    "readback_correct_next": "{callsign}, readback correct. When ready, contact {next_unit} on {next_freq}.",
+    "readback_wrong": "{callsign}, negative. I say again: {items}.",
+    "readback_required": "{callsign}, read back {items}.",
+    "pushback": "{callsign}, push and start approved[, facing {facing}].",
+    "taxi": "{callsign}, taxi to holding point runway {runway}[ via {taxi_route}][, QNH {qnh}][, squawk {squawk_check}].",
+    "taxi_handoff": "{callsign}, contact {next_unit} on {next_freq}.",
+    "takeoff": "{callsign}, [wind {wind}, ]runway {runway}, cleared for take-off.",
+    "departure_handoff": "{callsign}, contact {next_unit} on {next_freq}, {good_day}.",
+    "radar_contact": "{callsign}, {unit}, radar contact, climb {level}.",
+    "climb_handoff": "{callsign}, contact {next_unit} on {next_freq}.",
+    "center_climb": "{callsign}, {unit}, identified, climb {level}.",
+    "center_maintain": "{callsign}, {unit}, identified, maintain {level}.",
+    "descent": "{callsign}, descend {level}[, {star} arrival][, expect {approach} approach runway {runway}].",
+    "approach_handoff": "{callsign}, contact {next_unit} on {next_freq}.",
+    "approach_checkin": "{callsign}, {unit}, [information {atis} is current, ]descend altitude {level}[, QNH {qnh}], expect {approach} approach runway {runway}.",
+    "approach_clearance": "{callsign}, cleared {approach} approach runway {runway}, report established.",
+    "final_handoff": "{callsign}, contact {next_unit} on {next_freq}.",
+    "landing": "{callsign}, [wind {wind}, ]runway {runway}, cleared to land.",
+    "vacate": "{callsign}, vacate when able, contact {next_unit} on {next_freq}.",
+    "taxi_in": "{callsign}, taxi to [stand {stand}|the apron][ via {taxi_route}].",
+    "go_around": "{callsign}, roger, climb {level}, contact {next_unit} on {next_freq}.",
+    "go_around_app": "{callsign}, roger, climb {level}, expect vectors for another approach.",
+    "wrong_unit": "{callsign}, {unit}, contact {next_unit} on {next_freq}.",
+    "radio_check": "{callsign}, {unit}, readability five.",
+    "say_again": "{callsign}, say again.",
+    "standby": "{callsign}, standby.",
+    "contact_now": "{callsign}, contact {next_unit} on {next_freq} now.",
+    "check_squawk": "{callsign}, check squawk {squawk}."
+  },
+
+  "pilot": {
+    "request_clearance": "{unit}, {callsign}, [information {atis}, ]request IFR clearance to {arrival}.",
+    "request_pushback": "{unit}, {callsign}, [stand {stand}, ]request push and start.",
+    "request_taxi": "{unit}, {callsign}, request taxi.",
+    "ready_ground": "{unit}, {callsign}, holding point runway {runway}.",
+    "ready_departure": "{unit}, {callsign}, holding point runway {runway}, ready for departure.",
+    "checkin_climbing": "{unit}, {callsign}, [passing {altitude}, ]climbing {cleared}.",
+    "checkin_level": "{unit}, {callsign}, [maintaining {altitude}|with you].",
+    "checkin_descending": "{unit}, {callsign}, [passing {altitude}, ]descending {cleared}[, information {atis}].",
+    "request_descent": "{unit}, {callsign}, request descent.",
+    "report_established": "{unit}, {callsign}, established {approach} runway {runway}.",
+    "checkin_tower": "{unit}, {callsign}, {approach} runway {runway}.",
+    "runway_vacated": "{unit}, {callsign}, runway vacated, request taxi[ to stand {stand}].",
+    "go_around": "{unit}, {callsign}, going around.",
+    "radio_check": "{unit}, {callsign}, radio check {freq}.",
+    "say_again": "{unit}, {callsign}, say again."
+  },
+
+  "readback": {
+    "clearance": "Cleared to {arrival}[ via {sid} departure], runway {runway}, climb {initial_alt}, squawk {squawk}, {callsign}.",
+    "pushback": "Push and start approved, {callsign}.",
+    "taxi": "Taxi to holding point runway {runway}[ via {taxi_route}][, QNH {qnh}], {callsign}.",
+    "contact": "{next_freq}, {callsign}.",
+    "takeoff": "Runway {runway}, cleared for take-off, {callsign}.",
+    "climb": "Climb {level}, {callsign}.",
+    "maintain": "Maintain {level}, {callsign}.",
+    "descent": "Descend {level}, {callsign}.",
+    "approach_descent": "Descend {level}[, QNH {qnh}], expect {approach} runway {runway}, {callsign}.",
+    "approach_clearance": "Cleared {approach} approach runway {runway}, {callsign}.",
+    "landing": "Runway {runway}, cleared to land, {callsign}.",
+    "taxi_in": "Taxi to [stand {stand}|the apron], {callsign}.",
+    "go_around": "Climb {level}, {next_freq}, {callsign}.",
+    "go_around_app": "Climb {level}, {callsign}."
+  },
+
+  "buttons": {
+    "readback": "Read back",
+    "request_clearance": "Request IFR clearance",
+    "request_pushback": "Request push & start",
+    "request_taxi": "Request taxi",
+    "ready_ground": "At holding point",
+    "ready_departure": "Ready for departure",
+    "checkin": "Check in",
+    "request_descent": "Request descent",
+    "report_established": "Report established",
+    "checkin_tower": "Call tower",
+    "runway_vacated": "Runway vacated",
+    "go_around": "Going around",
+    "radio_check": "Radio check",
+    "say_again": "Say again"
+  },
+
+  "intents": [
+    { "intent": "say_again", "patterns": ["say again", "repeat", "did not copy", "didn t copy"] },
+    { "intent": "radio_check", "patterns": ["radio check", "how do you read"] },
+    { "intent": "go_around", "patterns": ["go(ing)? around", "missed approach"] },
+    { "intent": "request_clearance", "patterns": ["clearance", "request ifr", "ifr to"] },
+    { "intent": "request_pushback", "patterns": ["push", "start ?up"] },
+    { "intent": "runway_vacated", "patterns": ["vacated", "clear of (the )?runway"] },
+    { "intent": "request_taxi", "patterns": ["request taxi", "taxi"] },
+    { "intent": "ready_departure", "patterns": ["ready", "holding point", "holding short", "lined up"] },
+    { "intent": "request_descent", "patterns": ["request (descent|lower)", "ready for descent"] },
+    { "intent": "report_established", "patterns": ["established", "localizer", "on final", "final"] },
+    { "intent": "check_in", "patterns": ["passing", "climbing", "descending", "maintaining", "level", "with you", "checking in", "information [a-z]", "\\b(ils|rnav|rnp|visual|vor)\\b", "\\d{3,5}"] }
+  ]
+}

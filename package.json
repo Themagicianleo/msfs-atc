@@ -1,0 +1,9 @@
+{
+  "name": "openatc-web",
+  "private": true,
+  "type": "module",
+  "description": "Tests for the OpenATC web app (no build step, no runtime dependencies).",
+  "scripts": {
+    "test": "node --test web/tests/*.test.mjs"
+  }
+}

@@ -1,0 +1,78 @@
+{
+ "icao": "XARR",
+ "ident": "XARR",
+ "name": "OpenATC Demo Arrival",
+ "municipality": "Harbour Town",
+ "country": "XX",
+ "type": "manual",
+ "lat": 11.5,
+ "lon": 151.5,
+ "elevation_ft": 40,
+ "runways": [
+  {
+   "ident": "04",
+   "opposite": "22",
+   "heading": 40,
+   "heading_source": "true",
+   "length_ft": 9000,
+   "surface": "ASP",
+   "closed": false,
+   "lat": 11.490551,
+   "lon": 151.491909,
+   "elevation_ft": null,
+   "displaced_ft": null
+  },
+  {
+   "ident": "22",
+   "opposite": "04",
+   "heading": 220,
+   "heading_source": "true",
+   "length_ft": 9000,
+   "surface": "ASP",
+   "closed": false,
+   "lat": 11.509449,
+   "lon": 151.508092,
+   "elevation_ft": null,
+   "displaced_ft": null
+  }
+ ],
+ "frequencies": {
+  "ATIS": [
+   {
+    "mhz": "128.650",
+    "description": "manual"
+   }
+  ],
+  "GND": [
+   {
+    "mhz": "121.750",
+    "description": "manual"
+   }
+  ],
+  "TWR": [
+   {
+    "mhz": "118.300",
+    "description": "manual"
+   }
+  ],
+  "APP": [
+   {
+    "mhz": "120.800",
+    "description": "manual"
+   }
+  ],
+  "CTR": [
+   {
+    "mhz": "132.600",
+    "description": "manual"
+   }
+  ]
+ },
+ "names": {
+  "GND": "Harbour Ground",
+  "TWR": "Harbour Tower",
+  "APP": "Harbour Approach",
+  "CTR": "Oceanic Control"
+ },
+ "source": "manual"
+}

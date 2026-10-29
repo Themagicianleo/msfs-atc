@@ -1,0 +1,111 @@
+{
+ "icao": "XDEP",
+ "ident": "XDEP",
+ "name": "OpenATC Demo Departure",
+ "municipality": "Demo City",
+ "country": "XX",
+ "type": "manual",
+ "lat": 10.0,
+ "lon": 150.0,
+ "elevation_ft": 120,
+ "runways": [
+  {
+   "ident": "09",
+   "opposite": "27",
+   "heading": 90,
+   "heading_source": "true",
+   "length_ft": 10000,
+   "surface": "ASP",
+   "closed": false,
+   "lat": 10.0,
+   "lon": 149.986083,
+   "elevation_ft": null,
+   "displaced_ft": null
+  },
+  {
+   "ident": "27",
+   "opposite": "09",
+   "heading": 270,
+   "heading_source": "true",
+   "length_ft": 10000,
+   "surface": "ASP",
+   "closed": false,
+   "lat": 10.0,
+   "lon": 150.013917,
+   "elevation_ft": null,
+   "displaced_ft": null
+  },
+  {
+   "ident": "36",
+   "opposite": "18",
+   "heading": 0,
+   "heading_source": "true",
+   "length_ft": 7000,
+   "surface": "ASP",
+   "closed": false,
+   "lat": 10.000406,
+   "lon": 150.02,
+   "elevation_ft": null,
+   "displaced_ft": null
+  },
+  {
+   "ident": "18",
+   "opposite": "36",
+   "heading": 180,
+   "heading_source": "true",
+   "length_ft": 7000,
+   "surface": "ASP",
+   "closed": false,
+   "lat": 10.019594,
+   "lon": 150.02,
+   "elevation_ft": null,
+   "displaced_ft": null
+  }
+ ],
+ "frequencies": {
+  "ATIS": [
+   {
+    "mhz": "127.850",
+    "description": "manual"
+   }
+  ],
+  "DEL": [
+   {
+    "mhz": "121.650",
+    "description": "manual"
+   }
+  ],
+  "GND": [
+   {
+    "mhz": "121.900",
+    "description": "manual"
+   }
+  ],
+  "TWR": [
+   {
+    "mhz": "118.700",
+    "description": "manual"
+   }
+  ],
+  "DEP": [
+   {
+    "mhz": "124.350",
+    "description": "manual"
+   }
+  ],
+  "APP": [
+   {
+    "mhz": "119.250",
+    "description": "manual"
+   }
+  ]
+ },
+ "names": {
+  "DEL": "Demo Delivery",
+  "GND": "Demo Ground",
+  "TWR": "Demo Tower",
+  "DEP": "Demo Departure",
+  "APP": "Demo Approach"
+ },
+ "source": "manual"
+}

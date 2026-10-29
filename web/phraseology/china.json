@@ -1,0 +1,51 @@
+{
+  "id": "china",
+  "name": "China (CAAC style, metric)",
+  "extends": "icao",
+  "about": "English phraseology in CAAC style with metric altitudes and flight levels. Only the differences from icao.json are listed; anything missing is taken from icao.json. The metric flight level table follows the CAAC RVSM metric level scheme as remembered by the author: VERIFY it against the current CAAC AIP (ENR 1.7) before relying on it.",
+
+  "units": {
+    "altitude": "meters",
+    "transitionAltitudeFt": 9843,
+    "decimalWord": "decimal",
+    "metersWord": "meters"
+  },
+
+  "defaults": {
+    "initialClimbM": 900,
+    "departureClimbM": 6000,
+    "descentM": 3600,
+    "approachAltM": 900,
+    "centerFrequency": "128.500"
+  },
+
+  "metricLevels": [
+    { "m": 600, "fl": 20 }, { "m": 900, "fl": 30 }, { "m": 1200, "fl": 39 }, { "m": 1500, "fl": 49 },
+    { "m": 1800, "fl": 59 }, { "m": 2100, "fl": 69 }, { "m": 2400, "fl": 79 }, { "m": 2700, "fl": 89 },
+    { "m": 3000, "fl": 98 }, { "m": 3300, "fl": 108 }, { "m": 3600, "fl": 118 }, { "m": 3900, "fl": 128 },
+    { "m": 4200, "fl": 138 }, { "m": 4500, "fl": 148 }, { "m": 4800, "fl": 157 }, { "m": 5100, "fl": 167 },
+    { "m": 5400, "fl": 177 }, { "m": 5700, "fl": 187 }, { "m": 6000, "fl": 197 }, { "m": 6300, "fl": 207 },
+    { "m": 6600, "fl": 217 }, { "m": 6900, "fl": 226 }, { "m": 7200, "fl": 236 }, { "m": 7500, "fl": 246 },
+    { "m": 7800, "fl": 256 }, { "m": 8100, "fl": 266 }, { "m": 8400, "fl": 276 }, { "m": 8900, "fl": 291 },
+    { "m": 9200, "fl": 301 }, { "m": 9500, "fl": 311 }, { "m": 9800, "fl": 321 }, { "m": 10100, "fl": 331 },
+    { "m": 10400, "fl": 341 }, { "m": 10700, "fl": 351 }, { "m": 11000, "fl": 361 }, { "m": 11300, "fl": 371 },
+    { "m": 11600, "fl": 381 }, { "m": 11900, "fl": 391 }, { "m": 12200, "fl": 401 }, { "m": 12500, "fl": 411 },
+    { "m": 13100, "fl": 431 }, { "m": 13700, "fl": 451 }, { "m": 14300, "fl": 471 }, { "m": 14900, "fl": 491 }
+  ],
+
+  "atc": {
+    "clearance": "{callsign}, {unit}, cleared to {arrival} airport[, {sid} departure], flight planned route, runway {runway}, initial climb {initial_alt}, squawk {squawk}.",
+    "radar_contact": "{callsign}, {unit}, radar contact, climb to {level}.",
+    "center_climb": "{callsign}, {unit}, radar contact, climb to {level}.",
+    "center_maintain": "{callsign}, {unit}, radar contact, maintain {level}.",
+    "descent": "{callsign}, descend to {level}[, {star} arrival][, expect {approach} approach runway {runway}].",
+    "approach_checkin": "{callsign}, {unit}, radar contact, [information {atis} is current, ]descend to {level}[ on QNH {qnh}], expect {approach} approach runway {runway}."
+  },
+
+  "readback": {
+    "clearance": "Cleared to {arrival}[, {sid} departure], runway {runway}, initial climb {initial_alt}, squawk {squawk}, {callsign}.",
+    "climb": "Climb to {level}, {callsign}.",
+    "descent": "Descend to {level}, {callsign}.",
+    "approach_descent": "Descend to {level}[ on QNH {qnh}], expect {approach} runway {runway}, {callsign}."
+  }
+}

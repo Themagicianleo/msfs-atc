@@ -1,1 +1,207 @@
-<!doctype html><title>OpenATC</title>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0e12">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="OpenATC">
+  <title>OpenATC</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" href="icons/icon-512.png">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <!-- first tap: unlocks speech and audio (Safari needs a user gesture) -->
+  <div id="start" class="overlay">
+    <div class="overlay-box">
+      <h1>OpenATC</h1>
+      <p class="muted">Local ATC companion for MSFS. Simulation use only.</p>
+      <button id="start-btn" class="big primary">Tap to start</button>
+      <p class="small muted">The tap enables spoken ATC replies.</p>
+    </div>
+  </div>
+
+  <div id="pair" class="overlay hidden">
+    <form id="pair-form" class="overlay-box">
+      <h2>Pair this iPad</h2>
+      <p>Enter the 6-digit pairing code shown in the helper window on your PC.</p>
+      <input id="pair-code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="000000" aria-label="Pairing code">
+      <button class="big primary" type="submit">Pair</button>
+      <p id="pair-error" class="error" role="alert"></p>
+    </form>
+  </div>
+
+  <header class="topbar">
+    <div class="pills">
+      <span id="st-helper" class="pill bad" title="Connection to the helper on your PC">Helper</span>
+      <span id="st-sim" class="pill bad" title="Connection between the helper and the simulator">Sim</span>
+      <span id="st-com" class="pill">COM1 ---.---</span>
+      <span id="st-xpdr" class="pill">XPDR ----</span>
+      <span id="st-phase" class="pill phase">No flight</span>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="radio" role="tab">Radio</button>
+      <button class="tab" data-view="flight" role="tab">Flight plan</button>
+      <button class="tab" data-view="data" role="tab">Data</button>
+      <button class="tab" data-view="settings" role="tab">Settings</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- RADIO -->
+    <section id="view-radio" class="view active">
+      <div class="radio-grid">
+        <div class="col controls">
+          <div id="hint" class="card hint">
+            <div id="hint-tune" class="hint-tune hidden"></div>
+            <div id="hint-missed" class="hint-missed hidden"></div>
+            <div id="hint-squawk" class="hint-squawk hidden"></div>
+            <div class="hint-label">Say next</div>
+            <div id="hint-say" class="hint-say">Fill in the flight plan to start.</div>
+            <div id="hint-note" class="hint-note muted"></div>
+          </div>
+          <div id="actions" class="actions"></div>
+          <form id="type-form" class="type-row">
+            <input id="type-input" type="text" placeholder="Type a call, e.g. request taxi" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Type a radio call">
+            <button class="primary" type="submit">Send</button>
+          </form>
+          <div class="ptt-row">
+            <button id="ptt" class="ptt" type="button" aria-label="Push to talk">
+              <span id="ptt-label">Hold to talk</span>
+              <span id="ptt-interim" class="ptt-interim"></span>
+            </button>
+          </div>
+          <p id="voice-status" class="small muted"></p>
+          <button id="skip" class="ghost hidden" type="button">Skip ahead (no sim event)</button>
+        </div>
+        <div class="col">
+          <div id="log" class="log" aria-live="polite"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FLIGHT PLAN -->
+    <section id="view-flight" class="view">
+      <form id="fp-form" class="card form">
+        <h2>Flight plan</h2>
+        <div class="grid2">
+          <label>Callsign <input name="callsign" required placeholder="CCA1234" autocapitalize="characters"></label>
+          <label>Spoken callsign (optional) <input name="callsignSpoken" placeholder="Air China 1234"></label>
+          <label>Departure ICAO <input name="dep" required placeholder="ZBAA" autocapitalize="characters"></label>
+          <label>Arrival ICAO <input name="arr" required placeholder="ZSSS" autocapitalize="characters"></label>
+          <label>Cruise level <input name="cruise" required placeholder="FL350 or 10100m"></label>
+          <label>Initial climb (optional) <input name="initialClimb" placeholder="5000 / FL070 / 900m"></label>
+          <label>SID (optional) <input name="sid" placeholder="LAM3A" autocapitalize="characters"></label>
+          <label>STAR (optional) <input name="star" placeholder="ABC1D" autocapitalize="characters"></label>
+          <label>Approach
+            <select name="approach"><option>ILS</option><option>RNAV</option><option>RNP</option><option>VOR</option><option>VISUAL</option></select>
+          </label>
+          <label>Phraseology
+            <select name="region"><option value="icao">ICAO generic</option><option value="china">China (CAAC, metric)</option></select>
+          </label>
+        </div>
+        <label>Route <textarea name="route" rows="2" placeholder="Route text, for your reference"></textarea></label>
+        <details>
+          <summary>More: runways, stands, frequencies</summary>
+          <div class="grid2">
+            <label>Departure runway <input name="depRunway" placeholder="auto (wind)" autocapitalize="characters"></label>
+            <label>Arrival runway <input name="arrRunway" placeholder="auto (wind)" autocapitalize="characters"></label>
+            <label>Departure stand <input name="depStand" placeholder="A12" autocapitalize="characters"></label>
+            <label>Arrival stand <input name="arrStand" placeholder="B7" autocapitalize="characters"></label>
+            <label>Taxi out via <input name="taxiOut" placeholder="A, B2" autocapitalize="characters"></label>
+            <label>Taxi in via <input name="taxiIn" placeholder="C, D" autocapitalize="characters"></label>
+            <label>Transition alt. dep (ft) <input name="depTransitionFt" inputmode="numeric" placeholder="region default"></label>
+            <label>Transition alt. arr (ft) <input name="arrTransitionFt" inputmode="numeric" placeholder="region default"></label>
+            <label>En-route centre name <input name="centerName" placeholder="Beijing Control"></label>
+            <label>En-route centre freq <input name="f_CTR" inputmode="decimal" placeholder="128.500"></label>
+          </div>
+          <p class="small muted">Frequency overrides (MHz). Leave empty to use airport data.</p>
+          <div class="grid4">
+            <label>Delivery <input name="f_dep_DEL" inputmode="decimal"></label>
+            <label>Ground <input name="f_dep_GND" inputmode="decimal"></label>
+            <label>Tower <input name="f_dep_TWR" inputmode="decimal"></label>
+            <label>Departure <input name="f_dep_DEP" inputmode="decimal"></label>
+            <label>Approach <input name="f_arr_APP" inputmode="decimal"></label>
+            <label>Arr. tower <input name="f_arr_TWR" inputmode="decimal"></label>
+            <label>Arr. ground <input name="f_arr_GND" inputmode="decimal"></label>
+          </div>
+        </details>
+        <div class="row">
+          <button class="big primary" type="submit">Start flight</button>
+          <button id="fp-demo" class="ghost" type="button">Fill demo (XDEP to XARR)</button>
+        </div>
+        <p id="fp-error" class="error" role="alert"></p>
+      </form>
+      <div id="fp-summary" class="card hidden"></div>
+    </section>
+
+    <!-- DATA -->
+    <section id="view-data" class="view">
+      <div class="card"><h2>Live aircraft data</h2><table id="data-table" class="data"></table>
+        <p id="data-msg" class="small muted"></p></div>
+      <div id="mock-panel" class="card hidden">
+        <h2>Mock aircraft</h2>
+        <p class="small muted">The helper runs a simulated aircraft (started with --mock).</p>
+        <div class="row wrap">
+          <button data-mock="next">Next phase</button>
+          <button data-mock="tune-hint">Tune COM1 to hint</button>
+          <button data-mock="speed" data-value="1">Speed x1</button>
+          <button data-mock="speed" data-value="5">x5</button>
+          <button data-mock="speed" data-value="15">x15</button>
+          <button data-mock="reset">Reset to stand</button>
+        </div>
+        <label class="check"><input type="checkbox" id="mock-follow" checked> Mock aircraft follows ATC (push, taxi, take-off)</label>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="view-settings" class="view">
+      <div class="card form">
+        <h2>Speech output</h2>
+        <label class="check"><input type="checkbox" id="set-tts" checked> Speak ATC messages</label>
+        <label>Voice <select id="set-voice"></select></label>
+        <label class="check"><input type="checkbox" id="set-vary" checked> Different voice for each controller</label>
+        <label>Speed <input type="range" id="set-rate" min="0.6" max="1.6" step="0.05" value="1.05"> <span id="set-rate-v"></span></label>
+        <label>Pitch <input type="range" id="set-pitch" min="0.6" max="1.4" step="0.05" value="1"> <span id="set-pitch-v"></span></label>
+        <button id="test-voice" type="button">Test voice</button>
+      </div>
+      <div class="card form">
+        <h2>Voice input</h2>
+        <label class="check"><input type="checkbox" id="set-voicein" checked> Use push-to-talk (browser speech recognition)</label>
+        <label>Push-to-talk button
+          <select id="set-pttmode"><option value="hold">Hold while talking</option><option value="toggle">Tap to start, tap to stop</option></select>
+        </label>
+        <label class="check"><input type="checkbox" id="set-review"> Put recognised text in the text box instead of sending it</label>
+        <label>Recognition language
+          <select id="set-lang"><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option><option value="en-AU">English (Australia)</option><option value="en-IN">English (India)</option></select>
+        </label>
+        <p id="voice-diag" class="small muted"></p>
+      </div>
+      <div class="card form">
+        <h2>ATC</h2>
+        <label>Transmit on
+          <select id="set-radio"><option value="com1">COM1</option><option value="com2">COM2</option></select>
+        </label>
+        <label class="check"><input type="checkbox" id="set-freqcheck" checked> Controllers only answer on their own frequency</label>
+        <label class="check"><input type="checkbox" id="set-strict" checked> Check readbacks (runway, levels, squawk, frequency)</label>
+        <label class="check"><input type="checkbox" id="set-night"> Night mode (dimmer, red tint)</label>
+        <label class="check"><input type="checkbox" id="set-wakelock" checked> Keep the screen on</label>
+      </div>
+      <div class="card form">
+        <h2>This device</h2>
+        <p id="about" class="small muted"></p>
+        <div class="row wrap">
+          <button id="clear-log" type="button">Clear log</button>
+          <button id="unpair" class="danger" type="button">Unpair this iPad</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
