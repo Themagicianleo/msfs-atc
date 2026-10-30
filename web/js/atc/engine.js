@@ -11,6 +11,7 @@
 import { Formatter, PHONETIC, callsignOf, parseLevel, render } from './format.js';
 import { detectIntent, missingItems } from './parser.js';
 import { distanceNm, selectRunway } from './runway.js';
+import { isComChannel, readbackTokens, sameFrequency } from './frequency.js';
 
 export const PHASES = {
   clearance: { unit: 'dep_DEL', label: 'Clearance' },
@@ -34,12 +35,11 @@ export const PHASES = {
   done: { unit: null, label: 'Flight complete' },
 };
 
-const FREQ_FALLBACK = {
-  DEL: ['DEL', 'GND', 'TWR'], GND: ['GND', 'TWR'], TWR: ['TWR'],
-  DEP: ['DEP', 'APP'], APP: ['APP', 'DEP'],
-};
 const GO_AROUND_PHASES = ['approach', 'final', 'tower_checkin', 'landing'];
-const HANDOFF_TOLERANCE_MHZ = 0.003;
+// how far away another airport's published unit may be and still be used
+const NEARBY_TERMINAL_NM = 40; // a terminal (approach/departure) unit
+const NEARBY_CENTRE_NM = 250; // an area control centre
+const CALLSIGN_WORDS = /(APPROACH|DEPARTURE|DIRECTOR|RADAR|CONTROL|CENTER|CENTRE|ARRIVAL)/i;
 
 export class AtcEngine {
   constructor({ phraseology, airlines = {}, rng = Math.random, options = {} }) {
@@ -54,25 +54,28 @@ export class AtcEngine {
   }
 
   // ------------------------------------------------------------ setup
-  setFlightPlan(fp, depInfo, arrInfo, now = Date.now()) {
+  // nearby = {dep: [...], arr: [...]}: published frequencies around each
+  // airport from the helper (/api/frequencies/near), used as fallbacks
+  setFlightPlan(fp, depInfo, arrInfo, now = Date.now(), nearby = null) {
     this.fp = { ...fp };
     this.dep = depInfo;
     this.arr = arrInfo;
+    this.nearby = nearby || { dep: [], arr: [] };
     this.metar = { dep: null, arr: null };
     this.s = {
       phase: 'clearance', pending: null, squawk: this.newSquawk(), cleared: null,
-      depRunway: null, arrRunway: null, lockDep: false, lockArr: false,
+      depRunway: null, arrRunway: null, lockDep: false, lockArr: false, ctr: 'dep_CTR',
       last: {}, missed: null, flags: {}, stoppedSince: null, startedAt: now,
     };
     this.buildUnits();
     this.chooseRunways();
     const events = [this.system(`Flight plan loaded: ${this.fp.callsign} ${this.dep.icao} to ${this.arr.icao}. `
       + `Tune ${this.unitLabel(this.expectedUnit())} and request your clearance.`, now)];
-    for (const u of Object.values(this.units)) {
-      if (u.source === 'default') {
-        events.push(this.system(`No ${u.role} frequency known for ${u.airport || 'this flight'}; using ${u.freq}. `
-          + 'Add it in the flight plan or airports_manual.json.', now));
-      }
+    const unknown = Object.values(this.units).filter((u) => !u.known);
+    if (unknown.length) {
+      events.push(this.system(`No published frequency found for: ${unknown.map((u) => u.name).join(', ')}. `
+        + 'Enter them from your charts under Flight plan > More. Until then these controllers answer on any '
+        + 'frequency and handoffs to them give no frequency.', now));
     }
     return events;
   }
@@ -89,12 +92,13 @@ export class AtcEngine {
 
   serialize() {
     if (!this.s) return null;
-    return JSON.stringify({ fp: this.fp, dep: this.dep, arr: this.arr, metar: this.metar, s: this.s });
+    return JSON.stringify({ fp: this.fp, dep: this.dep, arr: this.arr, metar: this.metar, nearby: this.nearby, s: this.s });
   }
 
   restore(json) {
     const d = typeof json === 'string' ? JSON.parse(json) : json;
-    Object.assign(this, { fp: d.fp, dep: d.dep, arr: d.arr, metar: d.metar, s: d.s });
+    Object.assign(this, { fp: d.fp, dep: d.dep, arr: d.arr, metar: d.metar, nearby: d.nearby || { dep: [], arr: [] }, s: d.s });
+    this.s.ctr = this.s.ctr || 'dep_CTR';
     this.buildUnits();
   }
 
@@ -122,46 +126,69 @@ export class AtcEngine {
   }
 
   // ------------------------------------------------------------ units
+  // Every controller gets only real, published frequencies: the airport's own
+  // (OurAirports / manual file / flight plan), then the real-world fallback
+  // (clearance from Ground or Tower, approach from the nearby terminal unit,
+  // area control from the nearest airport that lists it). Nothing is invented:
+  // a unit with no published frequency is marked unknown.
   buildUnits() {
     const u = {};
-    const make = (key, airport, role, which) => {
-      const override = this.fp.frequencies?.[key];
-      let freq = override || null;
-      let source = override ? 'flight plan' : null;
-      if (!freq) {
-        for (const r of FREQ_FALLBACK[role]) {
-          const list = airport?.frequencies?.[r];
-          if (list && list.length) {
-            freq = list[0].mhz;
-            source = r === role ? 'airport' : `airport ${r}`;
-            break;
-          }
+    const names = this.phr.unitNames;
+    const nb = this.nearby || { dep: [], arr: [] };
+    const tunable = (list) => (list || []).map((e) => e.mhz).filter(isComChannel);
+    const own = (airport, role, primaryRole) => () => {
+      const freqs = tunable(airport?.frequencies?.[role]);
+      if (!freqs.length) return null;
+      return { freqs, name: this.unitName(airport, role),
+        source: role === primaryRole ? 'published' : `published ${names[role]} frequency (no ${names[primaryRole]} listed)` };
+    };
+    const near = (which, roles, maxNm) => () => {
+      const e = (nb[which] || []).find((x) => roles.includes(x.role) && x.dist_nm <= maxNm && isComChannel(x.mhz));
+      if (!e) return null;
+      const desc = e.description || '';
+      const name = CALLSIGN_WORDS.test(desc) && !/^manual$/i.test(desc)
+        ? titleCase(desc) : `${e.municipality || (e.name || e.airport).split(/\s+/)[0]} ${names[e.role]}`;
+      return { freqs: [e.mhz], name, source: `published at ${e.airport} (${Math.round(e.dist_nm)} NM away)` };
+    };
+    const make = (key, airport, role, which, chain, overrideKey = key) => {
+      const unit = { key, role, which, airport: airport?.icao, name: this.unitName(airport, role), freqs: [], source: 'unknown' };
+      const override = this.fp.frequencies?.[overrideKey];
+      if (override && isComChannel(override)) {
+        Object.assign(unit, { freqs: [Number(override).toFixed(3)], source: 'flight plan' });
+      } else {
+        for (const step of chain) {
+          const found = step();
+          if (found) { Object.assign(unit, found); break; }
         }
       }
-      if (!freq && role !== 'DEP' && role !== 'APP') {
-        freq = this.phr.defaults?.towerFrequency || '118.100';
-        source = 'default';
-      }
-      u[key] = { key, role, which, airport: airport?.icao, name: this.unitName(airport, role), freq, source };
+      u[key] = unit;
     };
-    make('dep_DEL', this.dep, 'DEL', 'dep');
-    make('dep_GND', this.dep, 'GND', 'dep');
-    make('dep_TWR', this.dep, 'TWR', 'dep');
-    make('dep_DEP', this.dep, 'DEP', 'dep');
-    make('arr_APP', this.arr, 'APP', 'arr');
-    make('arr_TWR', this.arr, 'TWR', 'arr');
-    make('arr_GND', this.arr, 'GND', 'arr');
-    const ctrFreq = this.fp.frequencies?.CTR || this.arr?.frequencies?.CTR?.[0]?.mhz
-      || this.dep?.frequencies?.CTR?.[0]?.mhz || this.phr.defaults?.centerFrequency || '127.500';
-    const ctrName = this.fp.centerName || this.arr?.names?.CTR || this.dep?.names?.CTR
-      || `${this.place(this.dep)} ${this.phr.unitNames.CTR}`;
-    let ctrSource = 'default';
-    if (this.fp.frequencies?.CTR) ctrSource = 'flight plan';
-    else if (this.arr?.frequencies?.CTR?.length || this.dep?.frequencies?.CTR?.length) ctrSource = 'airport';
-    u.CTR = { key: 'CTR', role: 'CTR', which: 'enroute', name: ctrName, freq: ctrFreq, source: ctrSource };
-    // no departure/approach frequency: the centre (or tower) works it
-    if (!u.dep_DEP.freq) Object.assign(u.dep_DEP, { freq: ctrFreq, name: ctrName, source: 'centre' });
-    if (!u.arr_APP.freq) Object.assign(u.arr_APP, { freq: ctrFreq, name: ctrName, source: 'centre' });
+    const { dep, arr } = this;
+    make('dep_DEL', dep, 'DEL', 'dep', [own(dep, 'DEL', 'DEL'), own(dep, 'GND', 'DEL'), own(dep, 'TWR', 'DEL')]);
+    make('dep_GND', dep, 'GND', 'dep', [own(dep, 'GND', 'GND'), own(dep, 'TWR', 'GND')]);
+    make('dep_TWR', dep, 'TWR', 'dep', [own(dep, 'TWR', 'TWR')]);
+    make('dep_DEP', dep, 'DEP', 'dep', [own(dep, 'DEP', 'DEP'), own(dep, 'APP', 'DEP'), near('dep', ['DEP', 'APP'], NEARBY_TERMINAL_NM)]);
+    make('arr_APP', arr, 'APP', 'arr', [own(arr, 'APP', 'APP'), own(arr, 'DEP', 'APP'), near('arr', ['APP', 'DEP'], NEARBY_TERMINAL_NM)]);
+    make('arr_TWR', arr, 'TWR', 'arr', [own(arr, 'TWR', 'TWR')]);
+    make('arr_GND', arr, 'GND', 'arr', [own(arr, 'GND', 'GND'), own(arr, 'TWR', 'GND')]);
+    make('dep_CTR', dep, 'CTR', 'enroute', [own(dep, 'CTR', 'CTR'), near('dep', ['CTR'], NEARBY_CENTRE_NM), own(arr, 'CTR', 'CTR')], 'CTR');
+    make('arr_CTR', arr, 'CTR', 'enroute', [own(arr, 'CTR', 'CTR'), near('arr', ['CTR'], NEARBY_CENTRE_NM)], 'CTR');
+    // gaps are filled the way real ATC does it: no departure/approach unit ->
+    // area control works you; no area control found -> the terminal unit keeps you
+    const copy = (to, from, why) => {
+      if (u[to].freqs.length || !u[from].freqs.length) return;
+      Object.assign(u[to], { freqs: u[from].freqs, name: u[from].name, source: why });
+    };
+    copy('arr_CTR', 'dep_CTR', 'same area control as departure');
+    copy('dep_DEP', 'dep_CTR', 'area control (no departure unit published)');
+    copy('arr_APP', 'arr_CTR', 'area control (no approach unit published)');
+    copy('dep_CTR', 'dep_DEP', 'departure unit (no area control published nearby)');
+    copy('arr_CTR', 'arr_APP', 'approach unit (no area control published nearby)');
+    if (this.fp.centerName) { u.dep_CTR.name = this.fp.centerName; u.arr_CTR.name = this.fp.centerName; }
+    for (const unit of Object.values(u)) {
+      unit.freq = unit.freqs[0] || null;
+      unit.known = !!unit.freq;
+    }
     this.units = u;
   }
 
@@ -176,7 +203,8 @@ export class AtcEngine {
 
   unitLabel(key) {
     const u = this.units?.[key];
-    return u ? `${u.name} ${this.f.freq(u.freq).t}` : '';
+    if (!u) return '';
+    return u.known ? `${u.name} ${this.f.freq(u.freq).t}` : `${u.name} (frequency unknown)`;
   }
 
   tunedFreq() {
@@ -186,19 +214,25 @@ export class AtcEngine {
 
   freqChecking() { return this.opts.freqCheck && this.tunedFreq() !== null; }
 
+  // units with a published frequency matching this one (8.33/25 kHz aware)
   unitsOn(freq) {
-    return Object.values(this.units).filter((u) => u.freq
-      && Math.abs(Number(u.freq) - freq) < HANDOFF_TOLERANCE_MHZ).map((u) => u.key);
+    return Object.values(this.units).filter((u) => u.freqs.some((f) => sameFrequency(f, freq))).map((u) => u.key);
   }
 
   isTunedTo(unitKey) {
-    if (!this.freqChecking()) return true;
+    if (!this.freqChecking() || !this.units[unitKey]?.known) return true;
     return this.unitsOn(this.tunedFreq()).includes(unitKey);
+  }
+
+  // the unit working a phase; en-route phases follow the current area control
+  phaseUnit(phase) {
+    const unit = PHASES[phase]?.unit;
+    return unit === 'CTR' ? (this.s.ctr || 'dep_CTR') : unit;
   }
 
   expectedUnit() {
     if (!this.s) return null;
-    return this.s.pending?.unit || PHASES[this.s.phase].unit;
+    return this.s.pending?.unit || this.phaseUnit(this.s.phase);
   }
 
   // ------------------------------------------------------------ runways & weather
@@ -282,7 +316,7 @@ export class AtcEngine {
 
   nextExtra(toKey) {
     const u = this.units[toKey];
-    return { next_unit: u.name, next_freq: this.f.freq(u.freq) };
+    return { next_unit: u.name, next_freq: u.known ? this.f.freq(u.freq) : null };
   }
 
   // remember what must be read back; onOk is a method name run on success
@@ -295,7 +329,7 @@ export class AtcEngine {
     const v = typeof value === 'object' ? value : { t: String(value), s: String(value) };
     const tokenFor = {
       runway: () => v.t.toLowerCase(),
-      freq: () => v.t.replace(/\D/g, ''),
+      freq: () => (v.mhz !== undefined ? readbackTokens(v.mhz) : v.t.replace(/\D/g, '')),
       squawk: () => v.t,
       qnh: () => v.t,
       level: () => v.token,
@@ -312,15 +346,18 @@ export class AtcEngine {
     return this.item('level', { ...v, token }, label);
   }
 
-  handoff(fromKey, toKey, tplKey, nextPhase, now) {
+  handoff(fromKey, toKey, tplKey, nextPhase, now, more = {}) {
     const extra = this.nextExtra(toKey);
     const msg = this.atc(fromKey, tplKey, extra, now);
-    this.expect(fromKey, 'contact', [this.item('freq', extra.next_freq)], 'advance', { ...extra, nextPhase });
+    const items = extra.next_freq ? [this.item('freq', extra.next_freq)]
+      : [{ key: 'unit', t: extra.next_unit, s: extra.next_unit, token: extra.next_unit.split(/\s+/).pop().toLowerCase() }];
+    this.expect(fromKey, 'contact', items, 'advance', { ...extra, nextPhase, ...more });
     return [msg];
   }
 
   // generic readback success: move on to the phase stored with the instruction
   advance(now, p) {
+    if (p?.extra?.setCtr) this.s.ctr = p.extra.setCtr;
     if (p?.extra?.nextPhase) this.setPhase(p.extra.nextPhase, now);
     return [];
   }
@@ -340,7 +377,8 @@ export class AtcEngine {
     const expected = this.expectedUnit();
     let unitKey = expected;
     if (this.freqChecking()) {
-      const on = this.unitsOn(tuned);
+      let on = this.unitsOn(tuned);
+      if (!on.length && expected && !this.units[expected].known) on = [expected];
       if (!on.length) {
         events.push(this.system(`No reply: no controller on ${this.f.freq(tuned).t}. `
           + (expected ? `Tune ${this.unitLabel(expected)}.` : ''), now));
@@ -367,10 +405,10 @@ export class AtcEngine {
 
     const p = this.s.pending;
     if (p && unitKey !== p.unit && p.kind === 'contact' && this.units[p.unit]
-        && unitKey === PHASES[p.extra.nextPhase]?.unit) {
+        && unitKey === (p.extra.setCtr || this.phaseUnit(p.extra.nextPhase))) {
       // pilot skipped the frequency readback and just called the next unit: fine
       this.s.pending = null;
-      this.setPhase(p.extra.nextPhase, now);
+      this.advance(now, p);
     } else if (p) {
       if (unitKey !== p.unit) {
         events.push(this.atc(unitKey, 'wrong_unit', this.nextExtra(p.unit), now));
@@ -381,10 +419,11 @@ export class AtcEngine {
 
     const phase = this.s.phase;
     const info = PHASES[phase];
-    if (unitKey !== info.unit) {
+    const phaseUnit = this.phaseUnit(phase);
+    if (unitKey !== phaseUnit) {
       const also = info.also?.[unitKey];
       if (!(also && (!intent || also.includes(intent)))) {
-        events.push(this.atc(unitKey, 'wrong_unit', this.nextExtra(info.unit), now));
+        events.push(this.atc(unitKey, 'wrong_unit', this.nextExtra(phaseUnit), now));
         return events;
       }
     }
@@ -610,6 +649,25 @@ export class AtcEngine {
     return TRIGGERS[this.s.phase].fire.call(this, now);
   }
 
+  // past half way and the arrival side has a different area control
+  ctrSwitchDue() {
+    if (this.s.flags.ctrSwitched || this.s.ctr !== 'dep_CTR') return false;
+    const a = this.units.dep_CTR; const b = this.units.arr_CTR;
+    if (!b.known || (a.known && a.freqs.some((f) => b.freqs.some((g) => sameFrequency(f, g))))) return false;
+    const sim = this.sim;
+    if (!sim || sim.lat === null || sim.lat === undefined) return false;
+    const toArr = distanceNm(sim.lat, sim.lon, this.arr.lat, this.arr.lon);
+    const toDep = distanceNm(sim.lat, sim.lon, this.dep.lat, this.dep.lon);
+    return toArr !== null && toDep !== null && toArr < toDep;
+  }
+
+  descentDue(s) {
+    const d = this.distToArr();
+    if (d === null) return false;
+    const tod = ((s.ind_alt_ft ?? 0) - (this.arr?.elevation_ft || 0)) / 1000 * 3 + 10;
+    return d < tod;
+  }
+
   distToArr() {
     const sim = this.sim;
     if (!sim || sim.lat === null || sim.lat === undefined) return null;
@@ -676,12 +734,14 @@ export class AtcEngine {
     const unitKey = this.expectedUnit();
     const u = this.units[unitKey];
     const hint = { say: null, tune: null, note: null, missed: null, squawk: null, phase: PHASES[this.s.phase].label };
-    if (u && this.freqChecking() && !this.isTunedTo(unitKey)) {
+    if (u && !u.known) {
+      hint.unknownFreq = `${u.name}: no published frequency found. Enter it under Flight plan > More.`;
+    } else if (u && this.freqChecking() && !this.isTunedTo(unitKey)) {
       hint.tune = { freq: u.freq, name: u.name, text: `Tune ${this.opts.radio.toUpperCase()} to ${this.f.freq(u.freq).t} (${u.name})` };
     }
     if (this.s.missed) {
       const m = this.units[this.s.missed.unit];
-      hint.missed = `${m.name} is calling you on ${this.f.freq(m.freq).t}.`;
+      hint.missed = m.known ? `${m.name} is calling you on ${this.f.freq(m.freq).t}.` : `${m.name} is calling you.`;
     }
     const primary = this.getActions().find((a) => a.primary);
     if (primary) hint.say = primary.text;
@@ -749,23 +809,24 @@ const TRIGGERS = {
       const target = this.s.cleared || 15000;
       return !s.on_ground && (s.ind_alt_ft ?? 0) >= target - 2000;
     },
-    fire(now) { return this.handoff('dep_DEP', 'CTR', 'climb_handoff', 'enroute_checkin', now); },
+    fire(now) { return this.handoff('dep_DEP', this.s.ctr, 'climb_handoff', 'enroute_checkin', now); },
   },
   cruise: {
-    when(s) {
-      const d = this.distToArr();
-      if (d === null) return false;
-      const tod = ((s.ind_alt_ft ?? 0) - (this.arr?.elevation_ft || 0)) / 1000 * 3 + 10;
-      return d < tod;
+    when(s) { return this.ctrSwitchDue() || this.descentDue(s); },
+    fire(now) {
+      if (this.ctrSwitchDue()) {
+        this.s.flags.ctrSwitched = true;
+        return this.handoff(this.s.ctr, 'arr_CTR', 'climb_handoff', 'enroute_checkin', now, { setCtr: 'arr_CTR' });
+      }
+      return this.giveDescent(this.s.ctr, now);
     },
-    fire(now) { return this.giveDescent('CTR', now); },
   },
   descent: {
     when(s) {
       const d = this.distToArr();
       return (s.ind_alt_ft ?? 99999) <= (this.s.cleared || 10000) + 2000 || (d !== null && d < 40);
     },
-    fire(now) { return this.handoff('CTR', 'arr_APP', 'approach_handoff', 'approach_checkin', now); },
+    fire(now) { return this.handoff(this.s.ctr, 'arr_APP', 'approach_handoff', 'approach_checkin', now); },
   },
   approach: {
     when() { const d = this.distToArr(); return d !== null && d < 18; },
@@ -815,4 +876,8 @@ function speakApproach(type, f) {
   if (t === 'RNAV') return 'R-NAV';
   if (t === 'VISUAL') return 'visual';
   return f.spell(t);
+}
+
+function titleCase(str) {
+  return String(str).toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase());
 }

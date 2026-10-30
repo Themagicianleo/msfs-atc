@@ -175,6 +175,46 @@ def _fmt_mhz(mhz: float) -> str:
     return f"{mhz:.3f}"
 
 
+def is_com_channel(mhz: Optional[float]) -> bool:
+    """A VHF COM channel an aircraft radio can tune: 118.000-136.990 MHz on
+    the 25 kHz or 8.33 kHz channel raster (ICAO Annex 10). Excludes military
+    UHF (225-400 MHz), HF and NAV-band entries, which COM1/COM2 can't receive."""
+    if mhz is None or not 118.0 <= mhz <= 136.99 + 1e-9:
+        return False
+    khz = round(mhz * 1000)
+    return abs(mhz * 1000 - khz) < 0.05 and khz % 25 in (0, 5, 10, 15)
+
+
+# words in a frequency description that mean "not the one ATC would give you"
+SECONDARY_WORDS = ("EMERG", "GUARD", "SEC", "ALT", "STBY", "STANDBY", "BACKUP", "BKUP", "MIL", "OPS", "COMPANY",
+                   "PPR", "HELI", "GLIDER", "VFR", "OUTER", "DEPARTURES ONLY")
+
+
+def _rank(entry: dict) -> int:
+    desc = (entry.get("description") or "").upper()
+    return 1 if any(w in desc for w in SECONDARY_WORDS) else 0
+
+
+def _clean(freqs: dict) -> dict:
+    """Drop untunable entries (ATIS may also be on a NAV frequency, keep it),
+    remove duplicates and put the most likely primary frequency first."""
+    out = {}
+    for role, entries in freqs.items():
+        seen, kept = set(), []
+        for e in entries:
+            mhz = float(e["mhz"])
+            if role != "ATIS" and not is_com_channel(mhz):
+                continue
+            if e["mhz"] in seen:
+                continue
+            seen.add(e["mhz"])
+            kept.append(e)
+        kept.sort(key=_rank)  # stable: keeps frequency order within a rank
+        if kept:
+            out[role] = kept
+    return out
+
+
 class AirportDB:
     def __init__(self, db_path: Path, manual_paths: Iterable[Path] = ()):
         self.db_path = db_path
@@ -239,7 +279,7 @@ class AirportDB:
                 "icao": row["icao"] or row["gps"] or ident, "ident": ident, "name": row["name"],
                 "municipality": row["municipality"], "country": row["country"], "type": row["type"],
                 "lat": row["lat"], "lon": row["lon"], "elevation_ft": row["elevation_ft"],
-                "runways": runways, "frequencies": freqs, "names": {}, "source": "ourairports",
+                "runways": runways, "frequencies": _clean(freqs), "names": {}, "source": "ourairports",
             }
         finally:
             con.close()
@@ -262,6 +302,58 @@ class AirportDB:
         for role, value in (m.get("frequencies") or {}).items():
             values = value if isinstance(value, list) else [value]
             freqs[role.upper()] = [{"mhz": _fmt_mhz(float(v)), "description": "manual"} for v in values]
-        out["frequencies"] = freqs
+        out["frequencies"] = _clean(freqs)
         out["names"] = {k.upper(): v for k, v in (m.get("names") or {}).items()}
         return out
+
+    def nearby_frequencies(self, lat: float, lon: float, radius_nm: float = 250,
+                           roles: Iterable[str] = ("APP", "DEP", "CTR")) -> list[dict]:
+        """Published controller frequencies (real-world, from OurAirports and
+        manual entries) at airports within ``radius_nm``, nearest first. Used
+        when an airport lists no departure/approach unit, and to find the area
+        control centre, which OurAirports only lists at some airports."""
+        roles = {r.upper() for r in roles}
+        dlat = radius_nm / 60.0
+        dlon = radius_nm / max(1.0, 60.0 * math.cos(math.radians(min(abs(lat), 89.0))))
+        found: dict = {}
+
+        def add(ident, name, municipality, alat, alon, role, mhz, desc):
+            if role not in roles or alat is None or not is_com_channel(mhz):
+                return
+            dist = _distance_nm(lat, lon, alat, alon)
+            if dist > radius_nm:
+                return
+            key = (role, _fmt_mhz(mhz))
+            if key not in found or dist < found[key]["dist_nm"]:
+                found[key] = {"airport": ident, "name": name, "municipality": municipality, "role": role,
+                              "mhz": _fmt_mhz(mhz), "description": desc, "dist_nm": round(dist, 1)}
+
+        if self.db_path.exists():
+            con = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True)
+            try:
+                rows = con.execute(
+                    "SELECT a.ident, a.name, a.municipality, a.lat, a.lon, f.type, f.description, f.mhz "
+                    "FROM freqs f JOIN airports a ON a.ident = f.airport "
+                    "WHERE a.lat BETWEEN ? AND ? AND a.lon BETWEEN ? AND ?",
+                    (lat - dlat, lat + dlat, lon - dlon, lon + dlon)).fetchall()
+            finally:
+                con.close()
+            for ident, name, muni, alat, alon, ftype, desc, mhz in rows:
+                role = FREQ_ROLES.get((ftype or "").upper())
+                if role is None:
+                    d = (desc or "").upper()
+                    role = next((v for k, v in FREQ_ROLES.items() if len(k) > 3 and k in d), None)
+                add(ident, name, muni, alat, alon, role, mhz, desc)
+        for ident, m in self._manual().items():
+            for role, value in (m.get("frequencies") or {}).items():
+                for v in (value if isinstance(value, list) else [value]):
+                    add(ident, m.get("name"), m.get("municipality"), m.get("lat"), m.get("lon"),
+                        role.upper(), float(v), (m.get("names") or {}).get(role.upper(), "manual"))
+        return sorted(found.values(), key=lambda e: (e["dist_nm"], _rank(e)))
+
+
+def _distance_nm(lat1, lon1, lat2, lon2) -> float:
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    a = (math.sin((p2 - p1) / 2) ** 2
+         + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2)
+    return 2 * 3440.065 * math.asin(min(1.0, math.sqrt(a)))

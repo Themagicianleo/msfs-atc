@@ -57,6 +57,11 @@ async def test_api_requires_pairing(ctx):
     assert (await r.json())["available"] is False
     r = await client.get("/api/airport/XXXX", headers={"Authorization": f"Bearer {token}"})
     assert r.status == 404 and "import-airports" in (await r.json())["error"]
+    r = await client.get("/api/frequencies/near?lat=10&lon=150", headers={"Authorization": f"Bearer {token}"})
+    assert r.status == 200 and await r.json() == []
+    r = await client.get("/api/frequencies/near?lat=100&lon=150", headers={"Authorization": f"Bearer {token}"})
+    assert r.status == 400
+    assert (await client.get("/api/frequencies/near?lat=10&lon=150")).status == 401
 
 
 async def test_websocket_auth_and_broadcast(ctx):

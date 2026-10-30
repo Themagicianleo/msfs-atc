@@ -6,7 +6,7 @@ import pytest
 from cryptography import x509
 from cryptography.x509.oid import ExtendedKeyUsageOID
 
-from openatc.airports import AirportDB, import_ourairports
+from openatc.airports import AirportDB, import_ourairports, is_com_channel
 from openatc.auth import PairingStore
 from openatc.certs import SERVER_DAYS, ensure_certificates
 from openatc.netutil import is_local_address
@@ -83,7 +83,7 @@ def test_certificates_meet_apple_rules(tmp_path):
 def airport_db(tmp_path):
     db = tmp_path / "oa.sqlite"
     counts = import_ourairports(db, FIX)
-    assert counts == {"airports": 3, "runways": 4, "freqs": 7}
+    assert counts == {"airports": 3, "runways": 4, "freqs": 10}
     manual = tmp_path / "manual.json"
     manual.write_text(json.dumps({"airports": {
         "TSTB": {"frequencies": {"TWR": "118.250", "GND": ["121.600", "121.650"]}, "names": {"twr": "Bravo Tower"}},
@@ -181,3 +181,31 @@ def test_mock_flies_a_whole_flight():
     end = mock.snapshot()
     assert end.on_ground and end.gs_kt == 0
     assert distance_nm(end.lat, end.lon, 10.5, 150.8) < 3
+
+
+# ------------------------------------------------------------------ frequencies
+@pytest.mark.parametrize("mhz,ok", [
+    (118.0, True), (121.9, True), (121.655, True), (136.975, True), (136.99, True), (132.005, True),
+    (117.95, False), (137.0, False), (257.8, False), (121.62, False), (3.023, False), (None, False),
+])
+def test_is_com_channel(mhz, ok):
+    assert is_com_channel(mhz) is ok
+
+
+def test_untunable_and_secondary_frequencies(airport_db):
+    a = airport_db.lookup("TSTA")
+    assert [f["mhz"] for f in a["frequencies"]["TWR"]] == ["118.700"]  # military UHF dropped
+    assert [f["mhz"] for f in a["frequencies"]["GND"]] == ["121.900", "121.655"]  # secondary last
+
+
+def test_nearby_frequencies(airport_db):
+    near = airport_db.nearby_frequencies(51.5, -0.5, 250)
+    roles = [(e["airport"], e["role"], e["mhz"]) for e in near]
+    assert ("TSTA", "APP", "119.725") in roles
+    assert ("TSTB", "CTR", "128.050") in roles and ("TSTB", "APP", "125.250") in roles
+    assert near[0]["airport"] == "TSTA" and near[0]["dist_nm"] == 0
+    assert all(e["role"] in ("APP", "DEP", "CTR") for e in near)
+    assert airport_db.nearby_frequencies(51.5, -0.5, 10, ["CTR"]) == []  # TSTB is ~45 NM away
+    ctr = airport_db.nearby_frequencies(52.0, 0.5, 5, ["CTR"])
+    assert ctr == [{"airport": "TSTB", "name": "Test Bravo", "municipality": "Bravotown", "role": "CTR",
+                    "mhz": "128.050", "description": "LONDON CONTROL", "dist_nm": 0.0}]

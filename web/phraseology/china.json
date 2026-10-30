@@ -15,8 +15,7 @@
     "initialClimbM": 900,
     "departureClimbM": 6000,
     "descentM": 3600,
-    "approachAltM": 900,
-    "centerFrequency": "128.500"
+    "approachAltM": 900
   },
 
   "metricLevels": [

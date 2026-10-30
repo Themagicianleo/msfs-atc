@@ -113,7 +113,7 @@ test('a whole IFR flight, departure to parking, ICAO phraseology', async () => {
   assert.match(text('readback_correct_next'), /contact Demo Ground on 121\.9/);
   assert.match(text('taxi'), /taxi to holding point runway 27, QNH 1015\.$/);
   assert.match(text('takeoff'), /wind 260\/12, runway 27, cleared for take-off/);
-  assert.match(text('departure_handoff'), /contact Demo Departure on 124\.35, good day/);
+  assert.match(text('departure_handoff'), /contact Demo Departure on 124\.350, good day/);
   assert.match(text('radar_contact'), /radar contact, climb FL150/);
   assert.match(text('center_climb'), /Oceanic Control, identified, climb FL240/);
   assert.match(text('descent'), /descend FL100, HARB2B arrival, expect ILS approach runway 04/);
@@ -146,11 +146,11 @@ test('frequency check: wrong frequency, wrong unit, missed calls', async () => {
   e.updateSim(makeSim({ com1_active: 123.45 }), now());
   let ev = e.pilotSays('Demo Delivery, Air China 1234, request IFR clearance', { now: now() });
   assert.equal(ev.length, 2);
-  assert.match(ev[1].text, /No reply: no controller on 123\.45\. Tune Demo Delivery 121\.65/);
+  assert.match(ev[1].text, /No reply: no controller on 123\.450\. Tune Demo Delivery 121\.650/);
   e.updateSim(makeSim({ com1_active: 118.7 }), now()); // tower
   ev = e.pilotSays('request IFR clearance', { now: now() });
   assert.equal(ev[1].tpl, 'wrong_unit');
-  assert.match(ev[1].text, /Demo Tower, contact Demo Delivery on 121\.65/);
+  assert.match(ev[1].text, /Demo Tower, contact Demo Delivery on 121\.650/);
   // radios unknown (sim not connected): no frequency check
   e.updateSim({ connected: false, in_flight: false }, now());
   ev = e.pilotSays('request IFR clearance', { now: now() });
@@ -226,16 +226,110 @@ test('skip works without a simulator, and state survives a reload', async () => 
   assert.match(e2.getActions()[0].text, /^118\.7, Air China 1234\.$/);
 });
 
-test('airport without frequencies falls back sensibly', async () => {
+test('only published frequencies: real-world fallbacks, nothing invented', async () => {
   const phr = await load('icao');
-  const bare = { ...XDEP, frequencies: { TWR: [{ mhz: '119.100' }] }, names: {} };
   const e = new AtcEngine({ phraseology: phr, airlines: AIRLINES, rng: seeded() });
-  const ev = e.setFlightPlan({ ...FP }, bare, { ...XARR, frequencies: {}, names: {} }, 1);
+  const dep = { ...XDEP, frequencies: { TWR: [{ mhz: '119.100' }, { mhz: '257.800' }] }, names: {} };
+  const arr = { ...XARR, frequencies: {}, names: {} };
+  const ev = e.setFlightPlan({ ...FP }, dep, arr, 1);
+  // clearance and ground on the tower frequency, as at a small real airport
   assert.equal(e.units.dep_DEL.freq, '119.100');
-  assert.equal(e.units.dep_GND.freq, '119.100');
-  assert.equal(e.units.dep_DEP.freq, '127.500'); // no DEP/APP/CTR anywhere: region default centre
-  assert.ok(ev.some((m) => /No TWR frequency known for XARR/.test(m.text)));
-  assert.equal(e.units.dep_DEL.name, 'Demo City Delivery');
+  assert.equal(e.units.dep_DEL.name, 'Demo City Tower');
+  assert.match(e.units.dep_DEL.source, /published Tower frequency \(no Delivery listed\)/);
+  assert.deepEqual(e.units.dep_TWR.freqs, ['119.100']); // military UHF 257.8 dropped
+  // nothing published for the arrival, departure unit or area control: unknown, not made up
+  for (const k of ['dep_DEP', 'dep_CTR', 'arr_CTR', 'arr_APP', 'arr_TWR', 'arr_GND']) {
+    assert.equal(e.units[k].known, false, k);
+    assert.equal(e.units[k].freq, null, k);
+  }
+  assert.ok(ev.some((m) => /No published frequency found for: .*Demo City Departure/.test(m.text)));
+  // a handoff to an unknown unit gives no frequency, and the readback is the unit name
+  e.s.phase = 'takeoff';
+  const msg = e.skip(5)[0];
+  assert.equal(msg.text, 'Air China 1234, contact Demo City Departure, good day.');
+  assert.match(e.getActions()[0].text, /^Demo City Departure, Air China 1234\.$/);
+  e.pilotSays(e.getActions()[0].text, { now: 6 });
+  assert.equal(e.s.phase, 'departure');
+  assert.match(e.getHint().unknownFreq, /Demo City Departure: no published frequency/);
+  // with the radio on any frequency, the unknown unit still answers
+  e.updateSim(makeSim({ com1_active: 127.0, on_ground: false, alt_agl_ft: 2000, ind_alt_ft: 2100 }), 7);
+  const r = e.pilotSays('passing 2100 climbing 5000', { now: 8 });
+  assert.equal(r[1].tpl, 'radar_contact');
+});
+
+test('nearby published units fill gaps: approach within 40 NM, centre within 250 NM', async () => {
+  const phr = await load('icao');
+  const e = new AtcEngine({ phraseology: phr, airlines: AIRLINES, rng: seeded() });
+  const nearby = {
+    dep: [
+      { airport: 'ZBIG', name: 'Big Intl', municipality: 'Bigcity', role: 'APP', mhz: '126.100', description: 'BIGCITY APPROACH', dist_nm: 18 },
+      { airport: 'ZFAR', name: 'Far Field', municipality: 'Farville', role: 'CTR', mhz: '128.355', description: 'FARVILLE CONTROL', dist_nm: 120 },
+    ],
+    arr: [
+      { airport: 'ZOTH', name: 'Other', municipality: 'Otherton', role: 'APP', mhz: '119.900', description: 'APP', dist_nm: 65 },
+      { airport: 'ZSEA', name: 'Sea Field', municipality: 'Seaport', role: 'CTR', mhz: '133.650', description: 'manual', dist_nm: 90 },
+    ],
+  };
+  const dep = { ...XDEP, frequencies: { TWR: [{ mhz: '118.700' }], GND: [{ mhz: '121.900' }] } };
+  const arr = { ...XARR, frequencies: { TWR: [{ mhz: '118.300' }] } };
+  e.setFlightPlan({ ...FP }, dep, arr, 1, nearby);
+  assert.equal(e.units.dep_DEP.freq, '126.100');
+  assert.equal(e.units.dep_DEP.name, 'Bigcity Approach');
+  assert.match(e.units.dep_DEP.source, /published at ZBIG \(18 NM away\)/);
+  assert.equal(e.units.dep_CTR.freq, '128.355');
+  assert.equal(e.units.dep_CTR.name, 'Farville Control');
+  assert.equal(e.units.arr_CTR.freq, '133.650');
+  assert.equal(e.units.arr_CTR.name, 'Seaport Control');
+  // ZOTH approach is 65 NM away: too far for a terminal unit, area control works the arrival
+  assert.equal(e.units.arr_APP.freq, '133.650');
+  assert.match(e.units.arr_APP.source, /area control/);
+  // flight-plan entries win
+  e.setFlightPlan({ ...FP, frequencies: { CTR: '135.100', arr_APP: '120.800' } }, dep, arr, 1, nearby);
+  assert.equal(e.units.dep_CTR.freq, '135.100');
+  assert.equal(e.units.arr_APP.freq, '120.800');
+});
+
+test('area control hands over to the arrival-side centre half way', async () => {
+  const phr = await load('icao');
+  const e = new AtcEngine({ phraseology: phr, airlines: AIRLINES, rng: seeded() });
+  const nearby = {
+    dep: [{ airport: 'XDEP', role: 'CTR', mhz: '128.355', description: 'WEST CONTROL', dist_nm: 0 }],
+    arr: [{ airport: 'XARR', role: 'CTR', mhz: '132.600', description: 'EAST CONTROL', dist_nm: 0 }],
+  };
+  e.setFlightPlan({ ...FP }, { ...XDEP }, { ...XARR, frequencies: { ...XARR.frequencies, CTR: [] } }, 1, nearby);
+  assert.equal(e.units.dep_CTR.name, 'West Control');
+  assert.equal(e.units.arr_CTR.name, 'East Control');
+  Object.assign(e.s, { phase: 'cruise', ctr: 'dep_CTR', cleared: 24000 });
+  const mid = { lat: (XDEP.lat + XARR.lat) / 2 + 0.05, lon: (XDEP.lon + XARR.lon) / 2 + 0.05 };
+  let ev = e.updateSim(makeSim({ ...mid, on_ground: false, ind_alt_ft: 24000, com1_active: 128.355 }), 10);
+  assert.equal(ev[0].text, 'Air China 1234, contact East Control on 132.6.');
+  e.pilotSays('132.6, Air China 1234', { now: 11 });
+  assert.equal(e.s.ctr, 'arr_CTR');
+  assert.equal(e.s.phase, 'enroute_checkin');
+  e.updateSim(makeSim({ ...mid, on_ground: false, ind_alt_ft: 24000, com1_active: 132.6 }), 12);
+  ev = e.pilotSays('East Control, Air China 1234, maintaining FL240', { now: 13 });
+  assert.match(ev[1].text, /East Control, identified, maintain FL240/);
+});
+
+test('every published frequency of a unit works, 8.33 kHz channels included', async () => {
+  const phr = await load('icao');
+  const e = new AtcEngine({ phraseology: phr, airlines: AIRLINES, rng: seeded() });
+  const dep = { ...XDEP, frequencies: { DEL: [{ mhz: '121.655' }], GND: [{ mhz: '121.900' }, { mhz: '121.705' }], TWR: [{ mhz: '118.505' }] } };
+  e.setFlightPlan({ ...FP }, dep, XARR, 1);
+  // 121.655 is an 8.33 channel on the 121.650 carrier: either radio setting works
+  e.updateSim(makeSim({ com1_active: 121.65 }), 2);
+  let ev = e.pilotSays('request IFR clearance', { now: 3 });
+  assert.equal(ev[1].tpl, 'clearance');
+  assert.equal(e.units.dep_DEL.unitLabel, undefined);
+  assert.equal(e.unitLabel('dep_DEL'), 'Demo Delivery 121.655');
+  e.s.pending = null; e.s.phase = 'taxi_request';
+  e.updateSim(makeSim({ com1_active: 121.705 }), 4); // the second ground frequency
+  ev = e.pilotSays('request taxi', { now: 5 });
+  assert.equal(ev[1].tpl, 'taxi');
+  // a sim reporting the 8.33 carrier (121.70833 for channel 121.710) is not 121.705
+  e.updateSim(makeSim({ com1_active: 121.70833 }), 6);
+  ev = e.pilotSays('say again', { now: 7 });
+  assert.match(ev[1].text, /No reply/);
 });
 
 test('distance helper', () => {

@@ -172,7 +172,8 @@ async function startFlight(fp) {
   app.engine = makeEngine(phr);
   if (app.sim) app.engine.updateSim(app.sim, Date.now());
   app.log = [];
-  handleEvents(app.engine.setFlightPlan(fp, dep, arr, Date.now()));
+  const nearby = { dep: await nearbyFrequencies(dep), arr: await nearbyFrequencies(arr) };
+  handleEvents(app.engine.setFlightPlan(fp, dep, arr, Date.now(), nearby));
   store.set('fp', fp);
   fetchWeather();
   if (app.source === 'mock') {
@@ -183,6 +184,17 @@ async function startFlight(fp) {
   renderFlightSummary();
   showView('radio');
   renderRadio();
+}
+
+// published approach/departure/centre frequencies around an airport, used
+// when the airport itself lists none (real data only, see engine buildUnits)
+async function nearbyFrequencies(airport) {
+  if (airport?.lat == null || airport?.lon == null) return [];
+  try {
+    return await api(`api/frequencies/near?lat=${airport.lat}&lon=${airport.lon}&radius=250`);
+  } catch {
+    return [];
+  }
 }
 
 let weatherTimer = null;
@@ -361,8 +373,8 @@ function renderRadio() {
   } else tune.classList.add('hidden');
   $('#hint-missed').classList.toggle('hidden', !hint.missed);
   $('#hint-missed').textContent = hint.missed || '';
-  $('#hint-squawk').classList.toggle('hidden', !hint.squawk);
-  $('#hint-squawk').textContent = hint.squawk || '';
+  $('#hint-squawk').classList.toggle('hidden', !hint.squawk && !hint.unknownFreq);
+  $('#hint-squawk').textContent = [hint.unknownFreq, hint.squawk].filter(Boolean).join(' ');
 
   const box = $('#actions');
   box.innerHTML = '';
@@ -451,7 +463,10 @@ function renderFlightSummary() {
     `${e.dep.icao} METAR: ${wx(e.metar.dep)}`,
     `${e.arr.icao} METAR: ${wx(e.metar.arr)}`,
     'Frequencies:',
-    ...Object.values(e.units).map((u) => `  ${u.name}: ${u.freq} (${u.source})`),
+    ...Object.values(e.units).map((u) => (u.known
+      ? `  ${u.name}: ${u.freqs.map((x) => f.freq(x).t).join(' / ')} (${u.source})`
+      : `  ${u.name}: NOT PUBLISHED - enter it under More`)),
+    'All frequencies are real published ones (OurAirports, your manual file or this form).',
   ];
   box.innerHTML = '<h2>Current flight</h2>';
   const pre = document.createElement('div');

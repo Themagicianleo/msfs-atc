@@ -5,14 +5,18 @@ import { Formatter, callsignOf, parseLevel, render } from '../js/atc/format.js';
 import { compact, detectIntent, missingItems, normalize } from '../js/atc/parser.js';
 import { selectRunway } from '../js/atc/runway.js';
 import { deepMerge, loadPhraseology, validatePhraseology } from '../js/atc/phraseology.js';
+import { carrierMHz, designator, is833Channel, isComChannel, readbackTokens, sameFrequency } from '../js/atc/frequency.js';
 
 const json = (p) => JSON.parse(readFileSync(new URL(p, import.meta.url)));
 const load = (id) => loadPhraseology(id, async (x) => json(`../phraseology/${x}.json`));
 
 test('frequencies, runways, squawks', () => {
   const f = new Formatter({});
-  assert.deepEqual(f.freq(121.9), { t: '121.9', s: 'one two one decimal niner' });
+  assert.deepEqual(f.freq(121.9), { t: '121.9', s: 'one two one decimal niner', mhz: 121.9 });
   assert.equal(f.freq('118.700').t, '118.7');
+  assert.equal(f.freq(124.35).t, '124.350'); // ICAO: six digits unless the last two are zero
+  assert.equal(f.freq(124.35).s, 'one two four decimal three five zero');
+  assert.equal(new Formatter({ units: { freqStyle: 'trim' } }).freq(124.35).t, '124.35');
   assert.equal(f.freq(118.705).s, 'one one eight decimal seven zero five');
   assert.deepEqual(f.runway('27L'), { t: '27L', s: 'two seven left' });
   assert.equal(f.runway('4').t, '04');
@@ -129,4 +133,21 @@ test('phraseology files load, extend and validate', async () => {
     'taxi_in', 'go_around', 'go_around_app', 'wrong_unit', 'radio_check', 'say_again', 'standby', 'contact_now']) {
     assert.ok(icao.atc[key], `atc.${key}`);
   }
+});
+
+test('VHF COM channel rules (25 kHz and 8.33 kHz)', () => {
+  assert.ok(isComChannel(118.0) && isComChannel('136.975') && isComChannel(121.655) && isComChannel(136.99));
+  assert.ok(!isComChannel(117.95) && !isComChannel(257.8) && !isComChannel(137.0) && !isComChannel(121.62));
+  assert.ok(isComChannel(121.66) && !isComChannel(121.67) && !isComChannel('abc'));
+  assert.ok(is833Channel(118.705) && !is833Channel(118.725));
+  assert.ok(Math.abs(carrierMHz(118.705) - 118.7) < 1e-9);
+  assert.ok(Math.abs(carrierMHz(118.71) - 118.708333) < 1e-6);
+  assert.ok(Math.abs(carrierMHz(118.715) - 118.716667) < 1e-6);
+  assert.ok(sameFrequency(118.7, 118.705));       // same carrier
+  assert.ok(sameFrequency(118.71, 118.70833));     // channel name vs carrier
+  assert.ok(!sameFrequency(118.71, 118.715) && !sameFrequency(118.7, 118.725));
+  assert.equal(designator(121.9), '121.9');
+  assert.equal(designator(118.05), '118.050');
+  assert.equal(designator(132.005), '132.005');
+  assert.deepEqual(readbackTokens(124.35).sort(), ['12435', '124350']);
 });

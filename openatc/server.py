@@ -164,6 +164,21 @@ def create_app(*, hub: Hub, store: PairingStore, airports: AirportDB, metar: Met
             return web.json_response({"error": f"unknown airport {code.upper()}{hint}"}, status=404)
         return web.json_response(info)
 
+    @routes.get("/api/frequencies/near")
+    async def frequencies_near(request):
+        try:
+            lat = float(request.query["lat"])
+            lon = float(request.query["lon"])
+            radius = min(float(request.query.get("radius", 250)), 600)
+        except (KeyError, ValueError):
+            raise web.HTTPBadRequest(text="lat, lon (and optional radius in NM) required")
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            raise web.HTTPBadRequest(text="lat/lon out of range")
+        roles = [r for r in request.query.get("roles", "APP,DEP,CTR").upper().split(",") if r]
+        result = await asyncio.get_running_loop().run_in_executor(
+            None, lambda: airports.nearby_frequencies(lat, lon, radius, roles))
+        return web.json_response(result[:60])
+
     @routes.get("/api/metar/{code}")
     async def metar_route(request):
         return web.json_response(await metar.get(request.match_info["code"]))

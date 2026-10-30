@@ -247,9 +247,44 @@ next_unit next_freq cleared altitude freq items squawk_check`.
 
 Runway coordinates are optional (used for "arrived at the holding point" and
 distance-to-runway); headings default to the runway number × 10. Frequencies
-listed replace OurAirports' for that role. Missing frequencies fall back:
-Delivery → Ground → Tower; Departure ↔ Approach → en-route control; anything
-still missing uses the region default (shown in the log).
+listed replace OurAirports' for that role.
+
+### Frequencies: real published ones only
+
+OpenATC never makes up a frequency. Every controller uses, in this order:
+
+1. what you typed in the flight plan (*More → frequency overrides*, from your charts);
+2. the airport's own published frequencies (manual file, then OurAirports);
+3. the real-world fallback, still using published frequencies:
+   - no Delivery → clearance from **Ground**, else **Tower** (as at many real airports);
+   - no Ground → **Tower**;
+   - no Departure/Approach → the other one at the same airport, else a published
+     Approach/Departure at an airport **within 40 NM** (one terminal unit often
+     serves several airports), else **area control**;
+   - area control (*Control/Centre*) → the airport's own listing, else the nearest
+     airport **within 250 NM** that lists one. The departure side and the arrival side
+     are looked up separately; if they differ, you are handed from one to the other
+     half way along the route. If none is found, the departure/approach unit keeps you.
+4. If still nothing is published, the controller is shown as **frequency unknown**:
+   the log and the hint card tell you to enter it from your chart, the handoff says
+   "contact Beijing Control" without a frequency, and that controller answers on
+   whatever frequency you are on.
+
+Other real-world rules applied:
+- Only tunable VHF COM channels are used (118.000–136.990 MHz on the 25 kHz or
+  8.33 kHz raster). Military UHF, HF and NAV-band entries in OurAirports are dropped.
+- Every published frequency of a unit works (e.g. both Ground frequencies of a big
+  airport); the first listed is the one ATC gives you, with entries described as
+  secondary/standby/military/emergency etc. moved to the back.
+- 8.33 kHz channels are matched by carrier frequency: channel 118.705 and 118.700
+  are the same carrier, and a sim that reports the carrier (118.7083) still matches
+  channel 118.710.
+- Frequencies are read out per ICAO Annex 10: all six digits unless the last two are
+  zeros (`121.9`, `124.350`, `118.705`). For FAA-style trimming (`124.35`) set
+  `"freqStyle": "trim"` under `units` in your phraseology file. Readbacks are accepted
+  either way.
+
+The demo airports `XDEP`/`XARR` are fictional, so their frequencies are too.
 
 ## 6. Command line
 
@@ -384,9 +419,19 @@ to the author). What was tested is listed in section 11. Everything below is
   real SID/STAR data, no taxiway routes). The China file's metric flight-level table
   and English CAAC wording are from general knowledge: **check against the CAAC AIP**.
 - Default levels (initial climb 5000 ft / 900 m, departure climb FL150 / 6000 m,
-  descent FL100 / 3600 m, approach 3000 ft / 900 m), the 5000 ft ICAO transition
-  altitude and the default frequencies (tower 118.100, control 127.500) are
-  arbitrary but editable in the phraseology file / flight plan.
+  descent FL100 / 3600 m, approach 3000 ft / 900 m) and the 5000 ft ICAO transition
+  altitude are arbitrary but editable in the phraseology file / flight plan.
+- Frequencies are real published data, but **only as current and complete as
+  OurAirports**, a community-maintained database: some entries are outdated, and
+  coverage varies by country (area control/centre frequencies especially are listed
+  at only some airports). Real frequencies also change every AIRAC cycle. MSFS 2024
+  uses its own navigation data, so the frequency on the sim's airport page can
+  differ from OurAirports; OpenATC follows OurAirports unless you enter the
+  frequency yourself. Area control is real but may not be the exact sector you
+  would be in, because OpenATC has no airspace sector boundaries; it takes the
+  nearest published centre to each end of the route. **Not checked against current
+  AIPs**. For exact frequencies, enter them from current charts in the flight plan
+  or `userdata/airports_manual.json`.
 - ATIS letter is derived from the METAR hour (A–Z); it is not real ATIS.
 - Airline telephony list is short and from public knowledge.
 

@@ -1,3 +1,5 @@
+import { designator } from './frequency.js';
+
 // Text and speech formatting for radio phraseology.
 // Every formatter returns {t, s}: t = what is shown, s = what is spoken.
 
@@ -45,14 +47,15 @@ export class Formatter {
     return parts.join(' ');
   }
 
+  // ICAO readout by default: all six digits unless the last two are zeros
+  // (121.900 -> "121.9", 124.350 -> "124.350", 118.705 -> "118.705");
+  // units.freqStyle "trim" drops all trailing zeros instead (FAA style)
   freq(mhz) {
     if (mhz === null || mhz === undefined || mhz === '') return null;
-    const v = Number(mhz);
-    let t = v.toFixed(3).replace(/0+$/, '');
-    if (t.endsWith('.')) t += '0';
+    const t = designator(mhz, this.units.freqStyle || 'icao');
     const [a, b] = t.split('.');
     const dec = this.units.decimalWord || 'decimal';
-    return { t, s: `${this.spell(a)} ${dec} ${this.spell(b)}` };
+    return { t, s: `${this.spell(a)} ${dec} ${this.spell(b)}`, mhz: Number(mhz) };
   }
 
   runway(id) {
