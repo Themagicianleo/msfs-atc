@@ -4,6 +4,7 @@
 import { AtcEngine, PHASES } from './atc/engine.js';
 import { Formatter } from './atc/format.js';
 import { loadPhraseology, validatePhraseology } from './atc/phraseology.js';
+import { decodePlan } from './fpimport.js';
 import { Speaker } from './speech.js';
 import { Listener, voiceSupport } from './voice.js';
 
@@ -519,6 +520,42 @@ $('#fp-form').addEventListener('submit', async (e) => {
   }
 });
 
+// A flight plan handed over by another app (MSFS Buddy EFB): it only fills
+// the form; you check it and press Start flight.
+function importPlan(text, from) {
+  const fp = decodePlan(text);
+  $('#fp-form').reset(); // don't keep stands, taxi routes or frequencies from the last flight
+  fillForm({ frequencies: {}, ...fp });
+  $('#fp-error').textContent = '';
+  $('#fp-note').textContent = `Flight plan ${[fp.callsign, `${fp.dep} → ${fp.arr}`].filter(Boolean).join(' ')} loaded ${from}. Check it, then press Start flight.`;
+  showView('flight');
+}
+
+function importFromHash() {
+  if (!/[#&]fp=/.test(location.hash)) return;
+  try {
+    importPlan(location.hash, 'from the link');
+  } catch (err) {
+    $('#fp-error').textContent = err.message;
+    showView('flight');
+  }
+  history.replaceState(null, '', location.pathname + location.search);
+}
+addEventListener('hashchange', importFromHash);
+
+$('#fp-paste').addEventListener('click', async () => {
+  let text = '';
+  try { text = await navigator.clipboard.readText(); } catch { /* not allowed: ask instead */ }
+  if (!text) text = prompt('Paste the flight plan code from the EFB (it starts with OPENATC1:)') || '';
+  if (!text.trim()) return;
+  try {
+    importPlan(text, 'from the clipboard');
+  } catch (err) {
+    $('#fp-note').textContent = '';
+    $('#fp-error').textContent = err.message;
+  }
+});
+
 $('#fp-demo').addEventListener('click', () => fillForm({
   callsign: 'CCA1234', dep: 'XDEP', arr: 'XARR', cruise: 'FL240', sid: 'DEMO1A', star: 'HARB2B',
   approach: 'ILS', region: 'icao', arrStand: 'B7', route: 'DCT', frequencies: {},
@@ -643,6 +680,7 @@ setupVoice();
 renderLog();
 await loadAirlines();
 await restore();
+importFromHash(); // after restore, so a plan from a link replaces the last one in the form
 renderRadio();
 
 if ('serviceWorker' in navigator && window.isSecureContext) {
