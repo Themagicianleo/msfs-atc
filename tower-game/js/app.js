@@ -404,7 +404,7 @@ function renderVoice() {
   const s = voiceSupport();
   $('#voice-diag').textContent = s.ok ? `Speech recognition available${s.standalone ? ' (Home Screen app: if it fails, use a Safari tab)' : ''}.` : s.reason;
   $('#ptt').classList.toggle('disabled', listener.disabled);
-  $('#ptt-label').textContent = listener.disabled ? 'Voice unavailable: type or use buttons' : 'Hold to talk (or hold Space)';
+  $('#ptt-label').textContent = listener.disabled ? 'Voice unavailable: type or use buttons' : 'Hold to talk';
   if (listener.disabled) $('#voice-status').textContent = listener.reason;
 }
 

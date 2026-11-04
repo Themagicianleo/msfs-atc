@@ -260,6 +260,8 @@ export class Renderer {
     c.textAlign = 'center';
     c.textBaseline = 'middle';
     for (const l of labels) {
+      // only real designators (A, B2, WA, M12); OSM descriptive names stay off the chart
+      if (!/^[A-Z]{1,3}\d{0,3}[A-Z]?$/.test(l.name)) continue;
       if (l.lane && s < minLane) continue;
       if (!l.lane && s < 0.04) continue;
       const q = this.toScreen(l.p);

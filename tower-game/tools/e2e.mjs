@@ -9,6 +9,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildSite } from './build_site.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -22,7 +23,10 @@ if (!hadData) {
   spawnSync(PY, [join(ROOT, 'tools', 'build_airports.py'), '--from-dir', join(ROOT, 'tests', 'fixtures')], { stdio: 'inherit' });
 }
 const port = 20000 + Math.floor(Math.random() * 2000);
-const server = spawn(PY, ['-m', 'http.server', String(port), '--bind', '127.0.0.1', '--directory', ROOT], { stdio: 'ignore' });
+// serve exactly what GitHub Pages gets
+const SITE = mkdtempSync(join(tmpdir(), 'tower-site-'));
+buildSite(SITE);
+const server = spawn(PY, ['-m', 'http.server', String(port), '--bind', '127.0.0.1', '--directory', SITE], { stdio: 'ignore' });
 let page = null;
 
 async function main() {

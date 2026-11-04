@@ -109,6 +109,25 @@ input[type=range] { width: 100%; accent-color: var(--blue); }
   .side { width: auto; flex: 1 1 48%; }
   .game-bar .brand span { font-size: 15px; }
 }
+/* phones: one compact top bar, small map controls, room for the map */
 @media (max-width: 600px) {
+  .game-bar { flex-wrap: nowrap; gap: 6px; padding: 6px 8px 4px; overflow-x: auto; scrollbar-width: none; }
+  .game-bar .brand { gap: 6px; padding: 2px; min-width: 0; }
+  .game-bar .brand img { width: 24px; height: 24px; }
+  .game-bar .brand { flex: none; }
+  .game-bar .brand span { display: none; }
+  .game-bar .capsule { height: 34px; padding: 0 10px; font-size: 14px; flex: none; }
   .game-bar .capsule.info, .map-hint { display: none; }
+  .speed { flex: none; }
+  .speed button { min-width: 32px; padding: 5px 8px; font-size: 13px; }
+  #new-shift { padding: 0 10px; }
+  .game { padding: 0 8px 8px; gap: 8px; }
+  .map-wrap { flex-basis: 58%; }
+  .map-tools { top: 8px; right: 8px; gap: 6px; }
+  .map-tools .capsule { height: 32px; padding: 0 12px; font-size: 14px; }
+  .map-config { left: 8px; right: 8px; bottom: 8px; gap: 6px; padding: 4px 8px; font-size: 11px; flex-wrap: nowrap; overflow-x: auto; border-radius: 16px; }
+  .small-input { min-height: 28px; font-size: 13px; padding: 2px 26px 2px 8px; }
+  .ptt { min-height: 72px; font-size: 18px; }
 }
+/* touch devices have no space bar */
+@media (hover: none) { .kbd-hint { display: none; } }

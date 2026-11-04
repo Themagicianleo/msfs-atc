@@ -43,11 +43,8 @@ jobs:
         run: python tools/build_airports.py
       - name: Build the detailed airports from the OpenStreetMap extracts
         run: node tools/build_hq.mjs
-      - name: Leave tests and tools out of the site
-        run: |
-          mkdir -p ../_site
-          cp -r index.html tower.css manifest.webmanifest sw.js icons js data ../_site/
-          rm -f ../_site/data/osm/*.json  # raw extracts: not needed by the site (data/hq/ is built from them)
+      - name: Build the site (and check every referenced file is in it)
+        run: node tools/build_site.mjs ../_site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
