@@ -39,6 +39,10 @@ async def test_static_and_security_headers(ctx):
     assert r.status == 200 and r.headers["Content-Type"].startswith("text/javascript")
     assert (await client.get("/../openatc/auth.py")).status == 404
     assert (await client.get("/%2e%2e/openatc/auth.py")).status == 404
+    r = await client.get("/tower/")
+    assert r.status == 200 and "OpenATC Tower" in await r.text()
+    r = await client.get("/tower", allow_redirects=False)
+    assert r.status == 302 and r.headers["Location"] == "/tower/"
     r = await client.get("/phraseology/icao.json")  # user override wins
     assert json.loads(await r.text()) == {"override": True}
 

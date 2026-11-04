@@ -33,6 +33,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--port", type=int, default=8443, help="HTTPS port for the app (default 8443)")
     p.add_argument("--setup-port", type=int, default=8080,
                    help="plain-HTTP port that only serves the CA certificate (default 8080, 0 = off)")
+    p.add_argument("--local-port", type=int, default=8081,
+                   help="plain-HTTP port on 127.0.0.1 only, for a browser on this PC (microphone works on "
+                        "localhost without a certificate; 0 = off)")
     p.add_argument("--no-https", action="store_true",
                    help="serve the app over plain HTTP (voice input will NOT work in Safari)")
     p.add_argument("--mock", action="store_true", help="use a simulated aircraft instead of MSFS")
@@ -124,6 +127,10 @@ async def serve(args, store: PairingStore) -> None:
 
     for host in hosts:
         await web.TCPSite(runner, host, args.port, ssl_context=ssl_ctx).start()
+    # browsers treat http://localhost as secure, so a browser on this PC gets
+    # the microphone without installing the certificate; loopback only
+    if secure and args.local_port:
+        await web.TCPSite(runner, "127.0.0.1", args.local_port).start()
     scheme = "https" if secure else "http"
     main_host = lan_ip or "127.0.0.1"
     app_url = f"{scheme}://{main_host}:{args.port}/"
@@ -143,6 +150,9 @@ async def serve(args, store: PairingStore) -> None:
     if setup_runner:
         print(f" First-time setup:  http://{main_host}:{args.setup_port}/   (install the certificate)")
         print(f" CA fingerprint:    SHA-256 {fp}")
+    print(f" Tower game:        {app_url}tower/")
+    if secure and args.local_port:
+        print(f" On this PC:        http://localhost:{args.local_port}/  and  http://localhost:{args.local_port}/tower/")
     print(f" Pairing code:      {store.code}")
     print(f" Sim source:        {source.name}{'  (mock aircraft)' if args.mock else ''}")
     print(f" Listening only on: {', '.join(hosts)} (local network)")

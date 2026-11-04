@@ -1,0 +1,83 @@
+{
+  "id": "tower",
+  "name": "OpenATC Tower game",
+  "about": "Phraseology for the tower game: what pilots say ('pilot'), how they read back ('readback'), what the command buttons say for you ('controller') and the patterns that recognise your spoken or typed commands ('commands', regular expressions tried top to bottom on lower-case text with numbers as digits). {placeholders} are filled in; [parts] disappear when a placeholder inside is empty. Copy to userdata/phraseology/tower.json to keep your changes.",
+
+  "pilot": {
+    "arr_checkin": "{unit}, {callsign}, {approach} runway {runway}, {miles} miles.",
+    "arr_short_final": "{unit}, {callsign}, short final runway {runway}.",
+    "go_around": "{callsign}, going around.",
+    "vacated": "{unit}, {callsign}, runway {runway} vacated, request taxi to stand {gate}.",
+    "push": "{unit}, {callsign}, stand {gate}, request pushback.",
+    "taxi": "{unit}, {callsign}, ready to taxi.",
+    "ready": "{unit}, {callsign}, holding point runway {runway}, ready for departure.",
+    "hold_short": "{unit}, {callsign}, holding short runway {runway}.",
+    "handoff": "{unit}, {callsign}, request frequency change.",
+    "blocked": "{unit}, {callsign}, we're blocked by traffic, request instructions."
+  },
+
+  "readback": {
+    "land": "Cleared to land runway {runway}, {callsign}.",
+    "continue": "Continue approach, {callsign}.",
+    "go_around": "Going around, {callsign}.",
+    "push": "Pushback approved, {callsign}.",
+    "taxi_out": "Taxi to holding point runway {runway}[ via {via}][, cross runway {cross}], {callsign}.",
+    "taxi_in": "Taxi to stand {gate}[ via {via}][, cross runway {cross}], {callsign}.",
+    "hold_position": "Holding position, {callsign}.",
+    "continue_taxi": "Continue taxi, {callsign}.",
+    "hold_short": "Hold short runway {runway}, {callsign}.",
+    "cross": "Cross runway {runway}, {callsign}.",
+    "lineup": "Line up and wait runway {runway}, {callsign}.",
+    "takeoff": "Cleared for take-off runway {runway}, {callsign}.",
+    "contact": "Contact departure, good day, {callsign}.",
+    "unable": "Unable, {reason}, {callsign}.",
+    "say_again": "Say again for {callsign}?"
+  },
+
+  "controller": {
+    "land": "{callsign}, [wind {wind}, ]runway {runway}, cleared to land.",
+    "continue": "{callsign}, continue approach.",
+    "go_around": "{callsign}, go around.",
+    "push": "{callsign}, pushback approved.",
+    "taxi_out": "{callsign}, taxi to holding point runway {runway}[ via {via}].",
+    "taxi_in": "{callsign}, taxi to stand {gate}[ via {via}].",
+    "hold_position": "{callsign}, hold position.",
+    "continue_taxi": "{callsign}, continue taxi.",
+    "cross": "{callsign}, cross runway {runway}.",
+    "hold_short": "{callsign}, hold short runway {runway}.",
+    "lineup": "{callsign}, runway {runway}, line up and wait.",
+    "takeoff": "{callsign}, [wind {wind}, ]runway {runway}, cleared for take-off.",
+    "contact": "{callsign}, contact departure, good day."
+  },
+
+  "buttons": {
+    "land": "Cleared to land",
+    "continue": "Continue approach",
+    "go_around": "Go around",
+    "push": "Pushback approved",
+    "taxi_out": "Taxi to runway",
+    "taxi_in": "Taxi to stand",
+    "hold_position": "Hold position",
+    "continue_taxi": "Continue taxi",
+    "cross": "Cross runway",
+    "hold_short": "Hold short",
+    "lineup": "Line up and wait",
+    "takeoff": "Cleared for take-off",
+    "contact": "Contact departure"
+  },
+
+  "commands": [
+    { "cmd": "go_around", "patterns": ["go ?around", "missed approach"] },
+    { "cmd": "land", "patterns": ["clear\\w* to land", "clear\\w* land", "cleared for (the )?landing"] },
+    { "cmd": "takeoff", "patterns": ["clear\\w* for (immediate )?take ?off", "clear\\w* take ?off", "clear\\w* for departure"] },
+    { "cmd": "lineup", "patterns": ["line ?up"] },
+    { "cmd": "cross", "patterns": ["^(?!.*taxi).*cross"] },
+    { "cmd": "hold_short", "patterns": ["^(?!.*taxi).*hold(ing)? short"] },
+    { "cmd": "hold_position", "patterns": ["hold (your )?position", "^(?!.*taxi).*\\bstop\\b", "^(?!.*(taxi|short)).*\\bhold\\b"] },
+    { "cmd": "continue_taxi", "patterns": ["continue (taxi|taxiing)", "resume taxi"] },
+    { "cmd": "continue", "patterns": ["continue approach", "^(?!.*taxi).*\\bcontinue\\b"] },
+    { "cmd": "push", "patterns": ["push ?back", "\\bpush\\b"] },
+    { "cmd": "taxi", "patterns": ["\\btaxi\\b"] },
+    { "cmd": "contact", "patterns": ["contact (departure|radar|approach|center|centre|control)", "frequency change approved", "good ?day", "monitor"] }
+  ]
+}
