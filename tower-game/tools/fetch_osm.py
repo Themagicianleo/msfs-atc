@@ -19,36 +19,34 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-AIRPORTS = ["WSSS", "ZBAD", "KSFO"]
+# airport reference point and half-size of the box to download (degrees)
+AIRPORTS = {"WSSS": (1.3644, 103.9915, 0.055), "ZBAD": (39.5098, 116.4105, 0.06), "KSFO": (37.6188, -122.3756, 0.045)}
 SERVERS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]
 OUT = Path(__file__).resolve().parent.parent / "data" / "osm"
 
 QUERY = """
-[out:json][timeout:300];
+[out:json][timeout:180][bbox:{bbox}];
 (
-  way["aeroway"="aerodrome"]["icao"="{icao}"];
-  relation["aeroway"="aerodrome"]["icao"="{icao}"];
-)->.ad;
-.ad map_to_area->.a;
-(
-  way(area.a)["aeroway"~"^(runway|taxiway|taxilane|apron|parking_position|holding_position|stopway|gate|terminal|hangar|navigationaid|tower|helipad)$"];
-  node(area.a)["aeroway"~"^(holding_position|parking_position|gate|navigationaid|tower|windsock)$"];
-  way(area.a)["building"~"^(terminal|hangar|control_tower)$"];
-  relation(area.a)["aeroway"~"^(apron|terminal)$"];
+  way["aeroway"~"^(runway|taxiway|taxilane|apron|parking_position|holding_position|gate|terminal|hangar)$"];
+  node["aeroway"~"^(holding_position|parking_position|gate)$"];
+  way["building"~"^(terminal|hangar|control_tower)$"];
+  relation["aeroway"~"^(apron|terminal)$"];
 );
 out body geom qt;
-.ad out body geom;
 """
 
 
 def fetch(icao: str) -> dict:
-    data = urllib.parse.urlencode({"data": QUERY.replace("{icao}", icao)}).encode()
+    lat, lon, d = AIRPORTS[icao]
+    bbox = f"{lat - d},{lon - d * 1.3},{lat + d},{lon + d * 1.3}"
+    data = urllib.parse.urlencode({"data": QUERY.replace("{bbox}", bbox)}).encode()
     last = None
     for attempt in range(3):
         for url in SERVERS:
             try:
                 req = urllib.request.Request(url, data=data, headers={"User-Agent": "tower-controller-game (github action)"})
-                with urllib.request.urlopen(req, timeout=360) as resp:
+                print(f"{icao}: asking {url}", flush=True)
+                with urllib.request.urlopen(req, timeout=200) as resp:
                     out = json.loads(resp.read())
                 if out.get("elements"):
                     return out
@@ -69,9 +67,9 @@ def main(codes: list[str]) -> None:
         for el in result["elements"]:
             k = el.get("tags", {}).get("aeroway") or el.get("tags", {}).get("building") or "?"
             kinds[k] = kinds.get(k, 0) + 1
-        print(icao, len(result["elements"]), "elements", kinds)
+        print(icao, len(result["elements"]), "elements", kinds, flush=True)
         time.sleep(10)  # be gentle with the public server
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:] or AIRPORTS)
+    main(sys.argv[1:] or list(AIRPORTS))

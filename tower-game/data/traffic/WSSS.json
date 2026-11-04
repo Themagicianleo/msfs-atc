@@ -1,0 +1,355 @@
+{
+ "airport": "WSSS",
+ "meta": {
+  "icao": "WSSS",
+  "name": "Singapore Changi Airport",
+  "municipality": "Singapore",
+  "country": "SG",
+  "elevation_ft": 22,
+  "tower": "Changi Tower"
+ },
+ "about": "Representative traffic for the game: airlines that serve this airport, their ICAO code and radio callsign, a typical fleet mix there and destinations. Not a real schedule; weights are rough shares of movements. Edit freely: types must exist in data/aircraft.json.",
+ "airlines": [
+  {
+   "code": "SIA",
+   "callsign": "Singapore",
+   "weight": 36,
+   "numbers": [
+    1,
+    999
+   ],
+   "types": {
+    "A359": 6,
+    "B77W": 2,
+    "B78X": 3,
+    "A388": 1,
+    "B38M": 3
+   },
+   "destinations": [
+    "YSSY",
+    "YMML",
+    "EGLL",
+    "EDDF",
+    "RJTT",
+    "RJAA",
+    "VHHH",
+    "RKSI",
+    "ZSPD",
+    "VTBS",
+    "WIII",
+    "WMKK",
+    "VIDP",
+    "KSFO",
+    "OMDB",
+    "RCTP"
+   ]
+  },
+  {
+   "code": "TGW",
+   "callsign": "Scooter",
+   "weight": 16,
+   "numbers": [
+    100,
+    899
+   ],
+   "types": {
+    "A20N": 3,
+    "A21N": 3,
+    "B788": 1,
+    "B789": 2,
+    "E290": 2
+   },
+   "destinations": [
+    "WMKK",
+    "VTBS",
+    "WADD",
+    "RPLL",
+    "VVTS",
+    "VHHH",
+    "RJAA",
+    "RKSI",
+    "ZGGG",
+    "YBBN",
+    "VOMM"
+   ]
+  },
+  {
+   "code": "CPA",
+   "callsign": "Cathay",
+   "weight": 4,
+   "numbers": [
+    700,
+    759
+   ],
+   "types": {
+    "A359": 3,
+    "A333": 2,
+    "B77W": 1
+   },
+   "destinations": [
+    "VHHH"
+   ]
+  },
+  {
+   "code": "QFA",
+   "callsign": "Qantas",
+   "weight": 3,
+   "numbers": [
+    1,
+    99
+   ],
+   "types": {
+    "A333": 2,
+    "B789": 1
+   },
+   "destinations": [
+    "YSSY",
+    "YMML",
+    "YPPH"
+   ]
+  },
+  {
+   "code": "UAE",
+   "callsign": "Emirates",
+   "weight": 3,
+   "numbers": [
+    400,
+    439
+   ],
+   "types": {
+    "A388": 2,
+    "B77W": 2
+   },
+   "destinations": [
+    "OMDB"
+   ]
+  },
+  {
+   "code": "MAS",
+   "callsign": "Malaysian",
+   "weight": 4,
+   "numbers": [
+    600,
+    629
+   ],
+   "types": {
+    "B738": 3,
+    "A333": 1
+   },
+   "destinations": [
+    "WMKK"
+   ]
+  },
+  {
+   "code": "GIA",
+   "callsign": "Indonesia",
+   "weight": 4,
+   "numbers": [
+    820,
+    839
+   ],
+   "types": {
+    "B738": 3,
+    "A333": 1
+   },
+   "destinations": [
+    "WIII",
+    "WADD"
+   ]
+  },
+  {
+   "code": "THA",
+   "callsign": "Thai",
+   "weight": 3,
+   "numbers": [
+    400,
+    419
+   ],
+   "types": {
+    "A359": 1,
+    "A20N": 2,
+    "B789": 1
+   },
+   "destinations": [
+    "VTBS"
+   ]
+  },
+  {
+   "code": "AXM",
+   "callsign": "Red Cap",
+   "weight": 5,
+   "numbers": [
+    680,
+    699
+   ],
+   "types": {
+    "A20N": 3
+   },
+   "destinations": [
+    "WMKK",
+    "WMKP"
+   ]
+  },
+  {
+   "code": "KAL",
+   "callsign": "Korean Air",
+   "weight": 2,
+   "numbers": [
+    640,
+    649
+   ],
+   "types": {
+    "B77W": 1,
+    "A333": 1
+   },
+   "destinations": [
+    "RKSI"
+   ]
+  },
+  {
+   "code": "JAL",
+   "callsign": "Japan Air",
+   "weight": 2,
+   "numbers": [
+    35,
+    39
+   ],
+   "types": {
+    "B788": 1,
+    "B789": 1
+   },
+   "destinations": [
+    "RJTT",
+    "RJAA"
+   ]
+  },
+  {
+   "code": "ANA",
+   "callsign": "All Nippon",
+   "weight": 2,
+   "numbers": [
+    801,
+    809
+   ],
+   "types": {
+    "B788": 1,
+    "B789": 1
+   },
+   "destinations": [
+    "RJTT",
+    "RJAA"
+   ]
+  },
+  {
+   "code": "BAW",
+   "callsign": "Speedbird",
+   "weight": 2,
+   "numbers": [
+    11,
+    12
+   ],
+   "types": {
+    "A35K": 1,
+    "B77W": 1
+   },
+   "destinations": [
+    "EGLL"
+   ]
+  },
+  {
+   "code": "DLH",
+   "callsign": "Lufthansa",
+   "weight": 1,
+   "numbers": [
+    778,
+    779
+   ],
+   "types": {
+    "A359": 1
+   },
+   "destinations": [
+    "EDDF"
+   ]
+  },
+  {
+   "code": "CES",
+   "callsign": "China Eastern",
+   "weight": 3,
+   "numbers": [
+    543,
+    549
+   ],
+   "types": {
+    "A333": 1,
+    "A21N": 2
+   },
+   "destinations": [
+    "ZSPD"
+   ]
+  },
+  {
+   "code": "CSN",
+   "callsign": "China Southern",
+   "weight": 3,
+   "numbers": [
+    353,
+    359
+   ],
+   "types": {
+    "A333": 1,
+    "A20N": 2
+   },
+   "destinations": [
+    "ZGGG"
+   ]
+  },
+  {
+   "code": "VJC",
+   "callsign": "Vietjet",
+   "weight": 3,
+   "numbers": [
+    810,
+    819
+   ],
+   "types": {
+    "A321": 2
+   },
+   "destinations": [
+    "VVTS",
+    "VVNB"
+   ]
+  },
+  {
+   "code": "CEB",
+   "callsign": "Cebu",
+   "weight": 2,
+   "numbers": [
+    801,
+    809
+   ],
+   "types": {
+    "A21N": 1,
+    "A20N": 1
+   },
+   "destinations": [
+    "RPLL"
+   ]
+  },
+  {
+   "code": "IGO",
+   "callsign": "Ifly",
+   "weight": 2,
+   "numbers": [
+    1001,
+    1099
+   ],
+   "types": {
+    "A21N": 1
+   },
+   "destinations": [
+    "VOMM",
+    "VOBL"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,192 @@
+{
+ "airport": "ZBAD",
+ "meta": {
+  "icao": "ZBAD",
+  "name": "Beijing Daxing International Airport",
+  "municipality": "Beijing",
+  "country": "CN",
+  "elevation_ft": 98,
+  "tower": "Daxing Tower"
+ },
+ "about": "Representative traffic for the game: airlines that serve this airport, their ICAO code and radio callsign, a typical fleet mix there and destinations. Not a real schedule; weights are rough shares of movements. Edit freely: types must exist in data/aircraft.json.",
+ "airlines": [
+  {
+   "code": "CSN",
+   "callsign": "China Southern",
+   "weight": 38,
+   "numbers": [
+    3101,
+    3199
+   ],
+   "types": {
+    "A20N": 3,
+    "A21N": 3,
+    "A333": 2,
+    "A359": 1,
+    "B789": 1,
+    "B738": 2
+   },
+   "destinations": [
+    "ZGGG",
+    "ZGSZ",
+    "ZUUU",
+    "ZPPP",
+    "ZSSS",
+    "ZJSY",
+    "ZYTX",
+    "ZHHH",
+    "ZWWW",
+    "ZSHC",
+    "UUEE",
+    "RKSI"
+   ]
+  },
+  {
+   "code": "CES",
+   "callsign": "China Eastern",
+   "weight": 22,
+   "numbers": [
+    5101,
+    5199
+   ],
+   "types": {
+    "A20N": 3,
+    "A21N": 2,
+    "A333": 1,
+    "A359": 1,
+    "B738": 2,
+    "C919": 1
+   },
+   "destinations": [
+    "ZSSS",
+    "ZSPD",
+    "ZSHC",
+    "ZPPP",
+    "ZHHH",
+    "ZSAM",
+    "ZUUU"
+   ]
+  },
+  {
+   "code": "CXA",
+   "callsign": "Xiamen Air",
+   "weight": 10,
+   "numbers": [
+    8101,
+    8199
+   ],
+   "types": {
+    "B738": 3,
+    "B789": 1
+   },
+   "destinations": [
+    "ZSAM",
+    "ZSFZ",
+    "ZSHC",
+    "ZUUU"
+   ]
+  },
+  {
+   "code": "CUA",
+   "callsign": "Lianhang",
+   "weight": 10,
+   "numbers": [
+    5701,
+    5799
+   ],
+   "types": {
+    "B738": 3
+   },
+   "destinations": [
+    "ZGGG",
+    "ZUUU",
+    "ZPPP",
+    "ZJHK",
+    "ZSSS"
+   ]
+  },
+  {
+   "code": "CBJ",
+   "callsign": "Capital Jet",
+   "weight": 6,
+   "numbers": [
+    6101,
+    6199
+   ],
+   "types": {
+    "A20N": 2,
+    "A333": 1
+   },
+   "destinations": [
+    "ZJSY",
+    "ZPPP",
+    "ZSHC"
+   ]
+  },
+  {
+   "code": "CDG",
+   "callsign": "Shandong",
+   "weight": 4,
+   "numbers": [
+    1101,
+    1199
+   ],
+   "types": {
+    "B738": 2
+   },
+   "destinations": [
+    "ZSQD",
+    "ZSJN"
+   ]
+  },
+  {
+   "code": "CSC",
+   "callsign": "Sichuan",
+   "weight": 4,
+   "numbers": [
+    8901,
+    8999
+   ],
+   "types": {
+    "A20N": 2,
+    "A333": 1
+   },
+   "destinations": [
+    "ZUUU",
+    "ZUCK"
+   ]
+  },
+  {
+   "code": "DKH",
+   "callsign": "Air Juneyao",
+   "weight": 3,
+   "numbers": [
+    1101,
+    1199
+   ],
+   "types": {
+    "A20N": 2
+   },
+   "destinations": [
+    "ZSSS",
+    "ZSPD"
+   ]
+  },
+  {
+   "code": "AFL",
+   "callsign": "Aeroflot",
+   "weight": 2,
+   "numbers": [
+    200,
+    209
+   ],
+   "types": {
+    "A333": 1,
+    "B77W": 1
+   },
+   "destinations": [
+    "UUEE"
+   ]
+  }
+ ]
+}

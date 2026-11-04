@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: osm-fetch-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   fetch:
@@ -27,7 +27,9 @@ jobs:
           python-version: "3.12"
       - name: Download from the Overpass API
         working-directory: tower-game
-        run: python tools/fetch_osm.py
+        # one airport at a time, so a slow one doesn't lose the others
+        run: |
+          for a in WSSS ZBAD KSFO; do python -u tools/fetch_osm.py $a || echo "::warning::$a failed"; done
       - name: Commit the data
         run: |
           git config user.name "github-actions[bot]"

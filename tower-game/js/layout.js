@@ -312,35 +312,121 @@ export function buildLayout(airport, { maxRunways = 3, minLengthM = 1200 } = {})
 
 // Dijkstra over taxiways. Runway centrelines are never used for taxiing and
 // runway nodes only as start/end. "via" taxiway names are preferred.
-// prefer: 'A' or 'B' biases the choice between the two main parallels
-export function route(layout, from, to, { via = [], prefer = null } = {}) {
-  const g = layout.graph;
-  const wanted = via.map((v) => v.toUpperCase());
-  const onVia = (name) => wanted.some((v) => name === v || (name.startsWith(v) && /^\d+$/.test(name.slice(v.length))));
-  const distTo = new Array(g.nodes.length).fill(Infinity);
-  const prev = new Array(g.nodes.length).fill(-1);
-  const done = new Array(g.nodes.length).fill(false);
-  distTo[from] = 0;
-  for (;;) {
-    let u = -1;
-    for (let i = 0; i < distTo.length; i += 1) if (!done[i] && distTo[i] < Infinity && (u < 0 || distTo[i] < distTo[u])) u = i;
-    if (u < 0 || u === to) break;
-    done[u] = true;
+// ------------------------------------------------------------------ routing
+
+// small binary min-heap of [priority, value]
+class Heap {
+  constructor() { this.a = []; }
+  get size() { return this.a.length; }
+  push(k, v) {
+    const a = this.a;
+    a.push([k, v]);
+    let i = a.length - 1;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (a[p][0] <= a[i][0]) break;
+      [a[p], a[i]] = [a[i], a[p]];
+      i = p;
+    }
+  }
+  pop() {
+    const a = this.a;
+    const top = a[0];
+    const last = a.pop();
+    if (a.length) {
+      a[0] = last;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1;
+        const r = l + 1;
+        let m = i;
+        if (l < a.length && a[l][0] < a[m][0]) m = l;
+        if (r < a.length && a[r][0] < a[m][0]) m = r;
+        if (m === i) break;
+        [a[m], a[i]] = [a[i], a[m]];
+        i = m;
+      }
+    }
+    return top;
+  }
+}
+
+// shortest path from `from` to the first node accepted by isTarget
+function search(g, from, isTarget, weight, passable) {
+  const n = g.nodes.length;
+  const best = new Float64Array(n).fill(Infinity);
+  const prev = new Int32Array(n).fill(-1);
+  const heap = new Heap();
+  best[from] = 0;
+  heap.push(0, from);
+  while (heap.size) {
+    const [d, u] = heap.pop();
+    if (d > best[u]) continue;
+    if (u !== from && isTarget(u)) {
+      const nodes = [];
+      for (let v = u; v >= 0; v = prev[v]) nodes.unshift(v);
+      return nodes;
+    }
     for (const ei of g.adj[u]) {
       const e = g.edges[ei];
       if (e.kind === 'runway') continue;
       const v = e.a === u ? e.b : e.a;
-      if (g.nodes[v].kind === 'rwy' && v !== to) continue;
-      if (g.nodes[v].kind === 'gate' && v !== to) continue;
-      let w = e.len * (wanted.length && !onVia(e.name) && e.kind !== 'stand' ? 3 : 1);
-      if (prefer && !wanted.length && e.kind === 'twy' && (e.name === 'A' || e.name === 'B') && e.name !== prefer) w *= 1.6;
-      if (distTo[u] + w < distTo[v]) { distTo[v] = distTo[u] + w; prev[v] = u; }
+      if (!passable(v)) continue;
+      const w = weight(e);
+      if (d + w < best[v]) { best[v] = d + w; prev[v] = u; heap.push(d + w, v); }
     }
   }
-  if (distTo[to] === Infinity) return null;
-  const nodes = [];
-  for (let v = to; v >= 0; v = prev[v]) nodes.unshift(v);
-  return nodes;
+  return null;
+}
+
+// taxiway names a layout knows (for "via" and for the parser)
+export function taxiwayNames(layout) {
+  if (!layout._names) {
+    layout._names = new Set(layout.graph.edges.filter((e) => e.kind === 'twy' || e.kind === 'conn' || e.kind === 'link')
+      .map((e) => e.name).filter(Boolean));
+  }
+  return layout._names;
+}
+
+export function unknownVia(layout, via = []) {
+  const names = taxiwayNames(layout);
+  return via.map((v) => v.toUpperCase()).filter((v) => !names.has(v));
+}
+
+// Taxi route over taxiways: runway centrelines are never used for taxiing,
+// runway and stand nodes only as start or end. "via" taxiways are followed
+// in the given order. prefer: 'A' or 'B' biases the generated main parallels.
+export function route(layout, from, to, { via = [], prefer = null } = {}) {
+  const g = layout.graph;
+  if (from === to) return [from];
+  const passable = (v) => {
+    const k = g.nodes[v].kind;
+    return v === to || (k !== 'rwy' && k !== 'gate');
+  };
+  const names = via.map((v) => v.toUpperCase()).filter((v) => taxiwayNames(layout).has(v));
+  const preferW = (e) => (prefer && e.kind === 'twy' && (e.name === 'A' || e.name === 'B') && e.name !== prefer ? 1.6 : 1);
+  if (!names.length) return search(g, from, (v) => v === to, (e) => e.len * preferW(e), passable);
+  // follow each named taxiway in turn: get onto it, then use it towards the next
+  const touching = (name) => {
+    const set = new Set();
+    for (const e of g.edges) if (e.name === name) { set.add(e.a); set.add(e.b); }
+    return set;
+  };
+  let path = [from];
+  let cur = from;
+  for (let i = 0; i < names.length; i += 1) {
+    const on = touching(names[i]);
+    if (on.has(cur)) continue;
+    const ok = new Set([names[i - 1], names[i]]);
+    const leg = search(g, cur, (v) => on.has(v), (e) => e.len * (ok.has(e.name) || e.kind === 'stand' ? 1 : 4), passable);
+    if (!leg) return null;
+    path = path.concat(leg.slice(1));
+    cur = leg[leg.length - 1];
+  }
+  const lastName = names[names.length - 1];
+  const leg = search(g, cur, (v) => v === to, (e) => e.len * (e.name === lastName || e.kind === 'stand' ? 1 : 3), passable);
+  if (!leg) return null;
+  return path.concat(leg.slice(1));
 }
 
 // names of the taxiways a node route uses, in order, without repeats
