@@ -163,6 +163,27 @@ descent (top of descent ≈ 3 NM per 1000 ft + 10 NM, or request it) → approac
 ground (taxi to stand) → parking brake set = flight complete. Say *going around*
 on approach/tower for a missed approach.
 
+### Flight plan from the MSFS Buddy EFB
+
+Instead of typing the plan, hand it over from the
+[MSFS Buddy EFB](https://themagicianleo.github.io/msfs-buddy/) (SimBrief or
+SimPlanner flights):
+
+- **Link:** in the EFB's Settings, enter OpenATC's address (the *App on the iPad*
+  line of the helper window, e.g. `https://192.168.1.50:8443/`). Then **Open in
+  OpenATC** on the EFB's Flight page or OFP → ATC Flight Plan opens OpenATC with the
+  form filled in: callsign, airports, cruise level, SID/STAR, route, planned runways,
+  transition altitudes, and *China (CAAC, metric)* phraseology for mainland Chinese
+  airports.
+- **Copy and paste** (for the Home Screen app, which links can't open): **Copy for
+  OpenATC** in the EFB, then **Paste from EFB** on OpenATC's Flight plan tab. Safari
+  may ask to allow pasting; if reading the clipboard isn't allowed, a box opens to
+  paste the code into.
+
+Either way it only fills the form: check it and press **Start flight**. The code
+format (`OPENATC1:` + base64url JSON of the form fields) is read by
+`web/js/fpimport.js`.
+
 ## 4. Milestones: how to run and what to test
 
 All of these work without the simulator thanks to the **mock aircraft**
@@ -354,6 +375,10 @@ The demo airports `XDEP`/`XARR` are fictional, so their frequencies are too.
   that folder private; anyone with `openatc-ca.key` could make certificates your
   iPad trusts. To revoke: delete the profile on the iPad (Settings → General → VPN &
   Device Management) and delete `userdata\certs`.
+- A flight plan handed over from the EFB (link `#fp=…` or pasted code) only fills
+  the Flight plan form. It is decoded in the browser, never sent to the helper as
+  such; unknown fields are dropped and every value is length-limited and checked
+  against the form's formats. Nothing starts until you press Start flight.
 - The only outbound connections are to `aviationweather.gov` (METAR) and, when you
   run the import, `davidmegginson.github.io` (OurAirports CSVs).
 
