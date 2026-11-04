@@ -150,9 +150,8 @@ async def serve(args, store: PairingStore) -> None:
     if setup_runner:
         print(f" First-time setup:  http://{main_host}:{args.setup_port}/   (install the certificate)")
         print(f" CA fingerprint:    SHA-256 {fp}")
-    print(f" Tower game:        {app_url}tower/")
     if secure and args.local_port:
-        print(f" On this PC:        http://localhost:{args.local_port}/  and  http://localhost:{args.local_port}/tower/")
+        print(f" On this PC:        http://localhost:{args.local_port}/")
     print(f" Pairing code:      {store.code}")
     print(f" Sim source:        {source.name}{'  (mock aircraft)' if args.mock else ''}")
     print(f" Listening only on: {', '.join(hosts)} (local network)")

@@ -159,5 +159,3 @@ details summary { min-height: 52px; display: flex; align-items: center; cursor: 
 table.data { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 table.data td { padding: 8px 6px; border-bottom: 1px solid var(--line); }
 table.data td:first-child { color: var(--muted); width: 45%; }
-a.btn-link { display: flex; align-items: center; justify-content: center; min-height: var(--tap); border-radius: var(--radius);
-  background: var(--panel2); border: 1px solid var(--line); color: var(--accent); text-decoration: none; font-weight: 650; }

@@ -1,84 +1,118 @@
-// OpenATC Tower: the game page. Wires the simulation, the map, the radio
+// Tower Controller: the game page. Wires the simulation, the map, the radio
 // log, speech output, push-to-talk voice input, typing and buttons.
+// A static site: everything it needs is in this folder.
 
-import { selectRunway } from '../atc/runway.js';
-import { Speaker } from '../speech.js';
-import { Listener, voiceSupport } from '../voice.js';
+import { selectRunway } from './lib/runway.js';
+import { Speaker } from './lib/speech.js';
+import { Listener, voiceSupport } from './lib/voice.js';
 import { understand } from './commands.js';
 import { buildLayout, endGeometry } from './layout.js';
 import { Renderer, STATE_LABELS } from './render.js';
 import { World } from './world.js';
 import { M_PER_NM } from './geo.js';
+import { generatedWind, liveWind, windText } from './weather.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
+// localStorage can be missing or throw (private browsing); the game still works
 const store = {
-  get(k, d = null) { try { const v = localStorage.getItem(`openatc.${k}`); return v === null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(`openatc.${k}`, JSON.stringify(v)); } catch { /* ignore */ } },
-  del(k) { try { localStorage.removeItem(`openatc.${k}`); } catch { /* ignore */ } },
+  get(k, d = null) { try { const v = localStorage.getItem(`tower.${k}`); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(`tower.${k}`, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
-const settings = { tts: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', ...store.get('tower', {}) };
-const saveSettings = () => store.set('tower', settings);
-// voices vary per aircraft; the shared Speaker reads these keys
+const settings = { tts: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
+const saveSettings = () => store.set('settings', settings);
+// voices vary per aircraft; the Speaker reads these keys
 const speakerSettings = { tts: settings.tts, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
 const speaker = new Speaker(speakerSettings);
 
-const game = { world: null, phr: null, airlines: {}, speed: 1, selected: null, metar: null, last: 0, token: store.get('token') };
+const game = { world: null, phr: null, airlines: {}, speed: 1, selected: null, wind: null, last: 0, index: null };
 const renderer = new Renderer($('#map'));
-
-// ---------------------------------------------------------------- helper API
-async function api(path, opts = {}) {
-  const res = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json',
-    ...(game.token ? { Authorization: `Bearer ${game.token}` } : {}) } });
-  if (res.status === 401) { showPairing(); throw new Error('This device is not paired yet.'); }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-  return body;
-}
-
-function showPairing() {
-  game.token = null;
-  store.del('token');
-  $('#pair').classList.remove('hidden');
-}
-
-$('#pair-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  try {
-    const res = await fetch('/api/pair', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: $('#pair-code').value.trim(), device: 'Tower game' }) });
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.error || 'pairing failed');
-    game.token = body.token;
-    store.set('token', game.token);
-    $('#pair').classList.add('hidden');
-  } catch (err) { $('#pair-error').textContent = err.message; }
-});
 
 async function loadJson(path) {
   const res = await fetch(path, { cache: 'no-cache' });
-  if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
+  if (!res.ok) throw new Error(res.status === 404 ? 'not found' : `${path}: HTTP ${res.status}`);
   return res.json();
 }
 
+// ---------------------------------------------------------------- airport search
+const DEMO = ['DEMO', 'Demo Field (fictional)', 'Demo City', '', 10000];
+
+async function loadIndex() {
+  try {
+    game.index = await loadJson('data/airports/index.json');
+  } catch {
+    game.index = [];
+    $('#start-note').textContent = 'Airport data is not built here yet (run python tools/build_airports.py). You can play the DEMO airport.';
+  }
+  game.index.push(DEMO);
+}
+
+function searchAirports(q) {
+  const t = q.trim().toUpperCase();
+  if (!t || !game.index) return [];
+  const exact = game.index.filter((a) => a[0] === t);
+  const prefix = game.index.filter((a) => a[0] !== t && a[0].startsWith(t));
+  const text = t.length >= 3 ? game.index.filter((a) => !a[0].startsWith(t)
+    && (a[1].toUpperCase().includes(t) || a[2].toUpperCase().includes(t))) : [];
+  return [...exact, ...prefix, ...text].slice(0, 8);
+}
+
+function renderSuggestions() {
+  const box = $('#suggest');
+  box.innerHTML = '';
+  for (const a of searchAirports($('#start-icao').value)) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.code = a[0];
+    b.textContent = `${a[0]}  ${a[1]}${a[2] ? `, ${a[2]}` : ''}${a[3] ? ` (${a[3]})` : ''}`;
+    box.append(b);
+  }
+}
+$('#start-icao').addEventListener('input', renderSuggestions);
+$('#suggest').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-code]');
+  if (!b) return;
+  $('#start-icao').value = b.dataset.code;
+  $('#suggest').innerHTML = '';
+});
+
+async function loadAirport(code) {
+  if (code === 'DEMO') return loadJson('data/demo.json');
+  if (!/^[A-Z0-9]{3,4}$/.test(code)) throw new Error('Enter a 3- or 4-letter airport code.');
+  try {
+    return await loadJson(`data/airports/${code}.json`);
+  } catch (err) {
+    if (err.message === 'not found') {
+      throw new Error(`${code} is not in the game's data (only airports with a runway of at least 1200 m are included).`);
+    }
+    throw err;
+  }
+}
+
 // ---------------------------------------------------------------- starting a shift
-async function startShift(icao, traffic) {
+function showWind() {
+  const w = game.wind;
+  $('#wind').textContent = `${windText(w)}${w?.source === 'generated' ? ' (gen.)' : ''}`;
+  $('#wind').title = w?.raw ? `METAR: ${w.raw}` : `Wind source: ${w?.source || 'none'}`;
+}
+
+async function startShift(code, traffic) {
   speaker.unlock(); // inside the tap: Safari needs this for speech
-  const [airport, phr, airlines] = await Promise.all([
-    api(`/api/airport/${encodeURIComponent(icao)}`), loadJson('/phraseology/tower.json'), loadJson('/data/airlines.json')]);
-  let metar = null;
-  try { metar = await api(`/api/metar/${encodeURIComponent(icao)}`); } catch { metar = null; }
+  const [airport, phr, airlines] = await Promise.all([loadAirport(code), loadJson('data/phraseology.json'), loadJson('data/airlines.json')]);
+  let wind = settings.liveWeather && code !== 'DEMO' ? await liveWind(airport.icao) : null;
+  if (!wind) wind = generatedWind(airport.icao);
   const layout = buildLayout(airport);
   const ends = layout.runways.flatMap((r) => [
     { ident: r.identA, heading: r.headingA, length_ft: r.len / 0.3048 },
     { ident: r.identB, heading: r.headingB, length_ft: r.len / 0.3048 }]);
-  const pick = selectRunway(ends, metar) || { ident: ends[0].ident };
+  const pick = selectRunway(ends, wind) || { ident: ends[0].ident, reason: 'first runway' };
   game.phr = phr;
   game.airlines = airlines;
-  game.metar = metar;
-  game.world = new World({ layout, phr, airlines, arrEnd: pick.ident, depEnd: pick.ident, traffic, wind: metar });
+  game.wind = wind;
+  game.world = new World({ layout, phr, airlines, arrEnd: pick.ident, depEnd: pick.ident, traffic, wind,
+    unit: `${airport.municipality || airport.name || airport.icao} Tower` });
   game.selected = null;
   settings.airport = airport.icao;
   settings.traffic = traffic;
@@ -90,11 +124,10 @@ async function startShift(icao, traffic) {
     for (const e of ends) sel.append(new Option(e.ident, e.ident));
     sel.value = pick.ident;
   }
-  $('#wind').textContent = metar?.available
-    ? `Wind ${metar.wind_dir == null ? 'VRB' : String(metar.wind_dir).padStart(3, '0')}/${metar.wind_kt}kt`
-    : 'Wind: no live METAR';
+  showWind();
   $('#log').innerHTML = '';
-  sys(`${airport.icao} ${airport.name}: runways ${layout.runways.map((r) => r.id).join(', ')}. Landing and departing ${pick.ident} (${pick.reason}). Taxiways and stands are generated.`);
+  sys(`${airport.icao} ${airport.name}: runways ${layout.runways.map((r) => r.id).join(', ')}. ${windText(wind)} (${wind.source}). `
+    + `Landing and departing ${pick.ident} (${pick.reason}). Taxiways and stands are generated.`);
   renderer.resize();
   renderer.fit(layout);
   $('#start').classList.add('hidden');
@@ -109,6 +142,22 @@ $('#start-form').addEventListener('submit', async (e) => {
   } catch (err) {
     $('#start-error').textContent = err.message;
   }
+});
+
+// set the wind by hand (Settings)
+$('#wind-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (!game.world) return;
+  const dir = Number($('#wind-dir').value);
+  const kt = Number($('#wind-kt').value);
+  if (!(dir >= 0 && dir <= 360 && kt >= 0 && kt <= 60)) return;
+  game.wind = { available: true, source: 'set by you', wind_dir: Math.round(dir) % 360 || 360, wind_vrb: false, wind_kt: Math.round(kt), gust_kt: null };
+  game.world.wind = game.wind;
+  showWind();
+  const ends = game.world.L.runways.flatMap((r) => [{ ident: r.identA, heading: r.headingA, length_ft: r.len / 0.3048 },
+    { ident: r.identB, heading: r.headingB, length_ft: r.len / 0.3048 }]);
+  const pick = selectRunway(ends, game.wind);
+  sys(`${windText(game.wind)}. Best runway now: ${pick.ident} (change it with Arr/Dep).`);
 });
 
 $('#new-shift').addEventListener('click', () => $('#start').classList.remove('hidden'));
@@ -335,8 +384,11 @@ renderer.resize();
 renderVoice();
 $('#start-icao').value = settings.airport || '';
 $('#start-traffic').value = settings.traffic || 'normal';
-if (!game.token) showPairing();
+$('#set-live').checked = settings.liveWeather;
+$('#set-live').addEventListener('change', (e) => { settings.liveWeather = e.target.checked; saveSettings(); });
+loadIndex();
+if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
 requestAnimationFrame(frame);
 
 // for the end-to-end test
-window.openatcTower = { game, endGeometry };
+window.towerGame = { game, endGeometry };

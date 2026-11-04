@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { matchCallsign, parseInstruction, understand } from '../js/tower/commands.js';
+import { matchCallsign, parseInstruction, understand } from '../js/commands.js';
 
-const PHR = JSON.parse(readFileSync(new URL('../phraseology/tower.json', import.meta.url)));
+const PHR = JSON.parse(readFileSync(new URL('../data/phraseology.json', import.meta.url)));
 const R = PHR.commands;
 const AC = [
   { id: 1, code: 'BAW', tel: 'Speedbird', num: '123', callsign: 'BAW123' },

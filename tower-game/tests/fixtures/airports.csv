@@ -1,0 +1,5 @@
+"id","ident","type","name","latitude_deg","longitude_deg","elevation_ft","continent","iso_country","iso_region","municipality","scheduled_service","icao_code","iata_code","gps_code","local_code","home_link","wikipedia_link","keywords"
+1,"TSTA","large_airport","Test Alpha International",51.5,-0.5,80,"EU","GB","GB-ENG","Alphaville","yes","TSTA","TSA","TSTA","","","",""
+2,"TSTB","medium_airport","Test Bravo",52.0,0.5,300,"EU","GB","GB-ENG","Bravotown","yes","TSTB","","TSTB","","","",""
+3,"TSTC","closed","Old Closed Field",52.0,1.0,10,"EU","GB","GB-ENG","Nowhere","no","","","","","","",""
+4,"US-0001","small_airport","Gps Code Strip",40.0,-100.0,2000,"NA","US","US-KS","Plains","no","","","K9X9","9X9","","",""

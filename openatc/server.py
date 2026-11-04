@@ -225,11 +225,6 @@ def create_app(*, hub: Hub, store: PairingStore, airports: AirportDB, metar: Met
 
     async def static(request):
         rel = request.match_info.get("path") or "index.html"
-        folder = (WEB_DIR / rel).resolve()
-        if folder.is_dir() and (folder == WEB_DIR.resolve() or WEB_DIR.resolve() in folder.parents):
-            if not rel.endswith("/"):
-                raise web.HTTPFound(f"/{rel}/")
-            rel += "index.html"
         # user overrides for editable data (phraseology, airlines) win
         target = None
         if rel.startswith(("phraseology/", "data/")):

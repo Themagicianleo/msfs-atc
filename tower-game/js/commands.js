@@ -3,7 +3,7 @@
 //   "BAW123 taxi to holding point runway 27 via alpha, cross runway 15"
 //   "air china 1234 taxi to stand bravo 4"
 
-import { normalize } from '../atc/parser.js';
+import { normalize } from './lib/parser.js';
 
 const PHONETIC = {
   alpha: 'a', alfa: 'a', bravo: 'b', charlie: 'c', delta: 'd', echo: 'e', foxtrot: 'f', golf: 'g', hotel: 'h',

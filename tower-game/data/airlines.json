@@ -1,0 +1,10 @@
+{
+  "_comment": "ICAO airline designator -> radiotelephony callsign. Public, widely published designators. Add your own; copy to userdata/data/airlines.json to keep changes across updates.",
+  "AAL": "American", "ACA": "Air Canada", "AFR": "Airfrans", "ANA": "All Nippon", "ANZ": "New Zealand",
+  "BAW": "Speedbird", "CAL": "Dynasty", "CCA": "Air China", "CES": "China Eastern", "CHH": "Hainan",
+  "CPA": "Cathay", "CSC": "Sichuan", "CSN": "China Southern", "CSZ": "Shenzhen Air", "CXA": "Xiamen Air",
+  "DAL": "Delta", "DLH": "Lufthansa", "EZY": "Easy", "JAL": "Japan Air", "JJA": "Jeju Air",
+  "KAL": "Korean Air", "KLM": "KLM", "QFA": "Qantas", "RYR": "Ryanair", "SIA": "Singapore",
+  "SWA": "Southwest", "THA": "Thai", "UAE": "Emirates", "UAL": "United", "CQH": "Air Spring",
+  "DKH": "Air Juneyao", "CDG": "Shandong", "SKY": "Skymark", "APJ": "Air Peach", "JJP": "Orange Liner"
+}

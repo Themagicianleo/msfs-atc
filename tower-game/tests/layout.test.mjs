@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildLayout, endGeometry, onRunway, reciprocal, route, routeCrossings, routeNames } from '../js/tower/layout.js';
-import { Path, add, dist, fromHeading, makeProjection, mul, perp } from '../js/tower/geo.js';
+import { buildLayout, endGeometry, onRunway, reciprocal, route, routeCrossings, routeNames } from '../js/layout.js';
+import { Path, add, dist, fromHeading, makeProjection, mul, perp } from '../js/geo.js';
 
 const json = (p) => JSON.parse(readFileSync(new URL(p, import.meta.url)));
 export const XDEP = json('./fixtures/xdep.json');

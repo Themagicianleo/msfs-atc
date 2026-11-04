@@ -3,7 +3,7 @@
 // every frame and command() for every controller instruction, and reads the
 // radio/score/alert events from drain().
 
-import { Formatter, render } from '../atc/format.js';
+import { Formatter, render } from './lib/format.js';
 import { M_PER_NM, KT, Path, add, dist, dot, headingOf, mul, norm, sub, fromHeading, angleDiff } from './geo.js';
 import { endGeometry, onRunway, route, routeCrossings, runwayForEnd } from './layout.js';
 

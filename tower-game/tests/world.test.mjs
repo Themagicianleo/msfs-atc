@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildLayout } from '../js/tower/layout.js';
-import { SCORE, World } from '../js/tower/world.js';
-import { bigAirport } from './tower-layout.test.mjs';
+import { buildLayout } from '../js/layout.js';
+import { SCORE, World } from '../js/world.js';
+import { bigAirport } from './layout.test.mjs';
 
 const json = (p) => JSON.parse(readFileSync(new URL(p, import.meta.url)));
 const XDEP = json('./fixtures/xdep.json');
-const PHR = json('../phraseology/tower.json');
+const PHR = json('../data/phraseology.json');
 const AIRLINES = json('../data/airlines.json');
 
 function seeded(seed = 7) {
