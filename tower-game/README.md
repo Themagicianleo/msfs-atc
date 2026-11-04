@@ -41,7 +41,53 @@ Open the site, type an airport (ICAO code, name or city, e.g. `EGLL`, `Haneda`,
 - **Controls:** pause/1x/2x/4x speed; traffic None, Calm, Normal or Busy. Change the
   landing and departure runways with **Arr/Dep**, and the wind under **Settings and help**.
 
-### The airports
+### The detailed airports: WSSS, ZBAD, KSFO
+
+**Singapore Changi (WSSS), Beijing Daxing (ZBAD) and San Francisco (KSFO)** use the real
+airport layout from [OpenStreetMap](https://www.openstreetmap.org/copyright)
+(© OpenStreetMap contributors, ODbL). That includes:
+- runways and real named taxiways and taxilanes;
+- holding positions;
+- stands with their real numbers (stand sizes are estimated from their spacing,
+  so an A380 only gets a stand big enough for it);
+- aprons and terminal buildings.
+
+**Chart button:** switches the map to an airport-diagram style with every taxiway name
+in yellow boxes, holding points and stand numbers (zoom in for taxilanes and stands).
+Taxi instructions use the real names: *taxi to holding point runway 02C via whiskey
+alpha, bravo one*. Spoken letters are matched against the airport's actual taxiway
+names, and pilots refuse taxiways that don't exist.
+
+**Traffic** comes from the airlines that serve each airport. Each one uses its real
+radio callsign (*Singapore*, *Scooter*, *China Southern*, *Lianhang*, *United*,
+*Skywest*…), a typical fleet there, and real destinations. Aircraft are drawn to
+scale and use their own approach and rotation speeds and ICAO wake category.
+
+**Wake turbulence:**
+- Arrivals are spaced on final by wake category (e.g. 5 NM for a medium behind a
+  heavy, 7 NM behind an A380).
+- A departure that starts its take-off roll too soon behind a heavier one from the same
+  runway costs points (2 min behind a heavy, 3 min behind an A380 for medium aircraft).
+
+**Runway plans:**
+- San Francisco uses its West Plan (land 28L and 28R, depart 1L and 1R) or Southeast
+  Plan (land 19L/19R, depart 10L/10R), depending on the wind.
+- Changi lands on 02L/20R and departs 02C/20C.
+- Daxing lands on the runway most into the wind and departs from a parallel one.
+- Change any of them with the Arr/Dep menus (e.g. `28L+28R`).
+
+The traffic mix is representative, not a real schedule, and the runway plans are
+simplified. OSM is volunteer-mapped and can be incomplete or out of date. Never use
+any of this for real-world navigation. Files: `data/traffic/<ICAO>.json` (airlines,
+fleets, runway plans), `data/aircraft.json` (types), `data/osm/` (OSM extracts),
+`data/hq/` (built layouts).
+
+To refresh the layouts, run the **Tower game - fetch OpenStreetMap airport data**
+workflow, or `python tools/fetch_osm.py` where the OSM servers are reachable, then
+`node tools/build_hq.mjs`. The build prints a quality report: exits per runway, entries,
+and whether every stand can reach every runway.
+
+### The other airports
 
 Runway positions, lengths and headings are real, from
 [OurAirports](https://ourairports.com/data/) (public domain). The site includes

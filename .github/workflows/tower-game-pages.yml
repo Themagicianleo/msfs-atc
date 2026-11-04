@@ -41,10 +41,13 @@ jobs:
           python -m unittest discover -s tests
       - name: Build airport data from OurAirports
         run: python tools/build_airports.py
+      - name: Build the detailed airports from the OpenStreetMap extracts
+        run: node tools/build_hq.mjs
       - name: Leave tests and tools out of the site
         run: |
           mkdir -p ../_site
           cp -r index.html tower.css manifest.webmanifest sw.js icons js data ../_site/
+          rm -f ../_site/data/osm/*.json  # raw extracts: not needed by the site (data/hq/ is built from them)
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
