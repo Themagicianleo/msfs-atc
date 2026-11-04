@@ -351,5 +351,34 @@
     "VOBL"
    ]
   }
- ]
+ ],
+ "configs": [
+  {
+   "name": "North (02)",
+   "wind": [
+    290,
+    110
+   ],
+   "arr": [
+    "02L"
+   ],
+   "dep": [
+    "02C"
+   ]
+  },
+  {
+   "name": "South (20)",
+   "wind": [
+    110,
+    290
+   ],
+   "arr": [
+    "20R"
+   ],
+   "dep": [
+    "20C"
+   ]
+  }
+ ],
+ "configs_about": "Runway configurations: arrivals and departures for a wind direction range [from, to] (degrees true, clockwise). Typical operations, simplified."
 }

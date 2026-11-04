@@ -60,7 +60,27 @@ export function matchCallsign(text, aircraft) {
   return { ac: scored[0].ac, score: scored[0].score };
 }
 
-export function parseInstruction(text, rules) {
+// "via w a b1 then ..." -> ['WA', 'B1'] using the airport's taxiway names:
+// spoken letters are joined into the longest name that exists
+function viaNames(tokens, known) {
+  if (!known) return tokens.map((t) => t.toUpperCase());
+  const out = [];
+  let i = 0;
+  while (i < tokens.length) {
+    let taken = null;
+    for (let j = Math.min(tokens.length, i + 4); j > i; j -= 1) {
+      const name = tokens.slice(i, j).join('').toUpperCase();
+      if (known.has(name)) { taken = { name, j }; break; }
+    }
+    if (!taken) taken = { name: tokens[i].toUpperCase(), j: i + 1 };
+    out.push(taken.name);
+    i = taken.j;
+  }
+  return out;
+}
+
+// known: Set of the airport's taxiway names (optional)
+export function parseInstruction(text, rules, known = null) {
   const n = phoneticToLetters(normalize(numberWords(text)));
   let type = null;
   for (const rule of rules || []) {
@@ -75,8 +95,12 @@ export function parseInstruction(text, rules) {
   else if (rw && type !== 'cross' && type !== 'hold_short') cmd.runway = rw[1].padStart(2, '0') + (rw[2] || '').toUpperCase();
   const gate = n.match(/\b(?:gate|stand|parking) (?:([a-z])\s?)?(\d{1,3})\b/);
   if (gate) cmd.gate = `${gate[1] || ''}${gate[2]}`.toUpperCase();
-  const via = n.match(/\bvia ((?:[a-z]\d{0,2}\b\s*)+)/);
-  if (via) cmd.via = via[1].trim().split(/\s+/).filter((t) => /^[a-z]\d{0,2}$/.test(t)).map((t) => t.toUpperCase());
+  const via = n.match(/\bvia ((?:(?:and |then )?[a-z]{1,3}\d{0,3}\b\s*)+)/);
+  if (via) {
+    const tokens = via[1].trim().split(/\s+/).filter((t) => t !== 'and' && t !== 'then' && /^[a-z]{1,3}\d{0,3}$/.test(t))
+      .filter((t) => !['to', 'for', 'at', 'on'].includes(t));
+    cmd.via = viaNames(tokens, known);
+  }
   const crosses = [...n.matchAll(/\bcross(?:ing)? (?:runway )?(\d{1,2})([lrc])?\b/g)]
     .map((m) => m[1].padStart(2, '0') + (m[2] || '').toUpperCase());
   if (crosses.length) cmd.cross = crosses;
@@ -90,11 +114,11 @@ export function parseInstruction(text, rules) {
 
 // Whole thing: which aircraft and what. selectedId is the aircraft tapped on
 // screen, used when no callsign was recognised.
-export function understand(text, aircraft, rules, selectedId = null) {
+export function understand(text, aircraft, rules, selectedId = null, known = null) {
   const m = matchCallsign(text, aircraft);
   let ac = m.ac;
   if (!ac && !m.ambiguous && selectedId != null) ac = aircraft.find((a) => a.id === selectedId) || null;
-  const cmd = parseInstruction(text, rules);
+  const cmd = parseInstruction(text, rules, known);
   if (!ac) {
     return { ac: null, cmd, error: m.ambiguous ? `Which one: ${m.ambiguous.map((a) => a.callsign).join(' or ')}?` : 'No callsign recognised. Say the callsign first, or tap an aircraft.' };
   }

@@ -5,15 +5,28 @@
 
 import { Formatter, render } from './lib/format.js';
 import { M_PER_NM, KT, Path, add, dist, dot, headingOf, mul, norm, sub, fromHeading, angleDiff } from './geo.js';
-import { endGeometry, onRunway, route, routeCrossings, runwayForEnd } from './layout.js';
+import { endGeometry, onRunway, route, routeCrossings, runwayForEnd, unknownVia } from './layout.js';
 
 // Generic aircraft performance (approach speed and rotation speed in knots).
+// Used when an airport has no traffic profile (data/traffic/<ICAO>.json).
 export const AIRCRAFT_TYPES = [
-  { code: 'A320', cat: 'M', vapp: 138, vr: 145 }, { code: 'B738', cat: 'M', vapp: 145, vr: 150 },
-  { code: 'A21N', cat: 'M', vapp: 140, vr: 150 }, { code: 'E190', cat: 'M', vapp: 130, vr: 135 },
-  { code: 'AT76', cat: 'M', vapp: 115, vr: 115 }, { code: 'B789', cat: 'H', vapp: 150, vr: 160 },
-  { code: 'A359', cat: 'H', vapp: 145, vr: 155 }, { code: 'B77W', cat: 'H', vapp: 155, vr: 165 },
+  { code: 'A320', wake: 'M', span: 35.8, length: 37.6, vapp: 136, vr: 145 },
+  { code: 'B738', wake: 'M', span: 35.8, length: 39.5, vapp: 144, vr: 150 },
+  { code: 'A21N', wake: 'M', span: 35.8, length: 44.5, vapp: 140, vr: 150 },
+  { code: 'E190', wake: 'M', span: 28.7, length: 36.2, vapp: 130, vr: 135 },
+  { code: 'AT76', wake: 'M', span: 27.1, length: 27.2, vapp: 115, vr: 110 },
+  { code: 'B789', wake: 'H', span: 60.1, length: 62.8, vapp: 145, vr: 155 },
+  { code: 'A359', wake: 'H', span: 64.8, length: 66.8, vapp: 140, vr: 150 },
+  { code: 'B77W', wake: 'H', span: 64.8, length: 73.9, vapp: 150, vr: 165 },
 ];
+
+// ICAO wake turbulence separation. Final approach (NM), leader -> follower;
+// anything not listed uses the minimum radar spacing.
+const WAKE_NM = { J: { H: 6, M: 7, L: 8 }, H: { H: 4, M: 5, L: 6 }, M: { L: 5 } };
+const MIN_RADAR_NM = 3;
+// Departures from the same runway (seconds after the leader starts its roll)
+const WAKE_DEP_S = { J: { H: 120, M: 180, L: 180 }, H: { M: 120, L: 120 }, M: { L: 120 } };
+export function wakeSpacingNm(leader, follower) { return WAKE_NM[leader]?.[follower] || MIN_RADAR_NM; }
 
 export const TRAFFIC_LEVELS = {
   off: { arrPerHour: 0, depPerHour: 0, label: 'No new traffic' },
@@ -23,7 +36,7 @@ export const TRAFFIC_LEVELS = {
 };
 
 const SPAWN_NM = 10;
-const MIN_FINAL_GAP_NM = 4;
+const GAME_SPACING_NM = 1; // added to the separation minimum so there is room to work
 const TAXI_SPEED = 10; // m/s, about 20 kt
 const REPEAT_S = { takeoff: 120, cross: 90, default: 45 }; // pilots call again after this long
 const GROUND = new Set(['gate', 'pushback', 'pushed', 'taxi_out', 'holding', 'lineup', 'lined_up', 'takeoff',
@@ -32,17 +45,24 @@ const MOVING_ON_TAXIWAYS = new Set(['pushback', 'taxi_out', 'taxi_in', 'lineup',
 
 export const SCORE = {
   arrived: 50, departed: 50, departedNoHandoff: 15, goAroundNoClearance: -100, goAroundRunwayBusy: -150,
-  runwayConflict: -250, groundConflict: -200, repeatCall: -10, gridlock: -30,
+  runwayConflict: -250, groundConflict: -200, repeatCall: -10, gridlock: -30, wake: -75,
 };
 
 export class World {
-  constructor({ layout, phr, airlines = {}, rng = Math.random, arrEnd, depEnd, traffic = 'normal', wind = null, unit }) {
+  // profile: data/traffic/<ICAO>.json (real airlines and fleets), types: data/aircraft.json
+  constructor({ layout, phr, airlines = {}, rng = Math.random, arrEnd, depEnd, traffic = 'normal', wind = null, unit,
+    profile = null, types = null }) {
     this.L = layout;
     this.phr = phr;
     this.rng = rng;
     this.f = new Formatter({ units: { freqStyle: 'icao' } });
     this.airlines = Object.entries(airlines).filter(([k]) => /^[A-Z]{3}$/.test(k));
     if (!this.airlines.length) this.airlines = [['OAT', 'Open Air']];
+    this.profile = profile;
+    this.types = types;
+    this.arrIdx = 0;
+    this.depIdx = 0;
+    this.lastRoll = {};
     this.unit = unit || `${layout.airport.municipality || layout.airport.icao} Tower`;
     this.wind = wind;
     this.t = 0;
@@ -60,9 +80,12 @@ export class World {
     this.nextDep = 4;
   }
 
+  // one runway end or a list (e.g. ['28L', '28R']); arrivals and departures alternate
   setRunways(arrEnd, depEnd) {
-    this.arrEnd = arrEnd;
-    this.depEnd = depEnd;
+    this.arrEnds = [].concat(arrEnd).filter(Boolean);
+    this.depEnds = [].concat(depEnd).filter(Boolean);
+    this.arrEnd = this.arrEnds[0];
+    this.depEnd = this.depEnds[0];
   }
 
   setTraffic(level) {
@@ -122,7 +145,28 @@ export class World {
   }
 
   // ---------------------------------------------------------------- traffic
+  pick(weights) {
+    const entries = Object.entries(weights);
+    let r = this.rng() * entries.reduce((s, [, w]) => s + w, 0);
+    for (const [k, w] of entries) { r -= w; if (r <= 0) return k; }
+    return entries[entries.length - 1][0];
+  }
+
   newCallsign() {
+    if (this.profile && this.types) {
+      const airlines = this.profile.airlines;
+      for (let i = 0; i < 50; i += 1) {
+        const al = airlines[Number(this.pick(Object.fromEntries(airlines.map((a, k) => [k, a.weight]))))];
+        const [lo, hi] = al.numbers;
+        const num = String(lo + Math.floor(this.rng() * (hi - lo + 1)));
+        const code = this.pick(al.types);
+        const t = this.types[code];
+        if (!t || this.ac.some((a) => a.num === num || a.callsign === al.code + num)) continue;
+        const other = al.destinations[Math.floor(this.rng() * al.destinations.length)];
+        return { code: al.code, tel: al.callsign, num, callsign: al.code + num, other,
+          type: { code, ...t } };
+      }
+    }
     for (let i = 0; i < 50; i += 1) {
       const [code, tel] = this.airlines[Math.floor(this.rng() * this.airlines.length)];
       const num = String(10 + Math.floor(this.rng() * 1990));
@@ -135,9 +179,9 @@ export class World {
 
   makeAircraft(kind, base = null) {
     const c = base || this.newCallsign();
-    const type = base?.type || AIRCRAFT_TYPES[Math.floor(this.rng() * AIRCRAFT_TYPES.length)];
+    const type = c.type || AIRCRAFT_TYPES[Math.floor(this.rng() * AIRCRAFT_TYPES.length)];
     const ac = {
-      id: this.nextId++, kind, callsign: c.callsign, code: c.code, tel: c.tel, num: c.num, type,
+      id: this.nextId++, kind, callsign: c.callsign, code: c.code, tel: c.tel, num: c.num, type, other: c.other || null,
       cs: { t: `${c.tel} ${c.num}`, s: `${c.tel} ${this.f.spell(c.num)}` },
       voice: Math.floor(this.rng() * 1000), p: [0, 0], hdg: 0, alt: 0, v: 0,
       cleared: {}, flags: {}, crossings: [], hold: false, req: null, born: this.t,
@@ -146,21 +190,39 @@ export class World {
     return ac;
   }
 
-  freeGate() {
-    const free = this.L.gates.filter((g) => !this.gateUse.has(g.id));
+  // a free stand big enough for the wingspan (real stands have a size limit)
+  freeGate(span = 0) {
+    const free = this.L.gates.filter((g) => !this.gateUse.has(g.id) && (!g.maxSpan || g.maxSpan >= span));
     return free.length ? free[Math.floor(this.rng() * free.length)] : null;
   }
 
-  lastArrivalDist() {
-    const finals = this.ac.filter((a) => a.state === 'final');
-    return finals.length ? Math.max(...finals.map((a) => a.dist)) : -Infinity;
+  // the last arrival on final for a runway end, if any
+  lastOnFinal(end) {
+    const finals = this.ac.filter((a) => a.state === 'final' && a.end === end);
+    return finals.length ? finals.reduce((m, a) => (a.dist > m.dist ? a : m)) : null;
+  }
+
+  // can a new arrival join the final at SPAWN_NM behind the last one?
+  finalHasRoom(end, wake) {
+    const last = this.lastOnFinal(end);
+    if (!last) return true;
+    return last.dist <= (SPAWN_NM - wakeSpacingNm(last.type.wake, wake) - GAME_SPACING_NM) * M_PER_NM;
   }
 
   spawnArrival(base = null, distNm = SPAWN_NM) {
-    const gate = this.freeGate();
-    const e = endGeometry(this.L, this.arrEnd);
+    const c = base || this.newCallsign();
+    const type = c.type || AIRCRAFT_TYPES[Math.floor(this.rng() * AIRCRAFT_TYPES.length)];
+    const ends = this.arrEnds.length ? this.arrEnds : [this.arrEnd];
+    let end = null;
+    for (let k = 0; k < ends.length && !end; k += 1) {
+      const cand = ends[(this.arrIdx + k) % ends.length];
+      if (distNm < SPAWN_NM || this.finalHasRoom(cand, type.wake)) end = cand;
+    }
+    const gate = this.freeGate(type.span);
+    const e = end && endGeometry(this.L, end);
     if (!gate || !e) return null;
-    const ac = this.makeAircraft('arr', base);
+    this.arrIdx += 1;
+    const ac = this.makeAircraft('arr', { ...c, type });
     ac.end = e.ident;
     ac.gate = gate.id;
     this.gateUse.set(gate.id, ac.id);
@@ -175,10 +237,13 @@ export class World {
   spawnDeparture() {
     const groundDeps = this.ac.filter((a) => a.kind === 'dep' && GROUND.has(a.state)).length;
     if (groundDeps >= Math.max(2, Math.floor(this.L.gates.length / 2))) return null;
-    const gate = this.freeGate();
+    const c = this.newCallsign();
+    const type = c.type || AIRCRAFT_TYPES[Math.floor(this.rng() * AIRCRAFT_TYPES.length)];
+    const gate = this.freeGate(type.span);
     if (!gate) return null;
-    const ac = this.makeAircraft('dep');
-    ac.end = this.depEnd;
+    const ac = this.makeAircraft('dep', { ...c, type });
+    const ends = this.depEnds.length ? this.depEnds : [this.depEnd];
+    ac.end = ends[this.depIdx++ % ends.length];
     ac.gate = gate.id;
     this.gateUse.set(gate.id, ac.id);
     ac.state = 'gate';
@@ -192,12 +257,10 @@ export class World {
     const lvl = TRAFFIC_LEVELS[this.traffic];
     this.nextArr -= dt;
     this.nextDep -= dt;
-    const finalFree = this.lastArrivalDist() <= (SPAWN_NM - MIN_FINAL_GAP_NM) * M_PER_NM;
     const due = this.requeue.find((r) => r.at <= this.t);
-    if (due && finalFree) {
-      this.requeue.splice(this.requeue.indexOf(due), 1);
-      this.spawnArrival(due.base);
-    } else if (this.nextArr <= 0 && finalFree) {
+    if (due) {
+      if (this.spawnArrival(due.base)) this.requeue.splice(this.requeue.indexOf(due), 1);
+    } else if (this.nextArr <= 0) {
       if (this.spawnArrival()) this.nextArr = this.interval(lvl.arrPerHour);
     }
     if (this.nextDep <= 0) {
@@ -416,7 +479,7 @@ export class World {
         }
         return null;
       case 'lined_up':
-        if (ac.cleared.takeoff && this.t - ac.linedAt > 3 && this.runwayAheadClear(ac)) ac.state = 'takeoff';
+        if (ac.cleared.takeoff && this.t - ac.linedAt > 3 && this.runwayAheadClear(ac)) this.startRoll(ac);
         return null;
       case 'takeoff': return this.updateTakeoff(ac, dt);
       case 'climb': return this.updateClimb(ac, dt);
@@ -458,8 +521,11 @@ export class World {
     const ex = exits.find((x) => x.along >= need) || exits[exits.length - 1];
     ac.exit = ex;
     const nodes = this.L.graph.nodes;
-    this.setPath(ac, [ac.p, nodes[ex.r].p, nodes[ex.h].p, nodes[ex.t].p], { speed: 12 });
-    ac.holdLineAt = ac.path.cum[Math.min(2, ac.path.cum.length - 1)];
+    // real exits follow the taxiway's curve; generated ones are straight
+    const ids = ex.path || [ex.r, ex.h, ex.t];
+    this.setPath(ac, [ac.p, ...ids.map((id) => nodes[id].p)], { speed: 12 });
+    const k = ac.path.pts.findIndex((q) => dist(q, nodes[ex.h].p) < 0.5);
+    ac.holdLineAt = k >= 0 ? ac.path.cum[k] : ac.path.cum[Math.min(2, ac.path.cum.length - 1)];
     void e;
   }
 
@@ -470,7 +536,8 @@ export class World {
     const rp = nodes[hp.r].p;
     ac.state = 'lineup';
     ac.req = null;
-    this.setPath(ac, [ac.p, nodes[hp.h].p, rp, add(rp, mul(e.dir, 80))], { speed: 6 });
+    const ids = hp.path || [hp.h, hp.r];
+    this.setPath(ac, [ac.p, ...ids.map((id) => nodes[id].p), add(rp, mul(e.dir, 80))], { speed: 6 });
   }
 
   // what a pilot lined up can see: nobody ahead on the runway, and the
@@ -480,6 +547,19 @@ export class World {
     return !this.ac.some((o) => o !== ac && dot(sub(o.p, ac.p), e.dir) > 0
       && ((GROUND.has(o.state) && onRunway(e.runway, o.p))
         || (o.state === 'climb' && o.alt < 400 && onRunway(e.runway, o.p, 200))));
+  }
+
+  startRoll(ac) {
+    ac.state = 'takeoff';
+    // wake turbulence: too soon behind a heavier departure from the same runway?
+    const rw = runwayForEnd(this.L, ac.end)?.id;
+    const prev = this.lastRoll[rw];
+    const need = prev && WAKE_DEP_S[prev.wake]?.[ac.type.wake];
+    if (need && this.t - prev.t < need) {
+      this.points(SCORE.wake, `wake turbulence: ${ac.callsign} (${ac.type.wake}) rolled ${Math.round(this.t - prev.t)} s after ${prev.callsign} (${prev.wake}); needs ${need / 60} min`, ac);
+      this.alert(`Wake turbulence: ${ac.callsign} departed too soon behind ${prev.callsign}`, ac);
+    }
+    this.lastRoll[rw] = { t: this.t, wake: ac.type.wake, callsign: ac.callsign };
   }
 
   updateTakeoff(ac, dt) {
@@ -686,8 +766,11 @@ export class World {
     }
   }
 
+  // "WA B1" is read as "whiskey alpha, bravo one"
   viaText(cmd) {
-    return cmd.via?.length ? cmd.via.join(' ').toUpperCase() : null;
+    if (!cmd.via?.length) return null;
+    const names = cmd.via.map((v) => v.toUpperCase());
+    return { t: names.join(' '), s: names.map((v) => this.f.spell(v)).join(', ') };
   }
 
   crossText(cmd) {
@@ -700,6 +783,8 @@ export class World {
     }
     const end = runwayArg || ac.end;
     if (!this.L.holdPoints[end]) return this.unable(ac, `runway ${end} is not available`);
+    const unknown = unknownVia(this.L, cmd.via);
+    if (unknown.length) return this.unable(ac, `we can't find taxiway ${unknown.join(', ')}`);
     const r = this.routeFromHere(ac, this.L.holdPoints[end].h, { via: cmd.via || [], prefer: 'A' });
     if (!r) return this.unable(ac, 'no taxi route');
     ac.end = end;
@@ -717,6 +802,9 @@ export class World {
     if (!gate) return this.unable(ac, `there is no stand ${cmd.gate}`);
     const user = this.gateUse.get(gate.id);
     if (user && user !== ac.id) return this.unable(ac, `stand ${gate.id} is occupied`);
+    if (gate.maxSpan && gate.maxSpan < ac.type.span) return this.unable(ac, `stand ${gate.id} is too small for us`);
+    const unknown = unknownVia(this.L, cmd.via);
+    if (unknown.length) return this.unable(ac, `we can't find taxiway ${unknown.join(', ')}`);
     if (gate.id !== ac.gate) { this.gateUse.delete(ac.gate); this.gateUse.set(gate.id, ac.id); ac.gate = gate.id; }
     const r = this.routeFromHere(ac, gate.node, { via: cmd.via || [], prefer: 'B' });
     if (!r) return this.unable(ac, 'no taxi route');

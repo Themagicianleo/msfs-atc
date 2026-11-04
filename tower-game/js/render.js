@@ -3,12 +3,22 @@
 import { M_PER_NM, add, dist, fromHeading, mul, perp, sub, norm } from './geo.js';
 import { endGeometry } from './layout.js';
 
-const C = {
-  bg: '#0d1712', grass: '#102018', runway: '#30343b', runwayEdge: '#5b616b', centre: '#e9edf2',
-  twy: '#272c33', twyLine: '#c9a227', apron: '#1f252c', terminal: '#3c4756', hold: '#e5484d',
+// radar-style (dark) and airport-diagram style ("chart") colours
+const DARK = {
+  bg: '#0d1712', runway: '#30343b', runwayEdge: '#5b616b', centre: '#e9edf2', building: '#252b33',
+  twy: '#272c33', lane: '#222730', twyLine: '#c9a227', apron: '#1a2026', terminal: '#3c4756', hold: '#e5484d',
   arr: '#4fc3f7', dep: '#ffb454', sel: '#ffffff', req: '#ffe066', text: '#e6e9ed', muted: '#8d99a6',
   final: 'rgba(79,195,247,0.35)', route: 'rgba(255,255,255,0.55)', conflict: '#ff4d4f',
+  labelBg: 'rgba(13,23,18,0.75)', labelText: '#e9c46a', labelEdge: 'rgba(233,196,106,0.5)',
 };
+const CHART = {
+  bg: '#f4f1e8', runway: '#1d1d1f', runwayEdge: '#000000', centre: '#ffffff', building: '#a9a39a',
+  twy: '#c9c4b8', lane: '#d8d3c7', twyLine: '#8a7a3a', apron: '#e2ddd0', terminal: '#8f8a80', hold: '#d00000',
+  arr: '#0067c0', dep: '#c25b00', sel: '#000000', req: '#b8860b', text: '#1d1d1f', muted: '#5a5a5a',
+  final: 'rgba(0,103,192,0.45)', route: 'rgba(0,0,0,0.6)', conflict: '#d00000',
+  labelBg: '#ffd400', labelText: '#000000', labelEdge: '#000000',
+};
+let C = DARK;
 
 const SHORT = {
   final: 'FINAL', rollout: 'LAND', vacated: 'VACATED', taxi_in: 'TAXI IN', parked: 'PARKED',
@@ -38,7 +48,7 @@ export class Renderer {
 
   // fit the whole airport (and a bit of the final approach) on screen
   fit(layout) {
-    const pts = layout.runways.flatMap((r) => [r.a, r.b]).concat(layout.terminal || []);
+    const pts = layout.runways.flatMap((r) => [r.a, r.b]).concat(layout.terminal || [], ...(layout.aprons || []));
     const xs = pts.map((p) => p[0]);
     const ys = pts.map((p) => p[1]);
     const minX = Math.min(...xs); const maxX = Math.max(...xs);
@@ -147,6 +157,7 @@ export class Renderer {
   }
 
   draw(world, { selectedId = null, now = 0 } = {}) {
+    C = this.chart ? CHART : DARK;
     const c = this.ctx;
     const L = world.L;
     const s = this.view.s;
@@ -166,20 +177,19 @@ export class Renderer {
       }
     }
 
-    if (L.apron) this.poly(L.apron, C.apron);
-    if (L.terminal) this.poly(L.terminal, C.terminal);
+    for (const ring of L.aprons || [L.apron].filter(Boolean)) this.poly(ring, C.apron);
+    for (const ring of L.buildings || []) this.poly(ring, C.building);
+    for (const ring of L.real ? L.terminals : [L.terminal].filter(Boolean)) this.poly(ring, C.terminal);
 
     // taxiways under runways
     const g = L.graph;
     for (const e of g.edges) {
       if (e.kind === 'runway') continue;
-      const a = g.nodes[e.a].p;
-      const b = g.nodes[e.b].p;
-      const w = e.kind === 'stand' ? 10 : 23;
-      this.line(a, b, Math.max(2, w * s), C.twy);
+      const w = { stand: 8, lane: 15 }[e.kind] || 23;
+      this.line(g.nodes[e.a].p, g.nodes[e.b].p, Math.max(2, w * s), e.kind === 'lane' ? C.lane : C.twy);
     }
     for (const e of g.edges) {
-      if (e.kind === 'runway') continue;
+      if (e.kind === 'runway' || (e.kind === 'stand' && s < 0.3)) continue;
       this.line(g.nodes[e.a].p, g.nodes[e.b].p, 1, C.twyLine);
     }
 
@@ -187,8 +197,10 @@ export class Renderer {
       const n = mul(perp(r.dir), r.width / 2);
       this.poly([add(r.a, n), add(r.b, n), sub(r.b, n), sub(r.a, n)], C.runway, C.runwayEdge);
       this.line(add(r.a, mul(r.dir, 80)), sub(r.b, mul(r.dir, 80)), Math.max(1, 1.2 * s), C.centre, [Math.max(4, 30 * s), Math.max(4, 20 * s)]);
-      this.text(r.identA, add(r.a, mul(r.dir, -90)), { bold: true, size: 13 });
-      this.text(r.identB, add(r.b, mul(r.dir, 90)), { bold: true, size: 13 });
+      // threshold bars
+      for (const [p, d] of [[r.a, r.dir], [r.b, mul(r.dir, -1)]]) this.line(add(p, n), sub(p, n), Math.max(2, 4 * s), C.centre);
+      this.text(r.identA, add(r.a, mul(r.dir, -90)), { bold: true, size: 13, color: C.text });
+      this.text(r.identB, add(r.b, mul(r.dir, 90)), { bold: true, size: 13, color: C.text });
     }
 
     // holding points (red bars) and taxiway names
@@ -196,10 +208,16 @@ export class Renderer {
       for (const nd of g.nodes) {
         if (nd.kind !== 'hold') continue;
         const r = L.runways.find((x) => x.id === nd.runway);
+        if (!r) continue;
         const d = mul(r.dir, 18);
         this.line(add(nd.p, d), sub(nd.p, d), Math.max(2, 4 * s), C.hold);
-        if (s > 0.12) this.text(nd.name, nd.p, { color: C.req, size: 10, dy: -10 });
+        if (s > 0.2 && nd.name) this.text(nd.name, nd.p, { color: C.hold, size: 10, dy: -10 });
       }
+    }
+    if (L.taxiLabels) {
+      this.drawTaxiLabels(L.taxiLabels, s);
+      if (s > 0.28) for (const gate of L.gates) this.text(gate.id, g.nodes[gate.node].p, { color: C.muted, size: 10, dy: 12 });
+    } else if (s > 0.05) {
       const named = new Set();
       for (const e of g.edges) {
         if (e.kind !== 'twy' && e.kind !== 'link') continue;
@@ -224,11 +242,38 @@ export class Renderer {
     for (const ac of world.ac) this.drawAircraft(ac, ac.id === selectedId, now);
   }
 
+  // chart-style taxiway name boxes, skipping any that would overlap
+  drawTaxiLabels(labels, s) {
+    const c = this.ctx;
+    const boxes = [];
+    const minLane = this.chart ? 0.35 : 0.5;
+    c.font = '700 11px -apple-system, system-ui, sans-serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    for (const l of labels) {
+      if (l.lane && s < minLane) continue;
+      if (!l.lane && s < 0.04) continue;
+      const q = this.toScreen(l.p);
+      if (q[0] < -20 || q[1] < -20 || q[0] > this.w + 20 || q[1] > this.h + 20) continue;
+      const w = c.measureText(l.name).width + 8;
+      const box = [q[0] - w / 2, q[1] - 8, w, 16];
+      if (boxes.some((b) => b[0] < box[0] + box[2] + 2 && box[0] < b[0] + b[2] + 2 && b[1] < box[1] + box[3] + 2 && box[1] < b[1] + b[3] + 2)) continue;
+      boxes.push(box);
+      c.fillStyle = C.labelBg;
+      c.fillRect(...box);
+      c.strokeStyle = C.labelEdge;
+      c.lineWidth = 1;
+      c.strokeRect(...box);
+      c.fillStyle = C.labelText;
+      c.fillText(l.name, q[0], q[1] + 0.5);
+    }
+  }
+
   drawAircraft(ac, selected, now) {
     const c = this.ctx;
     const s = this.view.s;
     const color = ac.kind === 'arr' ? C.arr : C.dep;
-    const size = Math.max(9, 40 * s); // a 40 m airliner, at least 9 px
+    const size = Math.max(9, (ac.type.span || 36) * 1.1 * s); // to scale, at least 9 px
     const p = this.toScreen(ac.p);
     const f = fromHeading(ac.hdg);
     const dir = [f[0], -f[1]]; // screen y points down

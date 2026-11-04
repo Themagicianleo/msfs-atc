@@ -444,5 +444,38 @@
     "ZBAA"
    ]
   }
- ]
+ ],
+ "configs": [
+  {
+   "name": "West Plan",
+   "wind": [
+    190,
+    40
+   ],
+   "arr": [
+    "28L",
+    "28R"
+   ],
+   "dep": [
+    "01L",
+    "01R"
+   ]
+  },
+  {
+   "name": "Southeast Plan",
+   "wind": [
+    40,
+    190
+   ],
+   "arr": [
+    "19L",
+    "19R"
+   ],
+   "dep": [
+    "10L",
+    "10R"
+   ]
+  }
+ ],
+ "configs_about": "Runway configurations: arrivals and departures for a wind direction range [from, to] (degrees true, clockwise). Typical operations, simplified."
 }

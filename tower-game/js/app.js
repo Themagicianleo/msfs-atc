@@ -2,7 +2,9 @@
 // log, speech output, push-to-talk voice input, typing and buttons.
 // A static site: everything it needs is in this folder.
 
-import { selectRunway } from './lib/runway.js';
+import { unpackLayout } from './osm.js';
+import { chooseConfig, runwayChoices } from './ops.js';
+import { taxiwayNames } from './layout.js';
 import { Speaker } from './lib/speech.js';
 import { Listener, voiceSupport } from './lib/voice.js';
 import { understand } from './commands.js';
@@ -78,6 +80,14 @@ $('#suggest').addEventListener('click', (e) => {
   $('#suggest').innerHTML = '';
 });
 
+document.querySelector('.featured').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-code]');
+  if (!b) return;
+  $('#start-icao').value = b.dataset.code;
+  $('#suggest').innerHTML = '';
+  $$('.featured button').forEach((x) => x.classList.toggle('on', x === b));
+});
+
 async function loadAirport(code) {
   if (code === 'DEMO') return loadJson('data/demo.json');
   if (!/^[A-Z0-9]{3,4}$/.test(code)) throw new Error('Enter a 3- or 4-letter airport code.');
@@ -98,36 +108,57 @@ function showWind() {
   $('#wind').title = w?.raw ? `METAR: ${w.raw}` : `Wind source: ${w?.source || 'none'}`;
 }
 
+// the detailed airports: real layout from OpenStreetMap, real airlines
+export const FEATURED = ['WSSS', 'ZBAD', 'KSFO'];
+
+async function loadFeatured(code) {
+  const [packed, profile, types] = await Promise.all([loadJson(`data/hq/${code}.json`),
+    loadJson(`data/traffic/${code}.json`), loadJson('data/aircraft.json')]);
+  return { layout: unpackLayout(packed), profile, types, airport: { ...packed.airport, icao: code } };
+}
+
+function fillRunwayMenus(layout, profile, cfg) {
+  const choices = runwayChoices(layout, profile);
+  for (const [sel, val] of [[$('#arr-rwy'), cfg.arr.join('+')], [$('#dep-rwy'), cfg.dep.join('+')]]) {
+    sel.innerHTML = '';
+    for (const c of choices) sel.append(new Option(c, c));
+    if (![...sel.options].some((o) => o.value === val)) sel.append(new Option(val, val));
+    sel.value = val;
+  }
+}
+
 async function startShift(code, traffic) {
   speaker.unlock(); // inside the tap: Safari needs this for speech
-  const [airport, phr, airlines] = await Promise.all([loadAirport(code), loadJson('data/phraseology.json'), loadJson('data/airlines.json')]);
+  const featured = FEATURED.includes(code);
+  const [phr, airlines, hq] = await Promise.all([loadJson('data/phraseology.json'), loadJson('data/airlines.json'),
+    featured ? loadFeatured(code).catch(() => null) : null]);
+  const airport = hq ? hq.airport : await loadAirport(code);
   let wind = settings.liveWeather && code !== 'DEMO' ? await liveWind(airport.icao) : null;
   if (!wind) wind = generatedWind(airport.icao);
-  const layout = buildLayout(airport);
-  const ends = layout.runways.flatMap((r) => [
-    { ident: r.identA, heading: r.headingA, length_ft: r.len / 0.3048 },
-    { ident: r.identB, heading: r.headingB, length_ft: r.len / 0.3048 }]);
-  const pick = selectRunway(ends, wind) || { ident: ends[0].ident, reason: 'first runway' };
+  const layout = hq ? hq.layout : buildLayout(airport);
+  const profile = hq?.profile || null;
+  const cfg = chooseConfig(layout, wind, profile);
   game.phr = phr;
   game.airlines = airlines;
   game.wind = wind;
-  game.world = new World({ layout, phr, airlines, arrEnd: pick.ident, depEnd: pick.ident, traffic, wind,
-    unit: `${airport.municipality || airport.name || airport.icao} Tower` });
+  game.profile = profile;
+  game.known = taxiwayNames(layout);
+  game.world = new World({ layout, phr, airlines, arrEnd: cfg.arr, depEnd: cfg.dep, traffic, wind,
+    profile, types: hq?.types || null,
+    unit: profile?.meta?.tower || `${airport.municipality || airport.name || airport.icao} Tower` });
   game.selected = null;
   settings.airport = airport.icao;
   settings.traffic = traffic;
   saveSettings();
-  $('#title').textContent = `${airport.icao} Tower`;
+  $('#title').textContent = profile?.meta?.tower || `${airport.icao} Tower`;
   $('#traffic').value = traffic;
-  for (const sel of [$('#arr-rwy'), $('#dep-rwy')]) {
-    sel.innerHTML = '';
-    for (const e of ends) sel.append(new Option(e.ident, e.ident));
-    sel.value = pick.ident;
-  }
+  fillRunwayMenus(layout, profile, cfg);
   showWind();
   $('#log').innerHTML = '';
+  const how = hq ? `Real layout from OpenStreetMap (© OpenStreetMap contributors, ODbL): ${game.known.size} named taxiways, ${layout.gates.length} stands.`
+    : 'Taxiways and stands are generated.';
   sys(`${airport.icao} ${airport.name}: runways ${layout.runways.map((r) => r.id).join(', ')}. ${windText(wind)} (${wind.source}). `
-    + `Landing and departing ${pick.ident} (${pick.reason}). Taxiways and stands are generated.`);
+    + `${cfg.name}: landing ${cfg.arr.join(' and ')}, departing ${cfg.dep.join(' and ')} (${cfg.reason}). ${how}`);
   renderer.resize();
   renderer.fit(layout);
   $('#start').classList.add('hidden');
@@ -154,16 +185,19 @@ $('#wind-form').addEventListener('submit', (e) => {
   game.wind = { available: true, source: 'set by you', wind_dir: Math.round(dir) % 360 || 360, wind_vrb: false, wind_kt: Math.round(kt), gust_kt: null };
   game.world.wind = game.wind;
   showWind();
-  const ends = game.world.L.runways.flatMap((r) => [{ ident: r.identA, heading: r.headingA, length_ft: r.len / 0.3048 },
-    { ident: r.identB, heading: r.headingB, length_ft: r.len / 0.3048 }]);
-  const pick = selectRunway(ends, game.wind);
-  sys(`${windText(game.wind)}. Best runway now: ${pick.ident} (change it with Arr/Dep).`);
+  const cfg = chooseConfig(game.world.L, game.wind, game.profile);
+  sys(`${windText(game.wind)}. Suggested: ${cfg.name}, landing ${cfg.arr.join(' and ')}, departing ${cfg.dep.join(' and ')} (change with Arr/Dep).`);
 });
 
 $('#new-shift').addEventListener('click', () => $('#start').classList.remove('hidden'));
 $('#fit').addEventListener('click', () => game.world && renderer.fit(game.world.L));
-$('#arr-rwy').addEventListener('change', (e) => { game.world?.setRunways(e.target.value, game.world.depEnd); sys(`New arrivals will land runway ${e.target.value}.`); });
-$('#dep-rwy').addEventListener('change', (e) => { game.world?.setRunways(game.world.arrEnd, e.target.value); sys(`New departures will use runway ${e.target.value}.`); });
+$('#arr-rwy').addEventListener('change', (e) => { game.world?.setRunways(e.target.value.split('+'), game.world.depEnds); sys(`New arrivals will land runway ${e.target.value.replace('+', ' and ')}.`); });
+$('#dep-rwy').addEventListener('change', (e) => { game.world?.setRunways(game.world.arrEnds, e.target.value.split('+')); sys(`New departures will use runway ${e.target.value.replace('+', ' and ')}.`); });
+$('#chart').addEventListener('click', () => {
+  renderer.chart = !renderer.chart;
+  $('#chart').classList.toggle('on', renderer.chart);
+  $('#chart').textContent = renderer.chart ? 'Radar' : 'Chart';
+});
 $('#traffic').addEventListener('change', (e) => { game.world?.setTraffic(e.target.value); settings.traffic = e.target.value; saveSettings(); });
 $$('.speed button').forEach((b) => b.addEventListener('click', () => {
   game.speed = Number(b.dataset.speed);
@@ -206,7 +240,7 @@ function issueText(text) {
   const w = game.world;
   if (!w || !text.trim()) return;
   addMsg('you', 'You', text.trim());
-  const u = understand(text, w.ac, game.phr.commands, game.selected);
+  const u = understand(text, w.ac, game.phr.commands, game.selected, game.known);
   if (u.error) {
     if (u.ac) w.readback(u.ac, 'say_again');
     sys(u.error, 'bad');
@@ -299,7 +333,8 @@ function renderPanel() {
   for (const d of strips.children) {
     const a = w.find(Number(d.dataset.id));
     if (!a) continue;
-    const txt = `${stripState(a)} · ${a.kind === 'arr' ? 'ARR' : 'DEP'} ${a.end || ''}`;
+    const route = a.other ? (a.kind === 'arr' ? ` from ${a.other}` : ` to ${a.other}`) : '';
+    const txt = `${a.type.code} · ${stripState(a)} · ${a.kind === 'arr' ? 'ARR' : 'DEP'} ${a.end || ''}${route}`;
     const st = d.querySelector('.st');
     if (st.textContent !== txt) st.textContent = txt;
   }

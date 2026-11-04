@@ -62,3 +62,12 @@ test('understand: callsign + instruction, selected aircraft as fallback', () => 
   assert.match(understand('Air China, go around', AC, R).error, /Which one: CCA1234 or CCA88/);
   assert.match(understand('Speedbird 123 how are you', AC, R).error, /not understood/);
 });
+
+test('via with real multi-letter taxiway names', () => {
+  const known = new Set(['A', 'B', 'B1', 'WA', 'WB', 'M', 'Z']);
+  assert.deepEqual(parseInstruction('taxi to holding point runway 02C via whiskey alpha bravo one', R, known).via, ['WA', 'B1']);
+  assert.deepEqual(parseInstruction('taxi runway 28L via alpha, bravo and mike', R, known).via, ['A', 'B', 'M']);
+  assert.deepEqual(parseInstruction('taxi via wa b1', R, known).via, ['WA', 'B1']);
+  // without a name list letters stay separate
+  assert.deepEqual(parseInstruction('taxi via alpha bravo', R).via, ['A', 'B']);
+});

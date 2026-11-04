@@ -19,7 +19,13 @@
     <form id="start-form" class="overlay-box">
       <h1>Tower Controller</h1>
       <p class="muted">You are the tower controller. Land the arrivals, get the departures out, keep the runways safe.</p>
-      <label>Airport: ICAO code, name or city
+      <p class="small muted">Detailed airports (real taxiways, stands and airlines):</p>
+      <div class="featured">
+        <button type="button" data-code="WSSS"><b>WSSS</b> Singapore Changi</button>
+        <button type="button" data-code="ZBAD"><b>ZBAD</b> Beijing Daxing</button>
+        <button type="button" data-code="KSFO"><b>KSFO</b> San Francisco</button>
+      </div>
+      <label>Or any airport (simplified, generated taxiways): ICAO code, name or city
         <input id="start-icao" required maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="EGLL, Heathrow, Tokyo... or DEMO"></label>
       <div id="suggest" class="suggest"></div>
       <label>Traffic
@@ -28,7 +34,7 @@
       <button class="big primary" type="submit">Start shift</button>
       <p id="start-error" class="error" role="alert"></p>
       <p id="start-note" class="small muted"></p>
-      <p class="small muted">Runways are real (OurAirports, public domain). Taxiways, stands and the terminal are generated, so they won't match the real airport. A game, not for real-world use. Use headphones so the microphone doesn't hear the pilots.</p>
+      <p class="small muted">Detailed airports: layout © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL); airlines and fleets are representative, not real schedules. Other airports: runways from OurAirports, taxiways generated. A game, not for real-world use or navigation. Use headphones so the microphone doesn't hear the pilots.</p>
     </form>
   </div>
 
@@ -54,7 +60,7 @@
     <div class="map-wrap">
       <canvas id="map" aria-label="Airport map"></canvas>
       <div class="map-hint">Drag to pan, pinch or scroll to zoom, tap an aircraft to select it.</div>
-      <button id="fit" class="ghost fit">Fit</button>
+      <div class="map-tools"><button id="chart" class="ghost">Chart</button><button id="fit" class="ghost">Fit</button></div>
     </div>
     <aside class="side">
       <section id="selected" class="card">
