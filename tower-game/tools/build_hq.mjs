@@ -42,7 +42,7 @@ export function report(L) {
     edges: g.edges.length, stands: L.gates.length, holds: g.nodes.filter((n) => n.kind === 'hold').length,
     crossings: g.nodes.filter((n) => n.kind === 'rwyx').length,
     exits: Object.fromEntries(ends.map((e) => [e, (L.exits[e] || []).map((x) => `${x.name}@${Math.round(x.along)}`).join(' ')])),
-    entries: Object.fromEntries(ends.map((e) => [e, L.holdPoints[e]?.name || '-'])),
+    entries: Object.fromEntries(ends.map((e) => [e, L.holdPoints[e] ? (L.holdPoints[e].name || '(unnamed)') : 'NONE'])),
     routesChecked: routes, routesFailed: failed, problems: [...new Set(problems)].slice(0, 30),
   };
 }

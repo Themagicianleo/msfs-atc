@@ -237,40 +237,101 @@ export function layoutFromOsm(osm, meta) {
 
   addExitsAndHolds(L, apronCentre);
   addStands(L, els, proj);
+  pruneToNetwork(L);
   L.taxiLabels = taxiLabels(L);
   return L;
 }
 
-// walk from a runway node out along a taxiway until clear of the runway
+// From a runway node, leaving along a given taxiway edge: the shortest way to a
+// point clear of the runway (searching, since OSM taxiway lines near a runway
+// are dense and curvy). The holding point is the first OSM holding position on
+// the way, or the first point at least HOLD_MIN from the centreline.
 function walkOut(L, r, start, firstEdge) {
   const g = L.graph;
-  const path = [start];
-  let cur = start;
-  let e = firstEdge;
-  let hold = null;
-  for (let steps = 0; steps < 40 && e; steps += 1) {
-    const next = e.a === cur ? e.b : e.a;
-    path.push(next);
-    const nd = g.nodes[next];
-    const off = pointSegmentDistance(nd.p, r.a, r.b).d;
-    if (hold === null && (nd.kind === 'hold' || off >= HOLD_MIN)) hold = next;
-    if (off >= CLEAR_OF_RUNWAY && hold !== null) return { path, hold, clear: next };
-    if (nd.kind === 'rwy' || (nd.kind === 'rwyx' && nd.runway !== r.id)) return null;
-    // continue on the straightest taxiway edge
-    const dirIn = norm(sub(nd.p, g.nodes[cur].p));
-    let best = null;
-    for (const k of g.adj[next]) {
-      const f = g.edges[k];
-      if (f === e || f.kind === 'runway') continue;
-      const other = f.a === next ? f.b : f.a;
-      const d = dot(norm(sub(g.nodes[other].p, nd.p)), dirIn);
-      if (!best || d > best.d) best = { f, d };
+  const off = (id) => pointSegmentDistance(g.nodes[id].p, r.a, r.b).d;
+  const first = firstEdge.a === start ? firstEdge.b : firstEdge.a;
+  const blocked = (v) => (g.nodes[v].kind === 'rwy' || g.nodes[v].kind === 'rwyx') && g.nodes[v].runway === r.id;
+  if (blocked(first)) return null;
+  const best = new Map([[first, firstEdge.len]]);
+  const prev = new Map([[first, start]]);
+  const queue = [[firstEdge.len, first]];
+  let goal = null;
+  while (queue.length) {
+    queue.sort((x, y) => x[0] - y[0]);
+    const [d, u] = queue.shift();
+    if (d > best.get(u)) continue;
+    if (off(u) >= CLEAR_OF_RUNWAY) { goal = u; break; }
+    if (d > 900) break;
+    for (const k of g.adj[u]) {
+      const e = g.edges[k];
+      if (e.kind === 'runway') continue;
+      const v = e.a === u ? e.b : e.a;
+      if (v === start || blocked(v)) continue;
+      const nd = d + e.len;
+      if (nd < (best.get(v) ?? Infinity)) { best.set(v, nd); prev.set(v, u); queue.push([nd, v]); }
     }
-    if (!best || best.d < -0.2) return null;
-    cur = next;
-    e = best.f;
   }
-  return null;
+  if (goal === null) return null;
+  const path = [];
+  for (let v = goal; v !== undefined; v = prev.get(v)) path.unshift(v);
+  const hold = path.find((v) => (g.nodes[v].kind === 'hold' && off(v) >= 40) || off(v) >= HOLD_MIN) ?? goal;
+  return { path, hold, clear: goal };
+}
+
+// nodes reachable over taxiways (not runways) from a start node
+function component(g, start) {
+  const seen = new Set([start]);
+  const stack = [start];
+  while (stack.length) {
+    const u = stack.pop();
+    for (const k of g.adj[u]) {
+      const e = g.edges[k];
+      if (e.kind === 'runway') continue;
+      const v = e.a === u ? e.b : e.a;
+      if (!seen.has(v)) { seen.add(v); stack.push(v); }
+    }
+  }
+  return seen;
+}
+
+// keep what the main taxi network (the one with the most stands) can reach
+function pruneToNetwork(L) {
+  const g = L.graph;
+  let main = new Set();
+  const done = new Set();
+  for (const gate of L.gates) {
+    if (done.has(gate.lane)) continue;
+    const c = component(g, gate.lane);
+    c.forEach((id) => done.add(id));
+    const stands = L.gates.filter((x) => c.has(x.lane)).length;
+    const best = L.gates.filter((x) => main.has(x.lane)).length;
+    if (stands > best) main = c;
+  }
+  L.gates = L.gates.filter((x) => main.has(x.lane));
+  for (const end of Object.keys(L.exits)) {
+    const seen = new Set();
+    L.exits[end] = L.exits[end].filter((x) => main.has(x.t)).filter((x) => {
+      const k = `${x.r}:${x.t}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }
+  for (const [end, list] of Object.entries(L.entryCandidates || {})) {
+    if (L.holdPoints[end] && main.has(L.holdPoints[end].h)) continue;
+    delete L.holdPoints[end];
+    const en = list.find((x) => main.has(x.h));
+    if (en) {
+      L.holdPoints[end] = { h: en.h, r: en.r, name: en.name, runway: g.nodes[en.r].runway,
+        path: [...en.path.slice(0, en.path.indexOf(en.h) + 1)].reverse() };
+      const hn = g.nodes[en.h];
+      if (hn.kind === 'twy') { hn.kind = 'hold'; hn.runway = g.nodes[en.r].runway; hn.name = hn.name || en.name; }
+    }
+  }
+  delete L.entryCandidates;
+  // a runway nothing can reach is not in use (closed, under construction, or not mapped)
+  L.closedRunways = L.runways.filter((r) => ![r.identA, r.identB].some((e) => L.holdPoints[e] || (L.exits[e] || []).length));
+  L.runways = L.runways.filter((r) => !L.closedRunways.includes(r));
 }
 
 function addExitsAndHolds(L, apronCentre) {
@@ -290,7 +351,12 @@ function addExitsAndHolds(L, apronCentre) {
         const w = walkOut(L, r, n.id, e);
         if (!w) continue;
         const out = norm(sub(g.nodes[w.path[1]].p, n.p));
-        links.push({ r: n.id, p: n.p, out, path: w.path, h: w.hold, t: w.clear, name: e.name,
+        let name = e.name;
+        for (let i = 1; !name && i < w.path.length; i += 1) {
+          const k2 = g.adj[w.path[i - 1]].find((k3) => { const f = g.edges[k3]; return f.a === w.path[i] || f.b === w.path[i]; });
+          if (k2 !== undefined) name = g.edges[k2].name;
+        }
+        links.push({ r: n.id, p: n.p, out, path: w.path, h: w.hold, t: w.clear, name,
           side: Math.sign(cross(r.dir, sub(g.nodes[w.clear].p, r.a))) });
       }
     }
@@ -304,7 +370,9 @@ function addExitsAndHolds(L, apronCentre) {
         .sort((x, y) => x.along - y.along || (y.side === apronSide) - (x.side === apronSide));
       // departure entry: near the threshold, on the terminal side if possible
       const entries = links.filter((l) => along(l.p) > -100 && along(l.p) < 900)
-        .sort((x, y) => (y.side === apronSide) - (x.side === apronSide) || along(x.p) - along(y.p));
+        .sort((x, y) => (y.side === apronSide) - (x.side === apronSide) || (!!y.name - !!x.name) || along(x.p) - along(y.p));
+      L.entryCandidates = L.entryCandidates || {};
+      L.entryCandidates[end.ident] = entries;
       const en = entries[0];
       if (en) {
         L.holdPoints[end.ident] = { h: en.h, r: en.r, name: en.name, runway: r.id, path: [...en.path.slice(0, en.path.indexOf(en.h) + 1)].reverse() };
@@ -323,7 +391,8 @@ function addStands(L, els, proj) {
   for (const e of els) {
     const t = tagsOf(e);
     if (t.aeroway !== 'parking_position' && t.aeroway !== 'gate') continue;
-    const ref = firstRef(t) || String(t.name || '').toUpperCase();
+    // "D64/D65" (a stand that can be used as two) -> "D64"
+    const ref = (firstRef(t) || String(t.name || '').toUpperCase()).split('/')[0].trim();
     if (!ref) continue;
     if (e.type === 'node') raw.push({ ref, p: proj.toXY(e.lat, e.lon), kind: t.aeroway });
     else if (e.type === 'way' && e.geometry) {
@@ -419,6 +488,7 @@ export function packLayout(L) {
     nodes: g.nodes.map((n) => [r1(n.p[0]), r1(n.p[1]), kinds.indexOf(n.kind), n.runway || 0, n.name || n.gate || 0]),
     edges: g.edges.map((e) => [e.a, e.b, names.indexOf(e.name || ''), ekinds.indexOf(e.kind), e.runway || 0]),
     runways: L.runways.map((r) => ({ identA: r.identA, identB: r.identB, a: r.a.map(r1), b: r.b.map(r1), width: r.width })),
+    closedRunways: (L.closedRunways || []).map((r) => ({ identA: r.identA, identB: r.identB, a: r.a.map(r1), b: r.b.map(r1), width: r.width })),
     holdPoints: L.holdPoints, exits: L.exits, gates: L.gates,
     aprons: L.aprons.map((ring) => ring.map((p) => p.map(r1))),
     terminals: L.terminals.map((ring) => ring.map((p) => p.map(r1))),
@@ -439,7 +509,7 @@ export function unpackLayout(d) {
   }
   for (const [a, b, n, k, rw] of d.edges) net.edge(a, b, d.names[n], d.ekinds[k], rw ? { runway: rw } : {});
   net.finish();
-  const runways = d.runways.map((r) => {
+  const mk = (r) => {
     const o = { ...r };
     o.dir = norm(sub(o.b, o.a));
     o.len = dist(o.a, o.b);
@@ -448,9 +518,11 @@ export function unpackLayout(d) {
     o.headingA = headingOf(o.dir);
     o.headingB = (o.headingA + 180) % 360;
     return o;
-  });
+  };
+  const runways = d.runways.map(mk);
+  const closedRunways = (d.closedRunways || []).map(mk);
   // keep the generated-layout fields the map uses: one apron/terminal for "fit"
-  return { airport: d.airport, proj, graph: net, runways, holdPoints: d.holdPoints, exits: d.exits, gates: d.gates,
+  return { airport: d.airport, proj, graph: net, runways, closedRunways, holdPoints: d.holdPoints, exits: d.exits, gates: d.gates,
     aprons: d.aprons, terminals: d.terminals, buildings: d.buildings, taxiLabels: d.taxiLabels, real: true,
     terminal: d.terminals.flat().length ? d.terminals.flat() : null };
 }

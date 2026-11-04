@@ -3,108 +3,155 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0b0e12">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Tower">
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Tower">
   <meta name="description" content="Be the tower controller at a real airport. Voice commands, in your browser.">
   <title>Tower Controller</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="icon" href="icons/icon-512.png">
+  <link rel="stylesheet" href="efb-glass.css">
   <link rel="stylesheet" href="tower.css">
 </head>
 <body>
-  <div id="start" class="overlay">
-    <form id="start-form" class="overlay-box">
-      <h1>Tower Controller</h1>
-      <p class="muted">You are the tower controller. Land the arrivals, get the departures out, keep the runways safe.</p>
-      <p class="small muted">Detailed airports (real taxiways, stands and airlines):</p>
-      <div class="featured">
-        <button type="button" data-code="WSSS"><b>WSSS</b> Singapore Changi</button>
-        <button type="button" data-code="ZBAD"><b>ZBAD</b> Beijing Daxing</button>
-        <button type="button" data-code="KSFO"><b>KSFO</b> San Francisco</button>
+  <div class="ambient" aria-hidden="true"></div>
+
+  <!-- start sheet -->
+  <div id="start" class="start">
+    <form id="start-form" class="start-sheet">
+      <div class="large-title">
+        <h1>Tower Controller</h1>
+        <p class="subtitle">You are the tower. Land the arrivals, get the departures out, keep the runways safe.</p>
       </div>
-      <label>Or any airport (simplified, generated taxiways): ICAO code, name or city
-        <input id="start-icao" required maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="EGLL, Heathrow, Tokyo... or DEMO"></label>
-      <div id="suggest" class="suggest"></div>
-      <label>Traffic
-        <select id="start-traffic"><option value="calm">Calm</option><option value="normal" selected>Normal</option><option value="busy">Busy</option></select>
-      </label>
-      <button class="big primary" type="submit">Start shift</button>
-      <p id="start-error" class="error" role="alert"></p>
-      <p id="start-note" class="small muted"></p>
-      <p class="small muted">Detailed airports: layout © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL); airlines and fleets are representative, not real schedules. Other airports: runways from OurAirports, taxiways generated. A game, not for real-world use or navigation. Use headphones so the microphone doesn't hear the pilots.</p>
+
+      <div class="label">Detailed airports</div>
+      <div class="featured">
+        <button type="button" class="feat card" data-code="WSSS">
+          <span class="feat-code">WSSS</span><span class="feat-name">Singapore Changi</span>
+          <span class="feat-sub">Singapore Airlines, Scoot · 02L/20R arrivals, 02C/20C departures</span>
+        </button>
+        <button type="button" class="feat card" data-code="ZBAD">
+          <span class="feat-code">ZBAD</span><span class="feat-name">北京大兴 Beijing Daxing</span>
+          <span class="feat-sub">中文无线电通话 · 公制单位 · Chinese radio, metric units</span>
+        </button>
+        <button type="button" class="feat card" data-code="KSFO">
+          <span class="feat-code">KSFO</span><span class="feat-name">San Francisco</span>
+          <span class="feat-sub">United hub · West Plan: land 28L/28R, depart 1L/1R</span>
+        </button>
+      </div>
+
+      <section class="section">
+        <label class="field">
+          <span class="label">Or any airport (simplified: generated taxiways)</span>
+          <input id="start-icao" class="input" required maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false"
+                 placeholder="ICAO code, name or city, or DEMO">
+        </label>
+        <div id="suggest" class="suggest"></div>
+        <label class="field">
+          <span class="label">Traffic</span>
+          <select id="start-traffic" class="input"><option value="calm">Calm</option><option value="normal" selected>Normal</option><option value="busy">Busy</option></select>
+        </label>
+        <button class="btn btn-primary btn-big" type="submit">Start shift</button>
+        <p id="start-error" class="danger small" role="alert"></p>
+        <p id="start-note" class="muted small"></p>
+      </section>
+      <p class="muted small fine">Detailed airports: layout © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL); airlines and fleets are representative, not real schedules. Other airports: runways from OurAirports, taxiways generated. A game, not for real-world use or navigation. Use headphones so the microphone doesn't hear the pilots.</p>
     </form>
   </div>
 
-  <header class="bar">
-    <strong id="title">Tower Controller</strong>
-    <span class="pill" id="wind">Wind --</span>
-    <label class="mini">Arr <select id="arr-rwy"></select></label>
-    <label class="mini">Dep <select id="dep-rwy"></select></label>
-    <label class="mini">Traffic
-      <select id="traffic"><option value="off">None</option><option value="calm">Calm</option><option value="normal">Normal</option><option value="busy">Busy</option></select>
-    </label>
-    <span class="speed" role="group" aria-label="Game speed">
-      <button data-speed="0" title="Pause">II</button><button data-speed="1" class="on">1x</button><button data-speed="2">2x</button><button data-speed="4">4x</button>
+  <header class="appbar game-bar">
+    <div class="brand"><img src="icons/icon-180.png" alt=""><span id="title">Tower Controller</span></div>
+    <span class="capsule glass-ctl info" id="wind">Wind --</span>
+    <span class="seg speed" role="group" aria-label="Game speed">
+      <button data-speed="0" aria-pressed="false" title="Pause">II</button><button data-speed="1" aria-pressed="true">1×</button><button data-speed="2" aria-pressed="false">2×</button><button data-speed="4" aria-pressed="false">4×</button>
     </span>
-    <span class="pill score" id="score">0</span>
-    <span class="pill" id="clock">00:00</span>
-    <button id="new-shift" class="ghost small">New</button>
+    <span class="capsule glass-ctl score" title="Score"><span class="clock-caption">Score</span><span id="score" class="clock-utc">0</span></span>
+    <span class="capsule glass-ctl"><span id="clock" class="clock-utc">00:00</span></span>
+    <button id="new-shift" class="capsule glass-ctl" type="button">New shift</button>
   </header>
 
-  <div id="alert" class="alert hidden" role="alert"></div>
+  <div id="alert" class="banner banner-danger alert-bar hidden" role="alert"></div>
 
   <main class="game">
-    <div class="map-wrap">
+    <section class="map-wrap card">
       <canvas id="map" aria-label="Airport map"></canvas>
-      <div class="map-hint">Drag to pan, pinch or scroll to zoom, tap an aircraft to select it.</div>
-      <div class="map-tools"><button id="chart" class="ghost">Chart</button><button id="fit" class="ghost">Fit</button></div>
-    </div>
-    <aside class="side">
-      <section id="selected" class="card">
-        <div class="sel-head"><span id="sel-cs">No aircraft selected</span><span id="sel-state" class="muted"></span></div>
-        <div id="sel-req" class="sel-req"></div>
-        <div id="sel-buttons" class="cmds"></div>
-      </section>
-      <form id="cmd-form" class="cmd-row">
-        <input id="cmd-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
-               placeholder="e.g. BAW123 cleared to land runway 27" aria-label="Type an instruction">
-        <button class="primary" type="submit">Send</button>
-      </form>
-      <button id="ptt" class="ptt" type="button"><span id="ptt-label">Hold to talk</span><span id="ptt-interim" class="interim"></span></button>
-      <p id="voice-status" class="small muted"></p>
-      <section class="card strips-card">
-        <h3>Traffic</h3>
-        <div id="strips" class="strips"></div>
-      </section>
-      <section class="card log-card">
-        <h3>Radio</h3>
-        <div id="log" class="log" aria-live="polite"></div>
-      </section>
-      <details class="card">
-        <summary>Settings and help</summary>
-        <label class="check"><input type="checkbox" id="set-tts" checked> Speak pilot calls</label>
-        <label>Voice speed <input type="range" id="set-rate" min="0.8" max="1.6" step="0.05" value="1.15"></label>
-        <label class="check"><input type="checkbox" id="set-live" checked> Try live weather (METAR) when starting</label>
-        <form id="wind-form" class="wind-row">
-          <label class="mini">Wind <input id="wind-dir" type="number" inputmode="numeric" min="0" max="360" step="10" placeholder="270"></label>
-          <label class="mini">at <input id="wind-kt" type="number" inputmode="numeric" min="0" max="60" placeholder="12"> kt</label>
-          <button class="small" type="submit">Set wind</button>
-        </form>
-        <label>Recognition language
-          <select id="set-lang"><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option><option value="en-AU">English (Australia)</option><option value="en-IN">English (India)</option></select>
+      <div class="map-tools"><button id="chart" class="capsule glass-ctl" type="button">Chart</button><button id="fit" class="capsule glass-ctl" type="button">Fit</button></div>
+      <div class="map-config glass-ctl">
+        <label>Arr <select id="arr-rwy" class="input small-input"></select></label>
+        <label>Dep <select id="dep-rwy" class="input small-input"></select></label>
+        <label>Traffic
+          <select id="traffic" class="input small-input"><option value="off">None</option><option value="calm">Calm</option><option value="normal">Normal</option><option value="busy">Busy</option></select>
         </label>
-        <p class="small">Say the callsign, then the instruction. Examples:<br>
-          <i>Speedbird 123, runway 27, cleared to land</i><br>
-          <i>Air China 1234, pushback approved</i><br>
-          <i>Air China 1234, taxi to holding point runway 27 via alpha</i><br>
-          <i>Delta 45, cross runway 15</i> &middot; <i>hold position</i> &middot; <i>continue taxi</i><br>
-          <i>Delta 45, runway 27, line up and wait</i> &middot; <i>cleared for take-off</i><br>
-          <i>Delta 45, contact departure, good day</i> &middot; <i>go around</i> &middot; <i>hold short runway 27</i><br>
-          Tap an aircraft first and you can leave out the callsign. On a PC, hold the space bar to talk.</p>
-        <p id="voice-diag" class="small muted"></p>
+      </div>
+      <div class="map-hint muted">Drag to pan · pinch or scroll to zoom · tap an aircraft to select it</div>
+    </section>
+
+    <aside class="side">
+      <section id="selected" class="card sel-card">
+        <div class="card-head"><h2 id="sel-cs">No aircraft selected</h2><span id="sel-state" class="muted small"></span></div>
+        <div class="card-body">
+          <div id="sel-req" class="sel-req"></div>
+          <div id="sel-buttons" class="cmds"></div>
+        </div>
+      </section>
+
+      <form id="cmd-form" class="cmd-row">
+        <input id="cmd-input" class="input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+               placeholder="BAW123 cleared to land runway 27 · 南方3101 可以落地" aria-label="Type an instruction">
+        <button class="btn btn-primary" type="submit">Send</button>
+      </form>
+
+      <div class="ptt-row">
+        <button id="ptt" class="ptt hero-tile" type="button"><span id="ptt-label">Hold to talk (or hold Space)</span><span id="ptt-interim" class="interim"></span></button>
+        <span id="mic-lang" class="seg mic-lang" role="group" aria-label="Microphone language" hidden>
+          <button type="button" data-lang="zh-CN" aria-pressed="true">中文</button><button type="button" data-lang="en-US" aria-pressed="false">EN</button>
+        </span>
+      </div>
+      <p id="voice-status" class="muted small"></p>
+
+      <section class="card">
+        <div class="card-head"><h2>Traffic</h2></div>
+        <div class="card-body"><div id="strips" class="strips"></div></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>Radio</h2></div>
+        <div class="card-body"><div id="log" class="log" aria-live="polite"></div></div>
+      </section>
+
+      <details class="card settings">
+        <summary class="card-head"><h2>Settings and help</h2></summary>
+        <div class="card-body">
+          <div class="field"><span class="label">Appearance</span>
+            <span class="seg" id="appearance" role="group" aria-label="Appearance">
+              <button type="button" data-theme="auto" aria-pressed="true">Automatic</button><button type="button" data-theme="light" aria-pressed="false">Light</button><button type="button" data-theme="dark" aria-pressed="false">Dark</button>
+            </span>
+          </div>
+          <label class="check"><input type="checkbox" id="set-tts" checked> Speak pilot calls</label>
+          <label class="field"><span class="label">Voice speed</span><input type="range" id="set-rate" min="0.8" max="1.6" step="0.05" value="1.15"></label>
+          <label class="field"><span class="label">Recognition language (English airports)</span>
+            <select id="set-lang" class="input"><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option><option value="en-AU">English (Australia)</option><option value="en-IN">English (India)</option></select>
+          </label>
+          <label class="check"><input type="checkbox" id="set-live" checked> Try live weather (METAR) when starting</label>
+          <form id="wind-form" class="wind-row">
+            <span class="label">Wind</span>
+            <input id="wind-dir" class="input" type="number" inputmode="numeric" min="0" max="360" step="10" placeholder="270" aria-label="Wind direction">
+            <span class="muted">° at</span>
+            <input id="wind-kt" class="input" type="number" inputmode="numeric" min="0" max="60" placeholder="12" aria-label="Wind speed in knots">
+            <span class="muted">kt</span>
+            <button class="btn btn-small" type="submit">Set wind</button>
+          </form>
+          <div class="help small">
+            <p>Say the callsign, then the instruction:</p>
+            <p><i>Speedbird 123, runway 27, cleared to land</i> · <i>pushback approved</i> · <i>taxi to holding point runway 28R via alpha, bravo</i> · <i>taxi to stand 12</i> · <i>cross runway 01L</i> · <i>hold short runway 27</i> · <i>hold position</i> · <i>continue taxi</i> · <i>line up and wait</i> · <i>cleared for take-off</i> · <i>contact departure</i> · <i>go around</i></p>
+            <p>大兴（中国航空公司用中文）：<i>南方三幺洞幺，跑道三五右，可以落地</i> · <i>可以推出</i> · <i>经A、B2滑到跑道17右外等待点</i> · <i>滑到停机位201</i> · <i>穿越跑道17左</i> · <i>原地等待</i> · <i>进跑道等待</i> · <i>可以起飞</i> · <i>联系离场，再见</i></p>
+            <p>Tap an aircraft and you can leave out the callsign. On a PC, hold the space bar to talk.</p>
+          </div>
+          <p id="voice-diag" class="muted small"></p>
+        </div>
       </details>
     </aside>
   </main>

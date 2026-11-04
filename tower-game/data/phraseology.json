@@ -4,7 +4,7 @@
   "about": "Phraseology for the tower game: what pilots say ('pilot'), how they read back ('readback'), what the command buttons say for you ('controller') and the patterns that recognise your spoken or typed commands ('commands', regular expressions tried top to bottom on lower-case text with numbers as digits). {placeholders} are filled in; [parts] disappear when a placeholder inside is empty. Copy to userdata/phraseology/tower.json to keep your changes.",
 
   "pilot": {
-    "arr_checkin": "{unit}, {callsign}, {approach} runway {runway}, {miles} miles.",
+    "arr_checkin": "{unit}, {callsign}, {approach} runway {runway}, {distance}.",
     "arr_short_final": "{unit}, {callsign}, short final runway {runway}.",
     "go_around": "{callsign}, going around.",
     "vacated": "{unit}, {callsign}, runway {runway} vacated, request taxi to stand {gate}.",

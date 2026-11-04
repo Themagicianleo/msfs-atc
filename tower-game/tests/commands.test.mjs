@@ -71,3 +71,30 @@ test('via with real multi-letter taxiway names', () => {
   // without a name list letters stay separate
   assert.deepEqual(parseInstruction('taxi via alpha bravo', R).via, ['A', 'B']);
 });
+
+test('Chinese instructions (ZBAD): callsigns, numbers, runways, via, stands', async () => {
+  const { understand, parseInstructionZh } = await import('../js/commands.js');
+  const ZH = JSON.parse(readFileSync(new URL('../data/phraseology-zh.json', import.meta.url))).commands;
+  const ac = [
+    { id: 11, code: 'CSN', tel: 'China Southern', telZh: '南方', num: '3101', callsign: 'CSN3101' },
+    { id: 12, code: 'CES', tel: 'China Eastern', telZh: '东方', num: '5147', callsign: 'CES5147' },
+    { id: 13, code: 'AFL', tel: 'Aeroflot', num: '206', callsign: 'AFL206' },
+  ];
+  let u = understand('南方三幺洞幺，跑道三五右，可以落地', ac, R, null, null, ZH);
+  assert.equal(u.ac.id, 11);
+  assert.deepEqual(u.cmd, { type: 'land', runway: '35R' });
+  u = understand('东方5147，经A B2滑到跑道17右外等待点', ac, R, null, null, ZH);
+  assert.equal(u.ac.id, 12);
+  assert.deepEqual(u.cmd, { type: 'taxi', runway: '17R', via: ['A', 'B2'] });
+  u = understand('南方3101，滑到停机位201', ac, R, null, null, ZH);
+  assert.deepEqual(u.cmd, { type: 'taxi', gate: '201' });
+  assert.deepEqual(parseInstructionZh('穿越跑道幺七左', ZH), { type: 'cross', runway: '17L', cross: ['17L'] });
+  assert.deepEqual(parseInstructionZh('跑道17右外等待', ZH), { type: 'hold_short', runway: '17R' });
+  assert.deepEqual(parseInstructionZh('跑道17右，进跑道等待', ZH), { type: 'lineup', runway: '17R' });
+  assert.deepEqual(parseInstructionZh('可以推出', ZH), { type: 'push' });
+  assert.deepEqual(parseInstructionZh('联系离场，再见', ZH), { type: 'contact' });
+  assert.deepEqual(parseInstructionZh('原地等待', ZH), { type: 'hold_position' });
+  assert.match(understand('可以落地', ac, R, null, null, ZH).error, /没有听到呼号/);
+  // English still works at the same airport (Aeroflot)
+  assert.equal(understand('Aeroflot 206 cleared to land runway 35R', ac, R, null, null, ZH).ac.id, 13);
+});

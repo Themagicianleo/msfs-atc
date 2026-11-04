@@ -104,7 +104,7 @@ async function loadAirport(code) {
 // ---------------------------------------------------------------- starting a shift
 function showWind() {
   const w = game.wind;
-  $('#wind').textContent = `${windText(w)}${w?.source === 'generated' ? ' (gen.)' : ''}`;
+  $('#wind').textContent = `${windText(w, game.metric)}${w?.source === 'generated' ? ' (gen.)' : ''}`;
   $('#wind').title = w?.raw ? `METAR: ${w.raw}` : `Wind source: ${w?.source || 'none'}`;
 }
 
@@ -130,7 +130,7 @@ function fillRunwayMenus(layout, profile, cfg) {
 async function startShift(code, traffic) {
   speaker.unlock(); // inside the tap: Safari needs this for speech
   const featured = FEATURED.includes(code);
-  const [phr, airlines, hq] = await Promise.all([loadJson('data/phraseology.json'), loadJson('data/airlines.json'),
+  const [phr, phrZh, airlines, hq] = await Promise.all([loadJson('data/phraseology.json'), loadJson('data/phraseology-zh.json'), loadJson('data/airlines.json'),
     featured ? loadFeatured(code).catch(() => null) : null]);
   const airport = hq ? hq.airport : await loadAirport(code);
   let wind = settings.liveWeather && code !== 'DEMO' ? await liveWind(airport.icao) : null;
@@ -143,14 +143,19 @@ async function startShift(code, traffic) {
   game.wind = wind;
   game.profile = profile;
   game.known = taxiwayNames(layout);
-  game.world = new World({ layout, phr, airlines, arrEnd: cfg.arr, depEnd: cfg.dep, traffic, wind,
+  // Chinese radio only for airlines marked lang "zh" in the airport's traffic profile
+  const chinese = !!profile?.airlines?.some((a) => a.lang === 'zh');
+  game.phrZh = chinese ? phrZh : null;
+  game.metric = profile?.meta?.units === 'metric';
+  setMicLang(chinese ? 'zh-CN' : settings.lang, chinese);
+  game.world = new World({ layout, phr, phrZh: game.phrZh, airlines, arrEnd: cfg.arr, depEnd: cfg.dep, traffic, wind,
     profile, types: hq?.types || null,
     unit: profile?.meta?.tower || `${airport.municipality || airport.name || airport.icao} Tower` });
   game.selected = null;
   settings.airport = airport.icao;
   settings.traffic = traffic;
   saveSettings();
-  $('#title').textContent = profile?.meta?.tower || `${airport.icao} Tower`;
+  $('#title').textContent = [game.phrZh && profile?.meta?.tower_zh, profile?.meta?.tower || `${airport.icao} Tower`].filter(Boolean).join(' · ');
   $('#traffic').value = traffic;
   fillRunwayMenus(layout, profile, cfg);
   showWind();
@@ -201,8 +206,26 @@ $('#chart').addEventListener('click', () => {
 $('#traffic').addEventListener('change', (e) => { game.world?.setTraffic(e.target.value); settings.traffic = e.target.value; saveSettings(); });
 $$('.speed button').forEach((b) => b.addEventListener('click', () => {
   game.speed = Number(b.dataset.speed);
-  $$('.speed button').forEach((x) => x.classList.toggle('on', x === b));
+  $$('.speed button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
 }));
+
+// Appearance: like the EFB, follow the device unless set to light or dark
+const darkQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
+function applyAppearance() {
+  const pick = settings.appearance || 'auto';
+  document.documentElement.dataset.theme = pick === 'auto' ? '' : pick;
+  renderer.theme = pick === 'auto' ? (darkQuery?.matches ? 'dark' : 'light') : pick;
+  $$('#appearance button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.theme === pick)));
+}
+$('#appearance').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-theme]');
+  if (!b) return;
+  settings.appearance = b.dataset.theme;
+  saveSettings();
+  applyAppearance();
+});
+darkQuery?.addEventListener?.('change', applyAppearance);
+applyAppearance();
 
 // ---------------------------------------------------------------- radio log
 function addMsg(cls, who, text, onClick) {
@@ -221,8 +244,8 @@ const sys = (text, cls = 'sys') => addMsg(cls, '', text);
 function handleEvents(events) {
   for (const ev of events) {
     if (ev.kind === 'pilot') {
-      addMsg('', ev.callsign, ev.text, () => speaker.speak(ev.speech, `ac${ev.voice}`));
-      speaker.speak(ev.speech, `ac${ev.voice}`);
+      addMsg('', ev.callsign, ev.text, () => speaker.speak(ev.speech, `ac${ev.voice}`, ev.lang));
+      speaker.speak(ev.speech, `ac${ev.voice}`, ev.lang);
     } else if (ev.kind === 'score') {
       sys(`${ev.delta > 0 ? '+' : ''}${ev.delta}  ${ev.reason}`, ev.delta > 0 ? 'good' : 'bad');
     } else if (ev.kind === 'alert') {
@@ -240,7 +263,7 @@ function issueText(text) {
   const w = game.world;
   if (!w || !text.trim()) return;
   addMsg('you', 'You', text.trim());
-  const u = understand(text, w.ac, game.phr.commands, game.selected, game.known);
+  const u = understand(text, w.ac, game.phr.commands, game.selected, game.known, game.phrZh?.commands || null);
   if (u.error) {
     if (u.ac) w.readback(u.ac, 'say_again');
     sys(u.error, 'bad');
@@ -282,7 +305,8 @@ const isAnswer = (req, type) => req && ({ land: 'land', push: 'push', taxi: 'tax
   taxi_in: 'taxi_in', cross: 'cross', contact: 'contact' })[req.type] === type;
 
 function stripState(a) {
-  return a.state === 'final' ? `FINAL ${(a.dist / M_PER_NM).toFixed(1)}NM${a.cleared.land ? ' CLR' : ''}` : (STATE_LABELS[a.state] || a.state);
+  const d = game.metric ? `${(a.dist / 1000).toFixed(1)}km` : `${(a.dist / M_PER_NM).toFixed(1)}NM`;
+  return a.state === 'final' ? `FINAL ${d}${a.cleared.land ? ' CLR' : ''}` : (STATE_LABELS[a.state] || a.state);
 }
 
 // The panel is rebuilt only when something structural changes, so a tap is
@@ -307,7 +331,7 @@ function renderPanel() {
         const b = document.createElement('button');
         b.type = 'button';
         b.dataset.type = type;
-        b.textContent = game.phr.buttons[type] || type;
+        b.textContent = w.phrOf(ac).buttons[type] || game.phr.buttons[type] || type;
         b.title = w.controllerText(ac, type);
         if (isAnswer(ac.req, type)) b.className = 'primary';
         box.append(b);
@@ -362,6 +386,18 @@ const listener = new Listener({
     else if (state === 'disabled') renderVoice();
     else $('#voice-status').textContent = '';
   },
+});
+
+// microphone language: Chinese for Chinese airlines at ZBAD, English otherwise
+function setMicLang(lang, show) {
+  listener.lang = lang;
+  const box = $('#mic-lang');
+  box.hidden = !show;
+  box.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.lang === lang)));
+}
+$('#mic-lang').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-lang]');
+  if (b) setMicLang(b.dataset.lang, true);
 });
 
 function renderVoice() {

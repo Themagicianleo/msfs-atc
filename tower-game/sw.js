@@ -1,10 +1,10 @@
 // Network first, cache as fallback: works offline after one visit, and
 // updates show up on the next load. Airport files are cached as you open them.
-const CACHE = 'tower-v1';
-const SHELL = ['./', 'index.html', 'tower.css', 'manifest.webmanifest', 'icons/icon-180.png',
-  'js/app.js', 'js/commands.js', 'js/geo.js', 'js/layout.js', 'js/render.js', 'js/world.js', 'js/weather.js',
+const CACHE = 'tower-v2';
+const SHELL = ['./', 'index.html', 'efb-glass.css', 'tower.css', 'manifest.webmanifest', 'icons/icon-180.png',
+  'js/app.js', 'js/commands.js', 'js/geo.js', 'js/layout.js', 'js/render.js', 'js/world.js', 'js/weather.js', 'js/osm.js', 'js/ops.js', 'js/zh.js',
   'js/lib/format.js', 'js/lib/frequency.js', 'js/lib/parser.js', 'js/lib/runway.js', 'js/lib/speech.js', 'js/lib/voice.js',
-  'data/phraseology.json', 'data/airlines.json', 'data/demo.json'];
+  'data/phraseology.json', 'data/phraseology-zh.json', 'data/airlines.json', 'data/aircraft.json', 'data/demo.json'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}));

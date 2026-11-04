@@ -72,7 +72,7 @@ async function main() {
   console.log('typed:', await page.evaluate(() => [...document.querySelectorAll('#log .msg')].slice(-2).map((m) => m.textContent)));
 
   // set the wind by hand
-  await page.click('details.card summary');
+  await page.click('details.settings summary');
   await page.fill('#wind-dir', '90');
   await page.fill('#wind-kt', '14');
   await page.click('#wind-form button');
@@ -89,6 +89,34 @@ async function main() {
   }
   console.log('stats:', JSON.stringify(await page.evaluate(() => ({ ...window.towerGame.game.world.stats, score: window.towerGame.game.world.score }))));
   await page.screenshot({ path: join(shots, 'landscape.png') });
+  // Beijing Daxing: real OSM layout (if built), Chinese radio for Chinese airlines, metric units
+  if (existsSync(join(ROOT, 'data', 'hq', 'ZBAD.json'))) {
+    await page.click('#new-shift');
+    await page.click('.featured button[data-code="ZBAD"]');
+    await page.selectOption('#start-traffic', 'busy');
+    await page.click('#start-form button[type=submit]');
+    await page.waitForSelector('#start', { state: 'hidden' });
+    await page.click('.speed button[data-speed="4"]');
+    await page.waitForFunction(() => [...document.querySelectorAll('#log .msg')].some((m) => /大兴塔台/.test(m.textContent)), null, { timeout: 60000 });
+    const zh = await page.evaluate(() => [...document.querySelectorAll('#log .msg')].map((m) => m.textContent).filter((t) => /塔台/.test(t))[0]);
+    console.log('ZBAD:', zh, '|', await page.textContent('#wind'));
+    if (!/m\/s/.test(await page.textContent('#wind'))) throw new Error('ZBAD wind should be in m/s');
+    const caller = await page.evaluate(() => window.towerGame.game.world.ac.find((a) => a.req && a.lang === 'zh'));
+    if (caller) {
+      const say = { land: `${caller.telZh}${caller.num}，跑道${caller.end}，可以落地`, push: `${caller.telZh}${caller.num}，可以推出` }[caller.req.type];
+      if (say) {
+        await page.fill('#cmd-input', say);
+        await page.click('#cmd-form button');
+        await page.waitForFunction((id) => !window.towerGame.game.world.find(id)?.req, caller.id, { timeout: 5000 });
+        console.log('ZBAD typed:', await page.evaluate(() => [...document.querySelectorAll('#log .msg')].slice(-1)[0].textContent));
+      }
+    }
+    await page.click('#chart');
+    await sleep(300);
+    await page.screenshot({ path: join(shots, 'zbad-chart.png') });
+    await page.click('#chart');
+    await page.screenshot({ path: join(shots, 'zbad.png') });
+  }
   await page.setViewportSize({ width: 820, height: 1180 });
   await sleep(400);
   await page.screenshot({ path: join(shots, 'portrait.png') });

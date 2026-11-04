@@ -44,9 +44,13 @@ export function generatedWind(icao, date = new Date()) {
   return { available: true, source: 'generated', wind_dir: dir, wind_vrb: false, wind_kt: kt, gust_kt: gust };
 }
 
-export function windText(w) {
+export function windText(w, metric = false) {
   if (!w) return 'Wind --';
   if (!w.wind_kt) return 'Wind calm';
   const dir = w.wind_dir == null ? 'VRB' : String(w.wind_dir).padStart(3, '0');
+  if (metric) {
+    const mps = (k) => Math.round(k / 1.943844);
+    return `Wind ${dir}/${mps(w.wind_kt)}${w.gust_kt ? `G${mps(w.gust_kt)}` : ''} m/s`;
+  }
   return `Wind ${dir}/${String(w.wind_kt).padStart(2, '0')}${w.gust_kt ? `G${w.gust_kt}` : ''}`;
 }

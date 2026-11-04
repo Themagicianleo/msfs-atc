@@ -42,11 +42,25 @@ export class Speaker {
     return pool[h % Math.min(pool.length, 6)];
   }
 
-  speak(text, unitKey) {
+  // a voice for another language (e.g. 'zh' -> a zh-CN system voice), stable per key
+  voiceForLang(lang, unitKey) {
+    const want = lang.toLowerCase();
+    let pool = this.voices.filter((v) => v.lang.toLowerCase().replace('_', '-').startsWith(want));
+    if (want === 'zh') {
+      const cn = pool.filter((v) => /cn|hans/i.test(v.lang));
+      if (cn.length) pool = cn;
+    }
+    if (!pool.length) return null;
+    let h = 0;
+    for (const c of unitKey || 'x') h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    return pool[h % Math.min(pool.length, 4)];
+  }
+
+  speak(text, unitKey, lang = 'en') {
     if (!this.supported || !this.settings.tts || !text) return;
     const u = new SpeechSynthesisUtterance(text);
-    const voice = this.voiceFor(unitKey);
-    if (voice) { u.voice = voice; u.lang = voice.lang; } else { u.lang = 'en-US'; }
+    const voice = lang && lang !== 'en' ? this.voiceForLang(lang, unitKey) : this.voiceFor(unitKey);
+    if (voice) { u.voice = voice; u.lang = voice.lang; } else { u.lang = lang === 'zh' ? 'zh-CN' : 'en-US'; }
     u.rate = Number(this.settings.rate) || 1;
     u.pitch = Number(this.settings.pitch) || 1;
     // Safari can stay "paused" after the app was in the background

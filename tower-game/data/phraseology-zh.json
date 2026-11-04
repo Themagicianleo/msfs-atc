@@ -1,0 +1,98 @@
+{
+  "id": "tower-zh",
+  "name": "塔台 (中文)",
+  "about": "Chinese radiotelephony for Chinese airlines at Chinese airports (CAAC style, simplified for the game). Same keys and placeholders as phraseology.json. Numbers in {placeholders} are written as digits and spoken the aviation way (幺 两 三 四 五 六 拐 八 九 洞). Edit freely; copy patterns carefully (regular expressions on the text after Chinese numerals are turned into digits).",
+  "lang": "zh-CN",
+
+  "pilot": {
+    "arr_checkin": "{unit}，{callsign}，盲降跑道{runway}，{distance}。",
+    "arr_short_final": "{unit}，{callsign}，跑道{runway}短五边。",
+    "go_around": "{callsign}，复飞。",
+    "vacated": "{unit}，{callsign}，已脱离跑道{runway}，请求滑回停机位{gate}。",
+    "push": "{unit}，{callsign}，停机位{gate}，请求推出。",
+    "taxi": "{unit}，{callsign}，准备好滑行。",
+    "ready": "{unit}，{callsign}，跑道{runway}外等待点，准备好起飞。",
+    "hold_short": "{unit}，{callsign}，跑道{runway}外等待。",
+    "handoff": "{unit}，{callsign}，请求转换频率。",
+    "blocked": "{unit}，{callsign}，前方有飞机挡住，请指示。"
+  },
+
+  "readback": {
+    "land": "跑道{runway}，可以落地，{callsign}。",
+    "continue": "继续进近，{callsign}。",
+    "go_around": "复飞，{callsign}。",
+    "push": "可以推出，{callsign}。",
+    "taxi_out": "[经{via}]滑到跑道{runway}外等待点[，穿越跑道{cross}]，{callsign}。",
+    "taxi_in": "[经{via}]滑到停机位{gate}[，穿越跑道{cross}]，{callsign}。",
+    "hold_position": "原地等待，{callsign}。",
+    "continue_taxi": "继续滑行，{callsign}。",
+    "hold_short": "跑道{runway}外等待，{callsign}。",
+    "cross": "穿越跑道{runway}，{callsign}。",
+    "lineup": "跑道{runway}，进跑道等待，{callsign}。",
+    "takeoff": "跑道{runway}，可以起飞，{callsign}。",
+    "contact": "联系离场，再见，{callsign}。",
+    "unable": "无法执行，{reason}，{callsign}。",
+    "say_again": "{callsign}，请重复。"
+  },
+
+  "controller": {
+    "land": "{callsign}，[地面风{wind}，]跑道{runway}，可以落地。",
+    "continue": "{callsign}，继续进近。",
+    "go_around": "{callsign}，复飞。",
+    "push": "{callsign}，可以推出。",
+    "taxi_out": "{callsign}，[经{via}]滑到跑道{runway}外等待点。",
+    "taxi_in": "{callsign}，[经{via}]滑到停机位{gate}。",
+    "hold_position": "{callsign}，原地等待。",
+    "continue_taxi": "{callsign}，继续滑行。",
+    "cross": "{callsign}，穿越跑道{runway}。",
+    "hold_short": "{callsign}，跑道{runway}外等待。",
+    "lineup": "{callsign}，跑道{runway}，进跑道等待。",
+    "takeoff": "{callsign}，[地面风{wind}，]跑道{runway}，可以起飞。",
+    "contact": "{callsign}，联系离场，再见。"
+  },
+
+  "buttons": {
+    "land": "可以落地",
+    "continue": "继续进近",
+    "go_around": "复飞",
+    "push": "可以推出",
+    "taxi_out": "滑行到跑道",
+    "taxi_in": "滑回停机位",
+    "hold_position": "原地等待",
+    "continue_taxi": "继续滑行",
+    "cross": "穿越跑道",
+    "hold_short": "跑道外等待",
+    "lineup": "进跑道等待",
+    "takeoff": "可以起飞",
+    "contact": "联系离场"
+  },
+
+  "reasons": {
+    "we are not on final": "我们不在五边",
+    "we are not on approach": "我们不在进近",
+    "we are not at the stand": "我们不在停机位",
+    "we need pushback first": "需要先推出",
+    "not able to taxi now": "现在无法滑行",
+    "we are not taxiing": "我们没有在滑行",
+    "we are airborne": "我们已经起飞",
+    "no runway crossing on our route": "路线上没有穿越跑道",
+    "we are not at the runway": "我们不在跑道",
+    "we are not airborne yet": "我们还没有起飞",
+    "no taxi route": "没有滑行路线"
+  },
+
+  "commands": [
+    { "cmd": "go_around", "patterns": ["复飞"] },
+    { "cmd": "land", "patterns": ["可以落地", "允许落地", "落地"] },
+    { "cmd": "takeoff", "patterns": ["可以起飞", "允许起飞", "起飞"] },
+    { "cmd": "lineup", "patterns": ["进跑道", "跑道等待"] },
+    { "cmd": "cross", "patterns": ["^(?!.*滑).*穿越"] },
+    { "cmd": "hold_short", "patterns": ["^(?!.*滑).*外等待"] },
+    { "cmd": "hold_position", "patterns": ["原地等待", "停止", "停住"] },
+    { "cmd": "continue_taxi", "patterns": ["继续滑行"] },
+    { "cmd": "continue", "patterns": ["继续进近"] },
+    { "cmd": "push", "patterns": ["推出"] },
+    { "cmd": "taxi", "patterns": ["滑行", "滑到", "滑回"] },
+    { "cmd": "contact", "patterns": ["联系", "再见", "转换频率"] }
+  ]
+}

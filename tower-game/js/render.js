@@ -5,10 +5,10 @@ import { endGeometry } from './layout.js';
 
 // radar-style (dark) and airport-diagram style ("chart") colours
 const DARK = {
-  bg: '#0d1712', runway: '#30343b', runwayEdge: '#5b616b', centre: '#e9edf2', building: '#252b33',
+  bg: '#0b0b0d', runway: '#30343b', runwayEdge: '#5b616b', centre: '#e9edf2', building: '#252b33',
   twy: '#272c33', lane: '#222730', twyLine: '#c9a227', apron: '#1a2026', terminal: '#3c4756', hold: '#e5484d',
-  arr: '#4fc3f7', dep: '#ffb454', sel: '#ffffff', req: '#ffe066', text: '#e6e9ed', muted: '#8d99a6',
-  final: 'rgba(79,195,247,0.35)', route: 'rgba(255,255,255,0.55)', conflict: '#ff4d4f',
+  arr: '#0a84ff', dep: '#ff9f0a', sel: '#ffffff', req: '#ffd60a', text: '#ffffff', muted: 'rgba(235,235,245,.6)',
+  final: 'rgba(10,132,255,0.45)', route: 'rgba(255,255,255,0.55)', conflict: '#ff4d4f',
   labelBg: 'rgba(13,23,18,0.75)', labelText: '#e9c46a', labelEdge: 'rgba(233,196,106,0.5)',
 };
 const CHART = {
@@ -17,6 +17,14 @@ const CHART = {
   arr: '#0067c0', dep: '#c25b00', sel: '#000000', req: '#b8860b', text: '#1d1d1f', muted: '#5a5a5a',
   final: 'rgba(0,103,192,0.45)', route: 'rgba(0,0,0,0.6)', conflict: '#d00000',
   labelBg: '#ffd400', labelText: '#000000', labelEdge: '#000000',
+};
+// EFB light appearance (Apple system colours)
+const LIGHT = {
+  bg: '#e5e5ea', runway: '#3a3a3c', runwayEdge: '#1c1c1e', centre: '#ffffff', building: '#c7c7cc',
+  twy: '#c7c7cc', lane: '#d1d1d6', twyLine: '#b25000', apron: '#d8d8de', terminal: '#aeaeb2', hold: '#d70015',
+  arr: '#007aff', dep: '#c77c02', sel: '#000000', req: '#ff9500', text: '#1c1c1e', muted: 'rgba(60,60,67,.6)',
+  final: 'rgba(0,122,255,0.45)', route: 'rgba(0,0,0,0.55)', conflict: '#d70015',
+  labelBg: 'rgba(255,255,255,0.85)', labelText: '#b25000', labelEdge: 'rgba(178,80,0,0.45)',
 };
 let C = DARK;
 
@@ -157,7 +165,8 @@ export class Renderer {
   }
 
   draw(world, { selectedId = null, now = 0 } = {}) {
-    C = this.chart ? CHART : DARK;
+    C = this.chart ? CHART : (this.theme === 'light' ? LIGHT : DARK);
+    this.metric = !!world.metric;
     const c = this.ctx;
     const L = world.L;
     const s = this.view.s;
@@ -301,8 +310,11 @@ export class Renderer {
     // data tag
     const kt = Math.round(ac.v / 0.514444);
     let info = SHORT[ac.state] || ac.state;
-    if (ac.state === 'final') info += ` ${(ac.dist / M_PER_NM).toFixed(1)}NM${ac.cleared.land ? ' CLR' : ''}`;
-    else if (kt > 2) info += ` ${kt}kt`;
+    const m = this.metric;
+    if (ac.state === 'final') info += m ? ` ${(ac.dist / 1000).toFixed(1)}km` : ` ${(ac.dist / M_PER_NM).toFixed(1)}NM`;
+    if (ac.state === 'final' && ac.cleared.land) info += ' CLR';
+    else if (ac.state !== 'final' && kt > 2) info += m ? ` ${Math.round(ac.v * 3.6)}km/h` : ` ${kt}kt`;
+    if (ac.alt > 50) info += m ? ` ${Math.round(ac.alt * 0.3048 / 10) * 10}m` : ` ${Math.round(ac.alt / 100) * 100}ft`;
     if (ac.hold) info += ' HOLD';
     if (ac.blockedBy) info += ' WAIT';
     const lx = p[0] + size * 0.6 + 6;

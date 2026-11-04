@@ -6,6 +6,7 @@
 import { Formatter, render } from './lib/format.js';
 import { M_PER_NM, KT, Path, add, dist, dot, headingOf, mul, norm, sub, fromHeading, angleDiff } from './geo.js';
 import { endGeometry, onRunway, route, routeCrossings, runwayForEnd, unknownVia } from './layout.js';
+import { zhDigits, zhReason, zhRunway, zhWind } from './zh.js';
 
 // Generic aircraft performance (approach speed and rotation speed in knots).
 // Used when an airport has no traffic profile (data/traffic/<ICAO>.json).
@@ -51,7 +52,7 @@ export const SCORE = {
 export class World {
   // profile: data/traffic/<ICAO>.json (real airlines and fleets), types: data/aircraft.json
   constructor({ layout, phr, airlines = {}, rng = Math.random, arrEnd, depEnd, traffic = 'normal', wind = null, unit,
-    profile = null, types = null }) {
+    profile = null, types = null, phrZh = null }) {
     this.L = layout;
     this.phr = phr;
     this.rng = rng;
@@ -60,6 +61,9 @@ export class World {
     if (!this.airlines.length) this.airlines = [['OAT', 'Open Air']];
     this.profile = profile;
     this.types = types;
+    this.phrZh = phrZh;
+    this.metric = profile?.meta?.units === 'metric';
+    this.unitZh = profile?.meta?.tower_zh || null;
     this.arrIdx = 0;
     this.depIdx = 0;
     this.lastRoll = {};
@@ -93,16 +97,43 @@ export class World {
   }
 
   // ---------------------------------------------------------------- radio
+  // the aircraft's language: Chinese airlines at Chinese airports use Chinese
+  zh(ac) { return ac.lang === 'zh' && !!this.phrZh; }
+  phrOf(ac) { return this.zh(ac) ? this.phrZh : this.phr; }
+
+  rwy(ac, id) { return id ? (this.zh(ac) ? zhRunway(id) : this.f.runway(id)) : null; }
+
+  distanceText(ac) {
+    if (!ac.dist) return null;
+    if (this.zh(ac)) { const km = Math.max(1, Math.round(ac.dist / 1000)); return { t: `${km}公里`, s: `${km}公里` }; }
+    if (this.metric) { const km = Math.max(1, Math.round(ac.dist / 1000)); return `${km} kilometres`; }
+    return `${Math.max(1, Math.round(ac.dist / M_PER_NM))} miles`;
+  }
+
+  windValue(ac) {
+    if (this.zh(ac)) return zhWind(this.wind);
+    if (this.metric && this.wind?.wind_kt != null) {
+      const mps = Math.round(this.wind.wind_kt / 1.943844);
+      if (!mps) return { t: 'calm', s: 'calm' };
+      const d = this.wind.wind_dir == null ? null : this.f.heading(this.wind.wind_dir);
+      return d ? { t: `${d.t}/${mps}MPS`, s: `${d.s} degrees, ${this.f.spell(String(mps))} metres per second` }
+        : { t: `variable ${mps}MPS`, s: `variable, ${this.f.spell(String(mps))} metres per second` };
+    }
+    return this.f.wind(this.wind);
+  }
+
   values(ac, extra = {}) {
     const end = ac.end;
+    const zh = this.zh(ac);
+    const gate = ac.gate ? { t: ac.gate, s: zh ? zhDigits(ac.gate) : (/^\d+$/.test(ac.gate) ? ac.gate : this.f.spell(ac.gate)) } : null;
     return {
-      unit: this.unit,
+      unit: zh && this.unitZh ? this.unitZh : this.unit,
       callsign: ac.cs,
-      runway: end ? this.f.runway(end) : null,
-      gate: ac.gate ? { t: ac.gate, s: /^\d+$/.test(ac.gate) ? ac.gate : this.f.spell(ac.gate) } : null,
+      runway: this.rwy(ac, end),
+      gate,
       approach: 'ILS',
-      miles: ac.dist ? String(Math.max(1, Math.round(ac.dist / M_PER_NM))) : null,
-      wind: this.f.wind(this.wind),
+      distance: this.distanceText(ac),
+      wind: this.windValue(ac),
       ...extra,
     };
   }
@@ -110,19 +141,20 @@ export class World {
   emit(ev) { this.out.push({ t: this.t, ...ev }); }
 
   say(ac, key, extra) {
-    const { text, speech } = render(this.phr.pilot[key], this.values(ac, extra));
-    this.emit({ kind: 'pilot', ac: ac.id, callsign: ac.callsign, text, speech, voice: ac.voice });
+    const { text, speech } = render(this.phrOf(ac).pilot[key], this.values(ac, extra));
+    this.emit({ kind: 'pilot', ac: ac.id, callsign: ac.callsign, text, speech, voice: ac.voice, lang: ac.lang || 'en' });
   }
 
   readback(ac, key, extra) {
-    const { text, speech } = render(this.phr.readback[key], this.values(ac, extra));
-    this.emit({ kind: 'pilot', ac: ac.id, callsign: ac.callsign, text, speech, voice: ac.voice, readback: true });
+    const { text, speech } = render(this.phrOf(ac).readback[key], this.values(ac, extra));
+    this.emit({ kind: 'pilot', ac: ac.id, callsign: ac.callsign, text, speech, voice: ac.voice, readback: true, lang: ac.lang || 'en' });
     return { ok: true, text };
   }
 
   unable(ac, reason) {
-    const { text, speech } = render(this.phr.readback.unable, this.values(ac, { reason }));
-    this.emit({ kind: 'pilot', ac: ac.id, callsign: ac.callsign, text, speech, voice: ac.voice, unable: true });
+    const said = this.zh(ac) ? zhReason(reason, this.phrZh.reasons) : reason;
+    const { text, speech } = render(this.phrOf(ac).readback.unable, this.values(ac, { reason: said }));
+    this.emit({ kind: 'pilot', ac: ac.id, callsign: ac.callsign, text, speech, voice: ac.voice, unable: true, lang: ac.lang || 'en' });
     return { ok: false, text, reason };
   }
 
@@ -163,7 +195,7 @@ export class World {
         const t = this.types[code];
         if (!t || this.ac.some((a) => a.num === num || a.callsign === al.code + num)) continue;
         const other = al.destinations[Math.floor(this.rng() * al.destinations.length)];
-        return { code: al.code, tel: al.callsign, num, callsign: al.code + num, other,
+        return { code: al.code, tel: al.callsign, num, callsign: al.code + num, other, lang: al.lang || 'en', telZh: al.callsign_zh || null,
           type: { code, ...t } };
       }
     }
@@ -182,7 +214,9 @@ export class World {
     const type = c.type || AIRCRAFT_TYPES[Math.floor(this.rng() * AIRCRAFT_TYPES.length)];
     const ac = {
       id: this.nextId++, kind, callsign: c.callsign, code: c.code, tel: c.tel, num: c.num, type, other: c.other || null,
-      cs: { t: `${c.tel} ${c.num}`, s: `${c.tel} ${this.f.spell(c.num)}` },
+      lang: c.lang && this.phrZh ? c.lang : 'en', telZh: c.telZh || null,
+      cs: c.lang === 'zh' && c.telZh && this.phrZh ? { t: `${c.telZh}${c.num}`, s: `${c.telZh}${zhDigits(c.num)}` }
+        : { t: `${c.tel} ${c.num}`, s: `${c.tel} ${this.f.spell(c.num)}` },
       voice: Math.floor(this.rng() * 1000), p: [0, 0], hdg: 0, alt: 0, v: 0,
       cleared: {}, flags: {}, crossings: [], hold: false, req: null, born: this.t,
     };
@@ -318,9 +352,22 @@ export class World {
     }
     if (start === null) start = ac.atNode;
     if (start === null || start === undefined) return null;
-    const nodes = route(this.L, start, to, opts);
+    const nodes = route(this.L, start, to, { ...opts, traffic: this.trafficCost(ac) });
     if (!nodes) return null;
     return { nodes, points: [...lead, ...nodes.map((id) => this.L.graph.nodes[id].p)] };
+  }
+
+  // Default routes avoid taxiways other aircraft are using in the other
+  // direction (as a ground controller would); explicit "via" is still obeyed.
+  trafficCost(me) {
+    const flows = new Map();
+    for (const o of this.ac) {
+      if (o === me || !o.routeNodes || !['taxi_out', 'taxi_in', 'pushed', 'holding', 'vacated'].includes(o.state)) continue;
+      const nodes = o.routeNodes;
+      for (let i = 1; i < nodes.length; i += 1) flows.set(`${nodes[i - 1]}>${nodes[i]}`, true);
+    }
+    if (!flows.size) return null;
+    return (u, v) => (flows.has(`${v}>${u}`) ? 8 : 1);
   }
 
   // Anyone on the next stretch of our own route (so corners are seen)?
@@ -373,6 +420,10 @@ export class World {
     const moveDir = here.dir; // the direction of travel (also when pushed back tail first)
     ac.moveDir = ac.v > 0.2 ? moveDir : null;
     let target = Math.min(ac.pathSpeed, Math.sqrt(2 * decel * Math.max(0, remain - 0.5)));
+    // landing roll: keep rolling, braking to reach the exit at turn-off speed
+    if (ac.exitAt !== undefined && ac.ps < ac.exitAt) {
+      target = Math.min(target, Math.max(ac.exitSpeed, Math.sqrt(ac.exitSpeed ** 2 + 2 * ac.brake * (ac.exitAt - ac.ps))));
+    } else if (ac.exitAt !== undefined) target = Math.min(target, ac.exitSpeed);
     const blocker = MOVING_ON_TAXIWAYS.has(ac.state) && ac.state !== 'rollout' ? this.trafficAhead(ac, P, decel) : null;
     ac.blockedBy = blocker?.id || null;
     if (ac.hold || blocker) target = 0;
@@ -385,7 +436,7 @@ export class World {
     if (nextCross && stopAt - ac.ps < 1 && ac.v < 0.3 && !nextCross.called) {
       nextCross.called = true;
       const r = this.L.runways.find((x) => x.id === nextCross.runway);
-      this.request(ac, 'cross', 'hold_short', { runway: this.f.runway(r.identA) });
+      this.request(ac, 'cross', 'hold_short', { runway: this.rwy(ac, r.identA) });
       ac.waitingCross = nextCross;
     }
     // blocked for a long time by someone who is blocked by us: gridlock
@@ -429,7 +480,8 @@ export class World {
       case 'final': return this.updateFinal(ac, dt);
       case 'rollout': {
         if (!ac.flags.vacated && ac.ps >= ac.holdLineAt) ac.flags.vacated = true;
-        if (this.follow(ac, dt, { decel: 1.6 })) {
+        if (this.follow(ac, dt, { decel: ac.brake || 2 })) {
+          ac.exitAt = undefined;
           ac.state = 'vacated';
           ac.atNode = ac.exit.t;
           this.request(ac, 'taxi_in', 'vacated');
@@ -516,14 +568,19 @@ export class World {
     const e = endGeometry(this.L, ac.end);
     ac.state = 'rollout';
     ac.alt = 0;
-    const need = 300 + (ac.v ** 2 - 12 ** 2) / (2 * 1.6);
+    // first exit the aircraft can make with normal braking (about 2 m/s2) at turn-off speed
+    const exitSpeed = 15; // m/s, about 30 kt
+    ac.brake = 2.0;
+    const need = 300 + (ac.v ** 2 - exitSpeed ** 2) / (2 * ac.brake);
     const exits = this.L.exits[ac.end];
     const ex = exits.find((x) => x.along >= need) || exits[exits.length - 1];
     ac.exit = ex;
     const nodes = this.L.graph.nodes;
     // real exits follow the taxiway's curve; generated ones are straight
     const ids = ex.path || [ex.r, ex.h, ex.t];
-    this.setPath(ac, [ac.p, ...ids.map((id) => nodes[id].p)], { speed: 12 });
+    this.setPath(ac, [ac.p, ...ids.map((id) => nodes[id].p)], { speed: 80 });
+    ac.exitSpeed = exitSpeed;
+    ac.exitAt = ac.path.cum[1];
     const k = ac.path.pts.findIndex((q) => dist(q, nodes[ex.h].p) < 0.5);
     ac.holdLineAt = k >= 0 ? ac.path.cum[k] : ac.path.cum[Math.min(2, ac.path.cum.length - 1)];
     void e;
@@ -633,6 +690,9 @@ export class World {
           // only traffic ahead of the fast one counts: lining up behind a
           // departing or landing aircraft is normal
           if (a.state !== 'final' && dot(sub(b.p, a.p), dir) < -50) continue;
+          // traffic using a crossing (or parallel) runway only conflicts near the intersection
+          const own = (x) => (x.state === 'taxi_out' || x.state === 'taxi_in' ? r : (x.end && runwayForEnd(this.L, x.end)));
+          if ((own(a) !== r || own(b) !== r) && dist(a.p, b.p) > 700) continue;
           this.conflict(a, b, 'runway', SCORE.runwayConflict, r);
         }
       }
@@ -716,19 +776,19 @@ export class World {
         if (s === 'holding' && (!runwayArg || runwayArg === ac.end)) {
           // "hold short runway 27" answers the ready call without a clearance
           ac.req = null;
-          return this.readback(ac, 'hold_short', { runway: this.f.runway(ac.end) });
+          return this.readback(ac, 'hold_short', { runway: this.rwy(ac, ac.end) });
         }
         const c = this.crossingFor(ac, runwayArg);
         if (!c) return this.unable(ac, 'no runway crossing on our route');
         c.cleared = false;
-        return this.readback(ac, 'hold_short', { runway: this.f.runway(runwayArg || this.crossIdent(c)) });
+        return this.readback(ac, 'hold_short', { runway: this.rwy(ac, runwayArg || this.crossIdent(c)) });
       }
       case 'cross': {
         const c = this.crossingFor(ac, runwayArg);
         if (!c) return this.unable(ac, 'no runway crossing on our route');
         c.cleared = true;
         if (ac.waitingCross === c) { ac.waitingCross = null; ac.req = null; }
-        return this.readback(ac, 'cross', { runway: this.f.runway(runwayArg || this.crossIdent(c)) });
+        return this.readback(ac, 'cross', { runway: this.rwy(ac, runwayArg || this.crossIdent(c)) });
       }
       case 'lineup':
       case 'takeoff': {
@@ -767,14 +827,18 @@ export class World {
   }
 
   // "WA B1" is read as "whiskey alpha, bravo one"
-  viaText(cmd) {
+  viaText(cmd, ac) {
     if (!cmd.via?.length) return null;
     const names = cmd.via.map((v) => v.toUpperCase());
+    if (ac && this.zh(ac)) return { t: names.join('、'), s: names.map(zhDigits).join('、') };
     return { t: names.join(' '), s: names.map((v) => this.f.spell(v)).join(', ') };
   }
 
-  crossText(cmd) {
-    return cmd.cross?.length ? cmd.cross.join(', ') : null;
+  crossText(cmd, ac) {
+    if (!cmd.cross?.length) return null;
+    if (ac && this.zh(ac)) { const r = cmd.cross.map(zhRunway); return { t: r.map((x) => x.t).join('、'), s: r.map((x) => x.s).join('、') }; }
+    const r = cmd.cross.map((id) => this.f.runway(id));
+    return { t: r.map((x) => x.t).join(', '), s: r.map((x) => x.s).join(', ') };
   }
 
   taxiOut(ac, cmd, runwayArg, done) {
@@ -793,7 +857,7 @@ export class World {
     ac.cleared = {};
     this.setPath(ac, r.points, { nodes: r.nodes });
     this.applyCrossClearances(ac, cmd.cross);
-    return done('taxi_out', { via: this.viaText(cmd), cross: this.crossText(cmd) });
+    return done('taxi_out', { via: this.viaText(cmd, ac), cross: this.crossText(cmd, ac) });
   }
 
   taxiIn(ac, cmd, done) {
@@ -813,17 +877,17 @@ export class World {
     this.setPath(ac, r.points, { nodes: r.nodes });
     this.applyCrossClearances(ac, cmd.cross);
     gate = null;
-    return done('taxi_in', { via: this.viaText(cmd), cross: this.crossText(cmd) });
+    return done('taxi_in', { via: this.viaText(cmd, ac), cross: this.crossText(cmd, ac) });
   }
 
   // controller text for a command button
   controllerText(ac, type, extra = {}) {
     const key = type === 'taxi' ? (ac.kind === 'dep' ? 'taxi_out' : 'taxi_in') : type;
-    const tpl = this.phr.controller[key];
+    const tpl = this.phrOf(ac).controller[key];
     if (!tpl) return '';
     const crossing = type === 'cross' ? this.crossingFor(ac, null) : null;
     return render(tpl, this.values(ac, {
-      runway: crossing ? this.f.runway(this.crossIdent(crossing)) : (ac.end ? this.f.runway(ac.end) : null),
+      runway: this.rwy(ac, crossing ? this.crossIdent(crossing) : ac.end),
       ...extra,
     })).text;
   }

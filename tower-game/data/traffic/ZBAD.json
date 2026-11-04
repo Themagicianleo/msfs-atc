@@ -6,7 +6,10 @@
   "municipality": "Beijing",
   "country": "CN",
   "elevation_ft": 98,
-  "tower": "Daxing Tower"
+  "tower": "Daxing Tower",
+  "tower_zh": "大兴塔台",
+  "units": "metric",
+  "lang_note": "Chinese airlines (lang zh) use Chinese radiotelephony with their Chinese callsigns; others use English."
  },
  "about": "Representative traffic for the game: airlines that serve this airport, their ICAO code and radio callsign, a typical fleet mix there and destinations. Not a real schedule; weights are rough shares of movements. Edit freely: types must exist in data/aircraft.json.",
  "airlines": [
@@ -39,7 +42,9 @@
     "ZSHC",
     "UUEE",
     "RKSI"
-   ]
+   ],
+   "callsign_zh": "南方",
+   "lang": "zh"
   },
   {
    "code": "CES",
@@ -65,7 +70,9 @@
     "ZHHH",
     "ZSAM",
     "ZUUU"
-   ]
+   ],
+   "callsign_zh": "东方",
+   "lang": "zh"
   },
   {
    "code": "CXA",
@@ -84,7 +91,9 @@
     "ZSFZ",
     "ZSHC",
     "ZUUU"
-   ]
+   ],
+   "callsign_zh": "白鹭",
+   "lang": "zh"
   },
   {
    "code": "CUA",
@@ -103,7 +112,9 @@
     "ZPPP",
     "ZJHK",
     "ZSSS"
-   ]
+   ],
+   "callsign_zh": "联航",
+   "lang": "zh"
   },
   {
    "code": "CBJ",
@@ -121,7 +132,9 @@
     "ZJSY",
     "ZPPP",
     "ZSHC"
-   ]
+   ],
+   "callsign_zh": "首都",
+   "lang": "zh"
   },
   {
    "code": "CDG",
@@ -137,7 +150,9 @@
    "destinations": [
     "ZSQD",
     "ZSJN"
-   ]
+   ],
+   "callsign_zh": "山东",
+   "lang": "zh"
   },
   {
    "code": "CSC",
@@ -154,7 +169,9 @@
    "destinations": [
     "ZUUU",
     "ZUCK"
-   ]
+   ],
+   "callsign_zh": "四川",
+   "lang": "zh"
   },
   {
    "code": "DKH",
@@ -170,7 +187,9 @@
    "destinations": [
     "ZSSS",
     "ZSPD"
-   ]
+   ],
+   "callsign_zh": "吉祥",
+   "lang": "zh"
   },
   {
    "code": "AFL",

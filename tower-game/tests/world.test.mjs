@@ -186,7 +186,7 @@ test('a busy session runs without errors and keeps score', () => {
     for (const ac of w.ac) {
       if (ac.state === 'holding' && !ac.cleared.takeoff) {
         const st = w.runwayStatus(w.L.runways[0]);
-        if (!st.occupants.length && !(st.nextArrivalNm < 3)) w.command(ac.id, { type: 'takeoff' });
+        if (!st.occupants.length && !((st.nextArrivalNm ?? 99) < 3)) w.command(ac.id, { type: 'takeoff' });
       }
       const want = ac.req?.type;
       if (!want) continue;
@@ -203,4 +203,33 @@ test('a busy session runs without errors and keeps score', () => {
   assert.ok(w.stats.departed >= 5, `departed ${w.stats.departed}`);
   assert.equal(w.stats.conflicts, 0, JSON.stringify(w.stats));
   assert.ok(w.score > 0, `score ${w.score} ${JSON.stringify(w.stats)}`);
+});
+
+test('ZBAD: Chinese airlines talk Chinese with metric units; others English in kilometres', () => {
+  const profile = json('../data/traffic/ZBAD.json');
+  const types = json('../data/aircraft.json');
+  const phrZh = json('../data/phraseology-zh.json');
+  const only = (code) => ({ ...profile, airlines: profile.airlines.filter((a) => a.code === code) });
+  const make = (code) => {
+    const w = new World({ layout: buildLayout(XDEP), phr: PHR, phrZh, airlines: AIRLINES, rng: seeded(5), arrEnd: '27', depEnd: '27',
+      traffic: 'off', wind: { available: true, wind_dir: 260, wind_kt: 10 }, profile: only(code), types, unit: 'Daxing Tower' });
+    w.nextArr = Infinity; w.nextDep = Infinity;
+    return w;
+  };
+  const w = make('CSN');
+  const ac = w.spawnArrival(null, 6);
+  let ev = w.drain().filter((e) => e.kind === 'pilot');
+  assert.match(ev[0].text, new RegExp(`^大兴塔台，南方${ac.num}，盲降跑道27，11公里。$`));
+  assert.equal(ev[0].lang, 'zh');
+  assert.match(ev[0].speech, /南方[幺两三四五六拐八九洞]+/);
+  const r = w.command(ac.id, { type: 'land' });
+  assert.equal(r.text, `跑道27，可以落地，南方${ac.num}。`);
+  assert.match(w.controllerText(ac, 'land'), /地面风260度5米每秒，跑道27，可以落地/);
+  const bad = w.command(ac.id, { type: 'push' });
+  assert.equal(bad.text, `无法执行，我们不在停机位，南方${ac.num}。`);
+  const e = make('AFL');
+  const ru = e.spawnArrival(null, 6);
+  ev = e.drain().filter((x) => x.kind === 'pilot');
+  assert.match(ev[0].text, new RegExp(`^Daxing Tower, Aeroflot ${ru.num}, ILS runway 27, 11 kilometres\\.$`));
+  assert.match(e.controllerText(ru, 'land'), /wind 260\/5MPS, runway 27, cleared to land/);
 });

@@ -87,6 +87,36 @@ workflow, or `python tools/fetch_osm.py` where the OSM servers are reachable, th
 `node tools/build_hq.mjs`. The build prints a quality report: exits per runway, entries,
 and whether every stand can reach every runway.
 
+### Beijing Daxing: Chinese radio, metric units
+
+At **ZBAD**, Chinese airlines work the tower in **Chinese**, as domestic flights do in China.
+
+- **Callsigns** are Chinese: 南方 (China Southern), 东方 (China Eastern), 白鹭 (Xiamen Air), 联航 (China
+  United), 首都 (Capital), 山东 (Shandong), 四川 (Sichuan), 吉祥 (Juneyao).
+- **Numbers** are spoken the aviation way: 幺 1, 两 2, 拐 7, 洞 0.
+- **Typical calls:** 「大兴塔台，南方3101，盲降跑道35右，18公里」, 「跑道35右，可以落地，南方3101」,
+  「经A、B2滑到跑道35左外等待点」, 「进跑道等待」, 「可以起飞」, 「联系离场，再见」.
+- **Foreign airlines** (Aeroflot) use English.
+- **Units:** wind in m/s, distances on final in km, speeds in km/h and heights in metres.
+
+You can answer in Chinese by voice or typing, e.g. 「南方三幺洞幺，跑道三五右，可以落地」. A **中文 / EN** switch
+next to the talk button sets the microphone language. It is Chinese by default at ZBAD, and English for Aeroflot.
+Spoken Chinese needs a Chinese system voice (on iPad: Settings → Accessibility → Spoken Content → Voices →
+Chinese). The Chinese wording is in `data/phraseology-zh.json`.
+
+The Chinese callsigns and the simplified CAAC-style wording are from general knowledge; check them against
+the CAAC radiotelephony rules if accuracy matters to you.
+
+### Look
+
+The game uses the design of the MSFS Buddy EFB (its `glass.css`, copied as `efb-glass.css`):
+- frosted glass cards over a soft ambient light;
+- capsule controls and segmented buttons;
+- Apple's system colours;
+- light and dark appearance following the device, or set under **Settings → Appearance**.
+
+The map has matching light and dark colours, and **Chart** switches to the airport-diagram style.
+
 ### The other airports
 
 Runway positions, lengths and headings are real, from

@@ -4,6 +4,7 @@
 //   "air china 1234 taxi to stand bravo 4"
 
 import { normalize } from './lib/parser.js';
+import { hasChinese, zhNormalize } from './zh.js';
 
 const PHONETIC = {
   alpha: 'a', alfa: 'a', bravo: 'b', charlie: 'c', delta: 'd', echo: 'e', foxtrot: 'f', golf: 'g', hotel: 'h',
@@ -114,7 +115,59 @@ export function parseInstruction(text, rules, known = null) {
 
 // Whole thing: which aircraft and what. selectedId is the aircraft tapped on
 // screen, used when no callsign was recognised.
-export function understand(text, aircraft, rules, selectedId = null, known = null) {
+// Chinese: callsign by Chinese name (南方3101) or English, then the instruction
+export function matchCallsignZh(text, aircraft) {
+  const n = zhNormalize(text).replace(/\s+/g, '').replace(/跑道\d{1,2}[LRC]?|停机位[A-Z]?\d+[A-Z]?|穿越\d{1,2}[LRC]?/g, '|');
+  const scored = aircraft.map((ac) => {
+    const num = String(ac.num);
+    const hasNum = new RegExp(`(^|[^0-9])${num}([^0-9]|$)`).test(n);
+    const hasName = (ac.telZh && n.includes(ac.telZh)) || n.toLowerCase().includes(ac.tel.toLowerCase().replace(/\s+/g, ''));
+    const tight = (ac.telZh && n.includes(`${ac.telZh}${num}`)) || n.includes(`${ac.code}${num}`);
+    return { ac, score: tight ? 10 : (hasNum && hasName ? 9 : (hasNum ? 4 : (hasName ? 1 : 0))) };
+  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score);
+  if (!scored.length) return { ac: null, score: 0 };
+  const top = scored.filter((x) => x.score === scored[0].score);
+  if (top.length > 1) return { ac: null, score: scored[0].score, ambiguous: top.map((x) => x.ac) };
+  return { ac: scored[0].ac, score: scored[0].score };
+}
+
+export function parseInstructionZh(text, rules, known = null) {
+  const n = zhNormalize(text);
+  const flat = n.replace(/\s+/g, '');
+  let type = null;
+  for (const rule of rules || []) {
+    if (rule.patterns.some((p) => new RegExp(p).test(flat))) { type = rule.cmd; break; }
+  }
+  const cmd = { type };
+  const crosses = [...flat.matchAll(/穿越(?:跑道)?(\d{1,2})([LRC]?)/g)].map((m) => m[1].padStart(2, '0') + m[2]);
+  const runways = [...flat.matchAll(/(穿越)?跑道(\d{1,2})([LRC]?)/g)].filter((m) => !m[1]).map((m) => m[2].padStart(2, '0') + m[3]);
+  if (runways.length) cmd.runway = runways[runways.length - 1];
+  const gate = flat.match(/(?:停机位|机位)([A-Z]?\d{1,3}[A-Z]?)/);
+  if (gate) cmd.gate = gate[1];
+  const via = n.match(/经由?\s*([A-Z0-9][A-Z0-9 ]*?)\s*(?=滑|到|穿越|$)/);
+  if (via) {
+    const tokens = via[1].trim().split(/\s+/).filter(Boolean);
+    cmd.via = known ? tokens.map((t) => t.toUpperCase()) : tokens.map((t) => t.toUpperCase());
+  }
+  if (crosses.length) cmd.cross = crosses;
+  if (type === 'cross' && crosses.length) cmd.runway = crosses[0];
+  if (type === 'hold_short') {
+    const m = flat.match(/跑道(\d{1,2})([LRC]?)外等待/);
+    if (m) cmd.runway = m[1].padStart(2, '0') + m[2];
+  }
+  return cmd;
+}
+
+export function understand(text, aircraft, rules, selectedId = null, known = null, rulesZh = null) {
+  if (rulesZh && hasChinese(text)) {
+    const mz = matchCallsignZh(text, aircraft);
+    let acz = mz.ac;
+    if (!acz && !mz.ambiguous && selectedId != null) acz = aircraft.find((a) => a.id === selectedId) || null;
+    const cmdz = parseInstructionZh(text, rulesZh, known);
+    if (!acz) return { ac: null, cmd: cmdz, error: mz.ambiguous ? `哪一架：${mz.ambiguous.map((a) => a.callsign).join('、')}？` : '没有听到呼号。请先说呼号，或点选飞机。' };
+    if (!cmdz.type) return { ac: acz, cmd: cmdz, error: '没听懂指令。' };
+    return { ac: acz, cmd: cmdz, error: null };
+  }
   const m = matchCallsign(text, aircraft);
   let ac = m.ac;
   if (!ac && !m.ambiguous && selectedId != null) ac = aircraft.find((a) => a.id === selectedId) || null;

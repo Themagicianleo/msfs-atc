@@ -372,7 +372,7 @@ function search(g, from, isTarget, weight, passable) {
       if (e.kind === 'runway') continue;
       const v = e.a === u ? e.b : e.a;
       if (!passable(v)) continue;
-      const w = weight(e);
+      const w = weight(e, u, v);
       if (d + w < best[v]) { best[v] = d + w; prev[v] = u; heap.push(d + w, v); }
     }
   }
@@ -396,7 +396,8 @@ export function unknownVia(layout, via = []) {
 // Taxi route over taxiways: runway centrelines are never used for taxiing,
 // runway and stand nodes only as start or end. "via" taxiways are followed
 // in the given order. prefer: 'A' or 'B' biases the generated main parallels.
-export function route(layout, from, to, { via = [], prefer = null } = {}) {
+// traffic(u, v): extra cost factor for driving u -> v (e.g. against other traffic)
+export function route(layout, from, to, { via = [], prefer = null, traffic = null } = {}) {
   const g = layout.graph;
   if (from === to) return [from];
   const passable = (v) => {
@@ -405,7 +406,8 @@ export function route(layout, from, to, { via = [], prefer = null } = {}) {
   };
   const names = via.map((v) => v.toUpperCase()).filter((v) => taxiwayNames(layout).has(v));
   const preferW = (e) => (prefer && e.kind === 'twy' && (e.name === 'A' || e.name === 'B') && e.name !== prefer ? 1.6 : 1);
-  if (!names.length) return search(g, from, (v) => v === to, (e) => e.len * preferW(e), passable);
+  const tf = traffic || (() => 1);
+  if (!names.length) return search(g, from, (v) => v === to, (e, u, v) => e.len * preferW(e) * tf(u, v), passable);
   // follow each named taxiway in turn: get onto it, then use it towards the next
   const touching = (name) => {
     const set = new Set();
