@@ -26,7 +26,7 @@ logic, the UI and speech run on the iPad.
 
 1. [Install on Windows](#1-install-on-windows)
 2. [Set up the iPad (HTTPS certificate, pairing, Home Screen)](#2-set-up-the-ipad)
-3. [Fly a flight](#3-fly-a-flight)
+3. [Fly a flight](#3-fly-a-flight) (and the [Tower game](#openatc-tower-the-controller-game))
 4. [Milestones: how to run and what to test](#4-milestones-how-to-run-and-what-to-test)
 5. [Editing phraseology, airports and airlines](#5-editing-phraseology-airports-and-airlines)
 6. [Command line](#6-command-line)
@@ -184,6 +184,58 @@ Either way it only fills the form: check it and press **Start flight**. The code
 format (`OPENATC1:` + base64url JSON of the form fields) is read by
 `web/js/fpimport.js`.
 
+### OpenATC Tower: the controller game
+
+A separate game, in the spirit of tower-controller sims (original code and content,
+not affiliated with any commercial game). You are the tower at a real airport:
+arrivals call you on final, departures call for pushback, taxi and take-off, and
+you give the instructions by voice, typing or buttons. Pilots read back over the
+iPad/PC voice.
+
+**Start it**
+- iPad: `https://<PC address>:8443/tower/` (same certificate and pairing as the main app;
+  also linked from the main app's Settings tab).
+- On the sim PC: `http://localhost:8081/tower/` in Chrome or Edge. Browsers treat
+  `localhost` as secure, so the microphone works without installing the certificate.
+  This port listens on 127.0.0.1 only (`--local-port`, 0 = off).
+- Enter an airport ICAO code (any airport after `import_airports.bat`; `XDEP` is the
+  offline demo) and a traffic level, then **Start shift**.
+
+**The airport.** Runways (position, length, heading) are real, from OurAirports.
+OurAirports has no taxiways, stands or buildings, so these are **generated** and will
+not match the real airport. The generated layout has two parallel taxiways along the
+main runway (A inner, B outer), one per other runway (C, D), and numbered connectors
+(A1, A2…) with holding points (red bars). It also has links to the apron (J1–J3),
+numbered stands (1, 2, 3…), and hold-short points wherever a taxiway crosses a runway.
+Up to the three longest runways (≥ 1200 m) are used. Live METAR wind picks the
+landing/departure runway; change it with the Arr/Dep menus.
+
+**Playing**
+- Tap an aircraft (or its strip) to select it. A yellow ring and a highlighted strip
+  mean it is calling you; the blue button is the usual answer. The dashed line shows
+  its taxi route, and "HOLD SHORT" marks a runway crossing it needs clearance for.
+- Talk: hold **Hold to talk** (on a PC hold the **space bar**) and say the callsign,
+  then the instruction. With an aircraft selected you can leave out the callsign.
+- Instructions understood: *runway 27, cleared to land* · *continue approach* ·
+  *go around* · *pushback approved* · *taxi to holding point runway 27 [via alpha]
+  [cross runway 15]* · *taxi to stand 12 [via bravo]* · *hold position* ·
+  *continue taxi* · *cross runway 15* · *hold short runway 27* · *line up and wait* ·
+  *cleared for take-off* · *contact departure*. Numbers can be "two seven" or
+  "twenty seven"; letters can be "alpha" or "a". The patterns are in
+  `web/phraseology/tower.json` (editable, like the other phraseology files).
+- Pilots behave sensibly but follow you. Arrivals without landing clearance go around
+  at 0.9 NM. Arrivals go around if the runway is still occupied at 0.3 NM. Taxiing
+  aircraft stop for traffic on their route and hold short of runways until cleared to
+  cross. A departure won't start its roll while someone is ahead on the runway.
+  Ignored calls are repeated.
+- Score: +50 per arrival parked, +50 per departure handed to departure (+15 if you
+  forgot the frequency change). Penalties: −100 go-around for no landing clearance,
+  −150 for an occupied runway, −250 runway conflict, −200 ground conflict (closer
+  than 30 m), −10 per repeated call, −30 gridlock. Gridlock is when two aircraft
+  block each other nose to nose for a minute; they then squeeze past.
+- Game speed: pause, 1x, 2x, 4x. Traffic: None, Calm (8+8 per hour), Normal (16+16),
+  Busy (26+26).
+
 ## 4. Milestones: how to run and what to test
 
 All of these work without the simulator thanks to the **mock aircraft**
@@ -323,6 +375,7 @@ The demo airports `XDEP`/`XARR` are fictional, so their frequencies are too.
 | `--simconnect-dll PATH` | use another `SimConnect.dll` (e.g. from the MSFS 2024 SDK) |
 | `--bind IP` | LAN address to listen on (default: auto-detect; must be private) |
 | `--port 8443`, `--setup-port 8080` | HTTPS app port; plain-HTTP certificate page (0 = off) |
+| `--local-port 8081` | plain HTTP on 127.0.0.1 only, for a browser on the sim PC (0 = off) |
 | `--no-https` | plain HTTP (testing only; voice input will not work in Safari) |
 | `--offline` | never fetch METAR |
 | `--data-dir DIR` | where settings, certificates and data are kept (default `userdata`) |
@@ -365,6 +418,8 @@ The demo airports `XDEP`/`XARR` are fictional, so their frequencies are too.
   0.0.0.0, and refuses to start on a public address. Every request from an address
   that is not loopback/private/link-local is refused (403). It never opens router
   ports (no UPnP). Don't forward ports to it.
+- The `--local-port` (8081) plain-HTTP port is bound to 127.0.0.1 only, so only the PC
+  itself can reach it; it still requires pairing.
 - Pairing: a 6-digit code (shown only in the helper window) is exchanged once for
   a random 256-bit token. Only a SHA-256 hash of the token is stored on the PC.
   After 5 wrong codes, pairing is locked for 10 minutes. All APIs and the
@@ -432,6 +487,18 @@ to the author). What was tested is listed in section 11. Everything below is
 - The certificate itself was verified with Python's `cryptography` (chain, SAN, EKU,
   validity) and served over TLS to Chromium in the end-to-end test.
 
+**Tower game**
+- The layout generator was tested on the fictional demo airport and on made-up
+  airports with parallel and crossing runways. It has **not been run on real
+  OurAirports data**, because the download is blocked from the build machine. Unusual
+  airports (very close parallels, many crossing runways, runways without coordinates)
+  may give odd taxiway layouts. The game shows an error if there is no room for an apron.
+- Speech recognition accuracy for commands is unmeasured: callsigns with unusual
+  airline names are the most likely to be misheard. Tap the aircraft first, or type.
+- Speed on an iPad (canvas drawing, many aircraft) was not measured. It was tested in
+  desktop Chromium only.
+- Aircraft performance numbers are generic approximations, not type data.
+
 **Data and phraseology**
 - OurAirports CSV columns as published in 2026 (`airports.csv`, `runways.csv`,
   `airport-frequencies.csv`); the import is tested with fixture files, the real
@@ -462,7 +529,17 @@ to the author). What was tested is listed in section 11. Everything below is
 
 ## 10. Limitations
 
-- No AI traffic, no conflicts, no vectors or holding; one aircraft, one flight at a time.
+- Flight companion: no AI traffic, no conflicts, no vectors or holding; one aircraft, one flight at a time.
+- Tower game:
+  - Taxiways and stands are generated, not real.
+  - Arrivals all fly a straight-in final, with no radar vectoring and no wake
+    turbulence spacing.
+  - Departures fly straight out.
+  - No helicopters or VFR traffic.
+  - Aircraft at a gridlock pass through each other after a minute (with a penalty)
+    rather than being rerouted.
+  - Only the arrivals' final approach is drawn on the map; aircraft further out are
+    listed in the strips.
 - No taxi routing (OurAirports has no taxiways); give taxi routes in the flight plan if wanted.
 - Holding-point detection needs runway threshold coordinates (OurAirports has them
   for most larger airports).
@@ -477,9 +554,13 @@ python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt   # Window
 .venv/bin/python -m pytest          # helper: pairing, certificates, airports import, METAR parsing,
                                     #   server auth/LAN-only/WebSocket, mock flight, SimConnect reconnect
 npm test                            # web: formatter, parser, runway choice, phraseology files,
-                                    #   whole ICAO and China flights through the ATC engine
+                                    #   whole ICAO and China flights through the ATC engine; tower game:
+                                    #   layout generation, routing, traffic sim (busy hour, no conflicts),
+                                    #   voice/typed command parsing
 node tools/e2e.mjs                  # helper (--mock, HTTPS) + headless Chromium: pair, live data,
                                     #   demo flight to radar contact with buttons and typed input
+node tools/e2e-tower.mjs            # tower game on the localhost port: pair, start a shift at XDEP,
+                                    #   typed instruction, button play, landscape/portrait screenshots
 ```
 
 No build step: the web app is plain HTML/CSS/ES modules in `web/`. Layout:
@@ -487,6 +568,7 @@ No build step: the web app is plain HTML/CSS/ES modules in `web/`. Layout:
 ```
 openatc/            Python helper (aiohttp server, SimConnect/mock sources, certs, pairing, data)
 web/                iPad web app; web/js/atc/ = ATC engine (no DOM, tested in Node)
+web/tower/, web/js/tower/  the tower game (layout.js, world.js, commands.js: no DOM, tested in Node)
 web/phraseology/    editable phraseology files
 data/               shipped manual airports (demo XDEP/XARR)
 userdata/           created at runtime: pairing, certificates, airport DB, your overrides (git-ignored)
