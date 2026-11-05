@@ -370,6 +370,8 @@ function search(g, from, isTarget, weight, passable) {
     for (const ei of g.adj[u]) {
       const e = g.edges[ei];
       if (e.kind === 'runway') continue;
+      // a one-way lane (dir 1: a to b, -1: b to a) can only be entered at its start
+      if ((e.dir === 1 && e.a !== u) || (e.dir === -1 && e.b !== u)) continue;
       const v = e.a === u ? e.b : e.a;
       if (!passable(v)) continue;
       const w = weight(e, u, v);

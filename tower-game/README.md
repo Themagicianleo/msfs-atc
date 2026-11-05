@@ -156,6 +156,24 @@ coordinate table are in the game with the right number, typically within 25 m of
 parks at the end of the painted lead-in line). The one stand OpenStreetMap has that the chart doesn't, "209", is no
 longer used.
 
+### Beijing Daxing: one-way apron bays
+
+Between the wings of the Daxing terminal each apron bay is a loop. **Aircraft come in on the straight lane through
+the middle and leave on the curved lanes around it**, which they also use to reach their stand and to push back
+onto:
+- The straight lane is one-way from the bay entrance up to the head of the bay, and the curved lanes are one-way
+  away from the head. So an arrival taxis in along the straight lane, turns onto a curve and into its stand; a
+  departure pushes back onto a curve and leaves along it. Nobody meets head-on in a bay.
+- Four bays are set up: Z8 with Z9/Z7 (stands 151–166), Y7 with Y8/Y6 (104–125), Y2 with Y3/Y1 (131–137, 180–184)
+  and Z2 with Z1/Z3 (141–146, 192–197). They are listed under `flows` in `data/traffic/ZBAD.json`.
+- Little arrows on the map (zoom in) show the direction of each one-way lane. Taxi routes, including ones you choose
+  with **Choose route on map**, follow them; asking for a route against the flow gives "no taxi route".
+- In OpenStreetMap the straight lanes of the NW and NE bays stop 60–100 m short of the loop, so the build joins
+  them to it (`node tools/build_hq.mjs` says so). I placed the lanes and bays from the map shape and your description
+  of the real layout, not from an official document: check them against the CAAC chart and tell me about any bay
+  that works differently.
+- At the other airports aircraft can use any lane both ways.
+
 ### Beijing Daxing: Chinese radio, metric units
 
 At **ZBAD**, Chinese airlines work the tower in **Chinese**, as domestic flights do in China.

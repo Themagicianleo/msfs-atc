@@ -238,8 +238,107 @@ export function layoutFromOsm(osm, meta) {
   addExitsAndHolds(L, apronCentre);
   addStands(L, els, proj, meta);
   pruneToNetwork(L);
+  L.flowReport = applyFlows(L, meta.flows || []);
   L.taxiLabels = taxiLabels(L);
   return L;
+}
+
+// One-way lanes. Between the wings of a big terminal (Beijing Daxing) each
+// apron bay is a loop: aircraft come in on the straight lane through the
+// middle and leave on the arms of the loop, which they also use to reach and
+// leave their stands (pushback onto an arm, then out). The airport's traffic
+// file lists the bays: { bay, tip: where the arms meet, in: {name, from: a
+// point on the lane at the entrance}, out: [arm names], reach: metres }.
+// The straight lane is one-way from the entrance up to the tip, the arms
+// one-way away from the tip, and the lane is joined to the loop if the map
+// leaves a gap there.
+function reaches(g, from, to) {
+  const seen = new Set([from]);
+  const queue = [from];
+  while (queue.length) {
+    const u = queue.shift();
+    if (u === to) return true;
+    for (const ei of g.adj[u]) {
+      const e = g.edges[ei];
+      if (e.kind === 'runway') continue;
+      if ((e.dir === 1 && e.a !== u) || (e.dir === -1 && e.b !== u)) continue;
+      const v = e.a === u ? e.b : e.a;
+      if (!seen.has(v)) { seen.add(v); queue.push(v); }
+    }
+  }
+  return false;
+}
+
+function applyFlows(L, flows) {
+  const g = L.graph;
+  const P = (id) => g.nodes[id].p;
+  const dd = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+  const report = [];
+  for (const f of flows) {
+    const tip = f.tip;
+    const reach = f.reach || 420;
+    const from = f.in.from;
+    const ax = [tip[0] - from[0], tip[1] - from[1]];
+    const len2 = ax[0] ** 2 + ax[1] ** 2;
+    const tOf = (p) => ((p[0] - from[0]) * ax[0] + (p[1] - from[1]) * ax[1]) / len2;
+    const offLine = (p) => Math.abs((p[0] - from[0]) * ax[1] - (p[1] - from[1]) * ax[0]) / Math.sqrt(len2);
+    let nIn = 0; let nOut = 0; let inner = null;
+    const undecided = [];
+    for (const e of g.edges) {
+      if (e.kind === 'stand' || e.kind === 'runway' || e.dir) continue;
+      const A = P(e.a); const B = P(e.b);
+      if (dd([(A[0] + B[0]) / 2, (A[1] + B[1]) / 2], tip) > reach) continue;
+      if (e.name === f.in.name) {
+        if (offLine(A) > 45 || offLine(B) > 45) continue;
+        const ta = tOf(A); const tb = tOf(B);
+        if (Math.max(ta, tb) > 1.03) continue; // past the tip: stands there still use it both ways
+        e.dir = tb > ta ? 1 : -1;
+        nIn += 1;
+        const far = tb > ta ? e.b : e.a;
+        if (!inner || Math.max(ta, tb) > inner.t) inner = { id: far, t: Math.max(ta, tb) };
+      } else if ((f.out || []).includes(e.name)) {
+        // a very short segment whose ends are equally far from the tip takes its direction from its neighbour
+        if (Math.abs(dd(B, tip) - dd(A, tip)) < 3) { undecided.push(e); continue; }
+        e.dir = dd(B, tip) > dd(A, tip) ? 1 : -1;
+        nOut += 1;
+      }
+    }
+    for (let progress = true; progress && undecided.length;) {
+      progress = false;
+      for (const e of [...undecided]) {
+        for (const ei of [...g.adj[e.a], ...g.adj[e.b]]) {
+          const n = g.edges[ei];
+          if (n === e || !n.dir || n.name !== e.name) continue;
+          const head = n.dir === 1 ? n.b : n.a;
+          const tail = n.dir === 1 ? n.a : n.b;
+          const shared = [e.a, e.b].find((id) => id === head || id === tail);
+          if (shared === undefined) continue;
+          // the flow leaves the node the neighbour ends at, or arrives at the node it starts from
+          e.dir = shared === head ? (e.a === shared ? 1 : -1) : (e.b === shared ? 1 : -1);
+          nOut += 1;
+          undecided.splice(undecided.indexOf(e), 1);
+          progress = true;
+          break;
+        }
+      }
+    }
+    let tipNode = null;
+    for (const e of g.edges) {
+      if (!e.dir || !(f.out || []).includes(e.name)) continue;
+      for (const id of [e.a, e.b]) if (tipNode === null || dd(P(id), tip) < dd(P(tipNode), tip)) tipNode = id;
+    }
+    let joined = false;
+    if (inner && tipNode !== null) {
+      g.finish();
+      if (!reaches(g, inner.id, tipNode) && dd(P(inner.id), P(tipNode)) <= 160) {
+        g.edges.push({ a: inner.id, b: tipNode, name: f.in.name, kind: 'lane', dir: 1 });
+        g.finish();
+        joined = true;
+      }
+    }
+    report.push({ bay: f.bay, straightEdges: nIn, loopEdges: nOut, joinedGap: joined, tipConnected: inner && tipNode !== null ? reaches(g, inner.id, tipNode) : false });
+  }
+  return report;
 }
 
 // From a runway node, leaving along a given taxiway edge: the shortest way to a
@@ -532,7 +631,8 @@ export function packLayout(L) {
   return {
     v: 1, airport: L.airport, origin: L.proj.toLatLon([0, 0]), names,
     nodes: g.nodes.map((n) => [r1(n.p[0]), r1(n.p[1]), kinds.indexOf(n.kind), n.runway || 0, n.name || n.gate || 0]),
-    edges: g.edges.map((e) => [e.a, e.b, names.indexOf(e.name || ''), ekinds.indexOf(e.kind), e.runway || 0]),
+    edges: g.edges.map((e) => (e.dir ? [e.a, e.b, names.indexOf(e.name || ''), ekinds.indexOf(e.kind), e.runway || 0, e.dir]
+      : [e.a, e.b, names.indexOf(e.name || ''), ekinds.indexOf(e.kind), e.runway || 0])),
     runways: L.runways.map((r) => ({ identA: r.identA, identB: r.identB, a: r.a.map(r1), b: r.b.map(r1), width: r.width })),
     closedRunways: (L.closedRunways || []).map((r) => ({ identA: r.identA, identB: r.identB, a: r.a.map(r1), b: r.b.map(r1), width: r.width })),
     holdPoints: L.holdPoints, exits: L.exits, gates: L.gates,
@@ -554,7 +654,7 @@ export function unpackLayout(d) {
     if (nm) { if (d.kinds[k] === 'gate') extra.gate = nm; else extra.name = nm; }
     net.node([x, y], d.kinds[k], extra);
   }
-  for (const [a, b, n, k, rw] of d.edges) net.edge(a, b, d.names[n], d.ekinds[k], rw ? { runway: rw } : {});
+  for (const [a, b, n, k, rw, dir] of d.edges) net.edge(a, b, d.names[n], d.ekinds[k], { ...(rw ? { runway: rw } : {}), ...(dir ? { dir } : {}) });
   net.finish();
   const mk = (r) => {
     const o = { ...r };

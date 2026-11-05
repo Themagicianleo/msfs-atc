@@ -11,6 +11,12 @@
   "units": "metric",
   "tower_pos": { "lat": 39.50303, "lon": 116.40604, "source": "TWR(W) on the CAAC aircraft parking chart ZBAD 2P-1 (2025-03-15), placed relative to stands 418 and 422; approximate" },
   "not_stands": ["E6"],
+  "flows": [
+   { "bay": "NE (stands 151-166)", "tip": [379, 1288], "in": { "name": "Z8", "from": [753, 1334] }, "out": ["Z9", "Z7"], "reach": 400 },
+   { "bay": "NW (stands 104-125)", "tip": [-489, 1180], "in": { "name": "Y7", "from": [-1000, 1122] }, "out": ["Y8", "Y6"], "reach": 520 },
+   { "bay": "SW (stands 131-137, 180-184)", "tip": [-228, 836], "in": { "name": "Y2", "from": [-272, 302] }, "out": ["Y3", "Y1"], "reach": 440 },
+   { "bay": "SE (stands 141-146, 192-197)", "tip": [206, 888], "in": { "name": "Z2", "from": [383, 341] }, "out": ["Z1", "Z3"], "reach": 600 }
+  ],
   "lang_note": "Chinese airlines (lang zh) use Chinese radiotelephony with their Chinese callsigns; others use English."
  },
  "about": "Representative traffic for the game: airlines that serve this airport, their ICAO code and radio callsign, a typical fleet mix there and destinations. Not a real schedule; weights are rough shares of movements. Edit freely: types must exist in data/aircraft.json.",

@@ -32,12 +32,13 @@ let C = DARK;
 // the layout's segments sorted by how they are drawn (done once per layout)
 function edgeGroups(L) {
   if (!L._edgeGroups) {
-    const groups = { twy: [], lane: [], stand: [], line: [], standLine: [] };
+    const groups = { twy: [], lane: [], stand: [], line: [], standLine: [], oneWay: [] };
     for (const e of L.graph.edges) {
       if (e.kind === 'runway') continue;
       if (e.kind === 'stand') { groups.stand.push(e); groups.standLine.push(e); continue; }
       (e.kind === 'lane' ? groups.lane : groups.twy).push(e);
       groups.line.push(e);
+      if (e.dir) groups.oneWay.push(e);
     }
     L._edgeGroups = groups;
   }
@@ -214,6 +215,7 @@ export class Renderer {
     this.strokeEdges(g, groups.stand, Math.max(2, 8 * s), C.twy);
     this.strokeEdges(g, groups.line, 1, C.twyLine);
     if (s >= 0.3) this.strokeEdges(g, groups.standLine, 1, C.twyLine);
+    if (groups.oneWay.length && s >= 0.25) this.drawFlowArrows(g, groups.oneWay);
 
     for (const r of L.runways) {
       const n = mul(perp(r.dir), r.width / 2);
@@ -300,6 +302,33 @@ export class Renderer {
       return;
     }
     c.drawImage(this.off, 0, 0, this.off.width, this.off.height, 0, 0, this.w, this.h);
+  }
+
+  // small arrows on one-way lanes (the apron bays at Daxing): in on the straight lane, out on the loop
+  drawFlowArrows(g, edges) {
+    const c = this.ctx;
+    const size = 5;
+    c.beginPath();
+    let n = 0;
+    for (const e of edges) {
+      const a = g.nodes[e.dir === 1 ? e.a : e.b].p;
+      const b = g.nodes[e.dir === 1 ? e.b : e.a].p;
+      // about one arrow every 50 m: long segments get one, runs of short ones every few
+      if (e.len < 40 && (n += 1) % Math.ceil(50 / Math.max(e.len, 4)) !== 0) continue;
+      const m = this.toScreen([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
+      if (m[0] < -10 || m[1] < -10 || m[0] > this.w + 10 || m[1] > this.h + 10) continue;
+      const q = this.toScreen(b);
+      const p = this.toScreen(a);
+      const l = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+      const dx = (q[0] - p[0]) / l;
+      const dy = (q[1] - p[1]) / l;
+      c.moveTo(m[0] + dx * size, m[1] + dy * size);
+      c.lineTo(m[0] - dx * size - dy * size * 0.8, m[1] - dy * size + dx * size * 0.8);
+      c.lineTo(m[0] - dx * size + dy * size * 0.8, m[1] - dy * size - dx * size * 0.8);
+      c.closePath();
+    }
+    c.fillStyle = C.twyLine;
+    c.fill();
   }
 
   // one path for many segments, skipping those off screen

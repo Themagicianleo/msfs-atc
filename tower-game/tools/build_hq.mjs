@@ -22,7 +22,8 @@ export function report(L) {
     if (!(L.exits[end] || []).length) problems.push(`no exits for landings on ${end}`);
   }
   // sample stands: can they reach every runway entry, and every exit reach them?
-  const sample = L.gates.filter((_, i) => i % Math.max(1, Math.floor(L.gates.length / 12)) === 0);
+  // (every stand when there are one-way lanes: a stand can become unreachable)
+  const sample = L.flowReport?.length ? L.gates : L.gates.filter((_, i) => i % Math.max(1, Math.floor(L.gates.length / 12)) === 0);
   let routes = 0; let failed = 0;
   for (const gate of sample) {
     for (const end of ends) {
@@ -43,6 +44,7 @@ export function report(L) {
     crossings: g.nodes.filter((n) => n.kind === 'rwyx').length,
     exits: Object.fromEntries(ends.map((e) => [e, (L.exits[e] || []).map((x) => `${x.name}@${Math.round(x.along)}`).join(' ')])),
     entries: Object.fromEntries(ends.map((e) => [e, L.holdPoints[e] ? (L.holdPoints[e].name || '(unnamed)') : 'NONE'])),
+    oneWayBays: L.flowReport?.length ? L.flowReport : undefined,
     routesChecked: routes, routesFailed: failed, problems: [...new Set(problems)].slice(0, 30),
   };
 }
