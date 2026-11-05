@@ -30,9 +30,26 @@ const NUMBERISH = new Set(['zero', 'oh', 'one', 'won', 'two', 'three', 'tree', '
 const AFTER_WORDS = new Set(['runway', 'stand', 'gate', 'parking', 'crossing', 'squawk', 'qnh']);
 const SIDE_WORDS = new Set(['left', 'right', 'center', 'centre', 'l', 'r', 'c']);
 const isNum = (w) => /^\d+$/.test(w) || NUMBERISH.has(w);
+// Said fast, recognisers join words: "alphabravo", "bravo1", "whiskeyalpha". Split them back into code words.
+const CODE_KEYS = Object.keys(PHONETIC).sort((a, b) => b.length - a.length);
+const CODE_GLUED_DIGIT = new RegExp(`\\b(${CODE_KEYS.join('|')})(\\d{1,2})\\b`, 'g');
+function splitCodeWords(word) {
+  if (word.length < 8 || !/^[a-z]+$/.test(word)) return word;
+  const best = new Array(word.length + 1).fill(null);
+  best[0] = [];
+  for (let i = 1; i <= word.length; i += 1) {
+    for (const k of CODE_KEYS) {
+      const j = i - k.length;
+      if (j >= 0 && best[j] && word.startsWith(k, j) && (!best[i] || best[j].length + 1 < best[i].length)) best[i] = [...best[j], k];
+    }
+  }
+  return best[word.length] && best[word.length].length > 1 ? best[word.length].join(' ') : word;
+}
+
 export function fixHeard(text) {
   let t = String(text || '').toLowerCase();
   for (const [re, to] of SPLIT_WORDS) t = t.replace(re, to);
+  t = t.replace(/\btaxy(ing)?\b|\btaxiing\b/g, 'taxi').replace(/[a-z]{8,}/g, splitCodeWords).replace(CODE_GLUED_DIGIT, '$1 $2');
   const w = t.split(/(\s+)/); // words at even positions
   const bare = (i) => (i >= 0 && i < w.length ? w[i].replace(/[^a-z0-9]/g, '') : '');
   let prev = '';

@@ -752,7 +752,7 @@ const listener = new Listener({
     if (!w) return false;
     const u = understand(t, w.ac, game.phr.commands, game.selected, game.known, game.phrZh?.commands || null);
     if (u.error || /(\bvia|\band|\bthen|\btaxiway|\bcross|\bshort( of)?|经|然后|穿越|在)$/i.test(t.trim())) return false;
-    return u.cmd.type === 'taxi' ? 1200 : 700;
+    return u.cmd.type === 'taxi' ? 900 : 450;
   },
   // what the recogniser should listen for: callsigns on frequency, the ICAO alphabet, this airport's taxiways
   getHints: () => {
@@ -785,16 +785,28 @@ function renderVoice() {
 // One tap starts listening, the next tap stops and sends (no holding, so the
 // phone doesn't start selecting text). Recognition also ends by itself after
 // a pause, and what was heard is sent then.
-function setTalkLabel(live) {
+function setTalkLabel(live, opening = false) {
   if (listener.disabled) return;
-  $('#ptt-label').textContent = live ? 'Stop and send' : 'Start talking';
+  // "Wait..." until the microphone is really open: words said before that are lost
+  $('#ptt-label').textContent = opening ? 'Wait...' : (live ? 'Stop and send' : 'Start talking');
   $('#ptt').setAttribute('aria-pressed', String(!!live));
 }
 const ptt = $('#ptt');
 // Pressing the key mutes the radio, like a real one: nobody else is heard while you transmit.
-const startTalk = () => { if (!listener.disabled && !listener.active) { speaker.mute(); listener.start(); setTalkLabel(true); } };
+const startTalk = () => { if (!listener.disabled && !listener.active) { speaker.mute(); listener.start(); setTalkLabel(true, true); } };
 const stopTalk = () => { if (listener.active) listener.stop(); setTalkLabel(false); };
-ptt.addEventListener('click', () => (listener.active ? stopTalk() : startTalk()));
+// Start on the press itself (not on release, which is a tenth of a second later), so the first words aren't lost;
+// the next tap stops and sends.
+let startedByPress = false;
+ptt.addEventListener('pointerdown', (e) => {
+  if (e.button > 0 || listener.active || listener.disabled) return;
+  startedByPress = true;
+  startTalk();
+});
+ptt.addEventListener('click', () => {
+  if (startedByPress) { startedByPress = false; return; }
+  listener.active ? stopTalk() : startTalk();
+});
 ptt.addEventListener('contextmenu', (e) => e.preventDefault());
 // PC: hold the space bar to talk (not while typing in a field)
 document.addEventListener('keydown', (e) => {

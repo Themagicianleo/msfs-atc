@@ -203,3 +203,23 @@ test('taxi routes: ICAO letters, several pieces, hold short', async () => {
   const best = understandBest(['Speedbird 123 taxi via alpha zulu', 'Speedbird 123 taxi via alpha bravo'], ac, R, null, known);
   assert.deepEqual(best.cmd.via, ['A', 'B']);
 });
+
+test('fast speech: merged words, run-together letters, double and triple digits, clipped phrases', async () => {
+  const { parseInstruction, matchCallsign } = await import('../js/commands.js');
+  const known = new Set(['A', 'B', 'B1', 'WA', 'M']);
+  const en = (t) => parseInstruction(t, R, known);
+  assert.deepEqual(en('taxi via alphabravo mike').via, ['A', 'B', 'M']);
+  assert.deepEqual(en('taxi via bravo1 alpha').via, ['B1', 'A']);
+  assert.deepEqual(en('taxi via whiskeyalpha').via, ['WA']);
+  assert.equal(en('speedbird double two cleared to land').type, 'land');
+  assert.equal(matchCallsign('Delta double two seven cleared land', [{ id: 1, code: 'DAL', tel: 'Delta', num: '227', callsign: 'DAL227' }]).ac?.id, 1);
+  assert.equal(matchCallsign('speedbird triple five go', [{ id: 2, code: 'BAW', tel: 'Speedbird', num: '555', callsign: 'BAW555' }]).ac?.id, 2);
+  assert.equal(en('cleared land runway 27').type, 'land');
+  assert.equal(en('holdshort runway 15').type, 'hold_short');
+  assert.equal(en('hold pos').type, 'hold_position');
+  assert.equal(en('cleared touch down runway 27').type, 'land');
+  assert.equal(en('taxying via alpha').type, 'taxi');
+  assert.equal(en('enter runway 27').type, 'lineup');
+  assert.equal(en('go round').type, 'go_around');
+  assert.equal(en('good day').type, 'contact', '"good day" is not a go-around');
+});

@@ -51,7 +51,10 @@ lets you pick them:
 - **Faster and more accurate listening:** the recogniser is told what to expect (the callsigns on frequency,
   the ICAO alphabet, this airport's taxiway names and the usual phrases; Chrome and Edge use this). Once what you
   said is a whole instruction and has stopped changing, it is sent without waiting for the browser's own
-  end-of-speech delay (a taxi route gets a little longer, since controllers pause between taxiways).
+  end-of-speech delay: about half a second after you stop (a taxi route gets 0.9 s, since controllers pause between taxiways).
+- **Fast speech:** listening starts the moment you press (the key shows *Wait...* until the microphone is open;
+  words said before that are lost). Merged words are split back (*alphabravo*, *bravo1*, *whiskeyalpha*), *double two* and
+  *triple five* are read as digits, and clipped phrases work (*cleared land*, *hold pos*, *holdshort*, *go round*, *enter runway*).
 - **Instructions understood:**
   - *Speedbird 123, runway 27, cleared to land* · *continue approach* · *go around*
   - *pushback approved [, expect runway 27R for departure]*

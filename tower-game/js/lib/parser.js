@@ -17,6 +17,13 @@ export function normalize(text) {
   const out = [];
   for (let i = 0; i < words.length; i += 1) {
     let w = words[i];
+    // "double two" -> 22, "triple five" -> 555 (said fast, as controllers do)
+    if ((w === 'double' || w === 'triple') && words[i + 1] && (words[i + 1] in NUMBER_WORDS || /^\d$/.test(words[i + 1]))) {
+      const d = NUMBER_WORDS[words[i + 1]] ?? words[i + 1];
+      out.push(d.repeat(w === 'double' ? 2 : 3));
+      i += 1;
+      continue;
+    }
     if (w in NUMBER_WORDS) w = NUMBER_WORDS[w];
     if (w === 'decimal' || w === 'point' || w === 'dot') {
       // only a decimal point between numbers ("one two one decimal niner"),

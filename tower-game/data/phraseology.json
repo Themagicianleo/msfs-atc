@@ -67,17 +67,17 @@
   },
 
   "commands": [
-    { "cmd": "go_around", "patterns": ["go ?around", "missed approach"] },
-    { "cmd": "land", "patterns": ["clear\\w* to land", "clear\\w* land", "cleared for (the )?landing"] },
-    { "cmd": "takeoff", "patterns": ["clear\\w* for (immediate )?take ?off", "clear\\w* take ?off", "clear\\w* for departure"] },
-    { "cmd": "lineup", "patterns": ["line ?up"] },
+    { "cmd": "go_around", "patterns": ["go ?a?round", "missed approach"] },
+    { "cmd": "land", "patterns": ["clear\\w* to land", "clear\\w* land", "cleared for (the )?landing", "clear\\w* (to )?touch ?down"] },
+    { "cmd": "takeoff", "patterns": ["clear\\w* for (immediate )?take ?off", "clear\\w* take ?off", "clear\\w* for departure", "clear\\w* (to )?(depart|go)\\b"] },
+    { "cmd": "lineup", "patterns": ["line ?up", "\\benter (the )?runway"] },
     { "cmd": "cross", "patterns": ["^(?!.*taxi).*cross"] },
-    { "cmd": "hold_short", "patterns": ["^(?!.*taxi).*hold(ing)? short"] },
-    { "cmd": "hold_position", "patterns": ["hold (your )?position", "^(?!.*taxi).*\\bstop\\b", "^(?!.*(taxi|short)).*\\bhold\\b"] },
+    { "cmd": "hold_short", "patterns": ["^(?!.*taxi).*hold(ing)? ?short"] },
+    { "cmd": "hold_position", "patterns": ["hold (your )?pos(ition)?", "holdposition", "^(?!.*taxi).*\\bstop\\b", "^(?!.*(taxi|short)).*\\bhold\\b"] },
     { "cmd": "continue_taxi", "patterns": ["continue (taxi|taxiing)", "resume taxi"] },
     { "cmd": "continue", "patterns": ["continue approach", "^(?!.*taxi).*\\bcontinue\\b"] },
-    { "cmd": "push", "patterns": ["push ?back", "\\bpush\\b"] },
-    { "cmd": "taxi", "patterns": ["\\btaxi\\b"] },
+    { "cmd": "push", "patterns": ["push ?back", "\\bpush(ed)?\\b"] },
+    { "cmd": "taxi", "patterns": ["\\btax[iy](ing)?\\b"] },
     { "cmd": "contact", "patterns": ["contact (departure|radar|approach|center|centre|control)", "frequency change approved", "good ?day", "monitor"] }
   ]
 }

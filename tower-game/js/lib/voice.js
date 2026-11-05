@@ -10,7 +10,7 @@ import { applyHints } from './hints.js';
 // After this long without the words changing, a transcript that already is a whole instruction is sent
 // without waiting for the recogniser's own (slower) end-of-speech decision. (isComplete may return its own
 // delay: a taxi route is given more time, since controllers pause between taxiways.)
-const SETTLE_MS = 700;
+const SETTLE_MS = 450;
 
 const FATAL = new Set(['not-allowed', 'service-not-allowed', 'language-not-supported']);
 const MAX_FAILURES = 3;
