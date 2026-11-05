@@ -1,0 +1,80 @@
+name: Tower game - check built-in voice downloads
+
+# The game's built-in voices are downloaded by each player's browser from
+# Hugging Face (Piper voice models) and jsDelivr (the speech runtime). This
+# checks those addresses still work and lists each model's speakers.
+# With "push_test_model" it also puts one model on a scratch branch so the
+# voice engine can be tested where Hugging Face can't be reached.
+
+on:
+  workflow_dispatch:
+    inputs:
+      push_test_model:
+        description: Push en_US-l2arctic-medium to branch tmp-voice-test
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runtime files on jsDelivr
+        run: |
+          for u in \
+            https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.wasm.min.js \
+            https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort-wasm-simd.wasm \
+            https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort-wasm.wasm \
+            https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.js \
+            https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.wasm \
+            https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.data; do
+            curl -sSIL -o /dev/null -w "%{http_code} %{size_download} $u\n" "$u"
+            echo "  access-control-allow-origin: $(curl -sSIL "$u" | grep -i '^access-control-allow-origin' | tail -1)"
+          done
+      - name: Voice models on Hugging Face
+        run: |
+          mkdir -p voices
+          for rev in v1.0.0 main; do
+            for m in en/en_US/l2arctic/medium/en_US-l2arctic-medium en/en_GB/vctk/medium/en_GB-vctk-medium \
+                     en/en_US/libritts_r/medium/en_US-libritts_r-medium en/en_US/arctic/medium/en_US-arctic-medium \
+                     zh/zh_CN/huayan/medium/zh_CN-huayan-medium; do
+              u="https://huggingface.co/rhasspy/piper-voices/resolve/$rev/$m.onnx"
+              echo "$rev $m: onnx $(curl -sSIL -o /dev/null -w '%{http_code}' "$u") cors: $(curl -sSIL -H 'Origin: https://example.org' "$u" | grep -i '^access-control-allow-origin' | tail -1 | tr -d '\r')"
+              curl -sSL -o "voices/$(basename $m).$rev.json" "https://huggingface.co/rhasspy/piper-voices/resolve/$rev/$m.onnx.json" || true
+            done
+          done
+          echo "hf-mirror: $(curl -sSIL -o /dev/null -w '%{http_code}' https://hf-mirror.com/rhasspy/piper-voices/resolve/main/en/en_US/l2arctic/medium/en_US-l2arctic-medium.onnx.json)"
+          python3 - <<'PY'
+          import json, glob, os
+          for f in sorted(glob.glob('voices/*.json')):
+              try:
+                  d = json.load(open(f))
+              except Exception as e:
+                  print(os.path.basename(f), 'not json'); continue
+              m = d.get('speaker_id_map', {})
+              print(os.path.basename(f), 'rate', d['audio']['sample_rate'], 'espeak', d['espeak']['voice'], 'speakers', len(m), 'size?')
+              print('   ', ' '.join(list(m.keys())[:40]))
+          PY
+      - name: Model sizes
+        run: |
+          for m in en/en_US/l2arctic/medium/en_US-l2arctic-medium en/en_GB/vctk/medium/en_GB-vctk-medium \
+                   en/en_US/libritts_r/medium/en_US-libritts_r-medium en/en_US/arctic/medium/en_US-arctic-medium \
+                   zh/zh_CN/huayan/medium/zh_CN-huayan-medium; do
+            echo "$m $(curl -sSL -o /dev/null -w '%{size_download}' https://huggingface.co/rhasspy/piper-voices/resolve/main/$m.onnx)"
+          done
+      - name: Scratch branch with one model for local tests
+        if: ${{ inputs.push_test_model }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan tmp-voice-test
+          git rm -rfq .
+          base=https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/l2arctic/medium/en_US-l2arctic-medium
+          curl -sSL -o en_US-l2arctic-medium.onnx "$base.onnx"
+          curl -sSL -o en_US-l2arctic-medium.onnx.json "$base.onnx.json"
+          git add en_US-l2arctic-medium.onnx en_US-l2arctic-medium.onnx.json
+          git commit -qm "scratch: voice model for local tests (delete me)"
+          git push -f origin tmp-voice-test
