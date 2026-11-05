@@ -217,6 +217,7 @@ export class NeuralVoices {
     const run = () => this.call({ type: 'synth', model: voice.model, text, speaker: voice.speaker, lengthScale: voice.pitch / voice.rate });
     const p = this.queue.then(run, run);
     this.queue = p.catch(() => {});
+    p.then((r) => { this.workMs = (this.workMs || 0) + (r.ms || 0); }, () => {});
     return p;
   }
 }

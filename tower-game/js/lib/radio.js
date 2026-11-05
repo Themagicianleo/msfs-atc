@@ -32,6 +32,25 @@ export class RadioFx {
     try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older Safari */ }
     const ctx = this.context();
     if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+    this.sleepSoon();
+  }
+
+  // An audio engine that is running keeps the phone's audio hardware and a CPU thread busy even when
+  // nothing plays, so it is switched off a few seconds after the last transmission and back on
+  // (a few milliseconds) before the next one.
+  wake() {
+    const ctx = this.context();
+    if (!ctx) return Promise.resolve(false);
+    clearTimeout(this.sleepTimer);
+    this.sleepSoon(); // (if nothing then plays, it goes back to sleep)
+    return ctx.state === 'running' ? Promise.resolve(true) : ctx.resume().then(() => ctx.state === 'running', () => false);
+  }
+
+  sleepSoon() {
+    clearTimeout(this.sleepTimer);
+    this.sleepTimer = setTimeout(() => {
+      if (this.ctx && !this.bed && this.ctx.state === 'running') this.ctx.suspend().catch(() => {});
+    }, 4000);
   }
 
   context() {
@@ -65,7 +84,8 @@ export class RadioFx {
 
   burst(seconds, level, freq = 2200) {
     const ctx = this.context();
-    if (!ctx || !this.enabled || ctx.state !== 'running') return;
+    if (!ctx || !this.enabled) return;
+    if (ctx.state !== 'running') { this.wake().then((ok) => { if (ok) this.burst(seconds, level, freq); }); return; }
     const { src, gain } = this.source(freq, 0.8);
     const t = ctx.currentTime;
     gain.gain.setValueAtTime(0, t);
@@ -81,7 +101,8 @@ export class RadioFx {
   keyUp({ key = '', range = 3000 } = {}) {
     this.keyDown(true);
     const ctx = this.context();
-    if (!ctx || !this.enabled || ctx.state !== 'running') return;
+    if (!ctx || !this.enabled) return;
+    if (ctx.state !== 'running') { this.wake().then((ok) => { if (ok) this.keyUp({ key, range }); }); return; }
     const ch = radioCharacter(key);
     const far = Math.min(1, range / 20000);
     this.tail = ch.tail;
@@ -124,6 +145,7 @@ export class RadioFx {
     b.src.stop(t + 0.06);
     for (const o of b.extra) o.stop(t + 0.05);
     if (!quiet) this.burst(this.tail || 0.14, 0.22, 2600);
+    this.sleepSoon();
   }
 
   // play generated speech (built-in voices) through the radio: band-limited
@@ -132,7 +154,8 @@ export class RadioFx {
   // if the sound can't play (audio not unlocked yet).
   play(pcm, sampleRate, { pitch = 1, volume = 1, key = '', range = 3000 } = {}) {
     const ctx = this.context();
-    if (!ctx || ctx.state !== 'running') return Promise.resolve(false);
+    if (!ctx) return Promise.resolve(false);
+    if (ctx.state !== 'running') return this.wake().then((ok) => (ok ? this.play(pcm, sampleRate, { pitch, volume, key, range }) : false));
     const buf = ctx.createBuffer(1, pcm.length, sampleRate);
     buf.copyToChannel(pcm, 0);
     const src = ctx.createBufferSource();
@@ -163,5 +186,5 @@ export class RadioFx {
   }
 
   // the controller's own transmit click
-  click() { this.burst(0.035, 0.12, 3000); }
+  click() { this.burst(0.035, 0.12, 3000); this.sleepSoon(); }
 }

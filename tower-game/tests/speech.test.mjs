@@ -49,3 +49,13 @@ test('each aircraft radio sounds different', async () => {
   const whistles = all.filter((c) => c.whistle).length;
   assert.ok(whistles > 0 && whistles < 20, `${whistles} whistles`);
 });
+
+test('efficient voices: compact voices first, Premium and Enhanced ones last', () => {
+  const voices = [v('Ava (Premium)'), v('Samantha (Enhanced)'), v('Samantha'), v('Daniel', 'en-GB'), v('Karen', 'en-AU')];
+  const best = rankVoices(voices, 'en').map((x) => x.name);
+  assert.ok(best.indexOf('Ava (Premium)') < best.indexOf('Samantha'));
+  const eff = rankVoices(voices, 'en', true).map((x) => x.name);
+  assert.ok(eff.indexOf('Samantha') < eff.indexOf('Ava (Premium)'));
+  assert.ok(eff.indexOf('Daniel') < eff.indexOf('Samantha (Enhanced)'));
+  assert.ok(voiceScore(v('Ava (Premium)'), true) < voiceScore(v('Samantha'), true));
+});

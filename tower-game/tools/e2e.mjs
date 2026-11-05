@@ -217,8 +217,26 @@ async function main() {
     await page.click('.speed button[data-speed="4"]');
   }
 
+  // the audio engine sleeps when nothing plays and wakes for the next sound
+  await page.click('.speed button[data-speed="0"]'); // (busy traffic keeps it awake with pilot calls)
+  await sleep(1500);
+  await page.evaluate(() => window.towerGame.speaker.fx.click());
+  await sleep(6000);
+  const asleep = await page.evaluate(() => window.towerGame.speaker.fx.ctx?.state);
+  await page.evaluate(() => window.towerGame.speaker.fx.click());
+  await sleep(400);
+  const awake = await page.evaluate(() => window.towerGame.speaker.fx.ctx?.state);
+  console.log('audio engine:', asleep, '->', awake);
+  if (asleep !== 'suspended' || awake !== 'running') throw new Error(`the audio engine should sleep when idle and wake for a sound (${asleep} -> ${awake})`);
+  await page.click('.speed button[data-speed="4"]');
+
   // set the wind by hand
   await page.click('details.settings summary');
+  // the performance readout fills in while Settings is open
+  await page.waitForFunction(() => /Screen \d+ frames\/s/.test(document.querySelector('#perf-report').textContent), null, { timeout: 5000 });
+  const report = await page.textContent('#perf-report');
+  console.log('performance readout:', report.replace(/\n/g, ' | '));
+  if (!/Version dev/.test(report)) throw new Error('the readout should show the version');
   await page.fill('#wind-dir', '90');
   await page.fill('#wind-kt', '14');
   await page.click('#wind-form button');

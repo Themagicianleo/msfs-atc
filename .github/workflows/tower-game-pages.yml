@@ -43,6 +43,8 @@ jobs:
         run: python tools/build_airports.py
       - name: Build the detailed airports from the OpenStreetMap extracts
         run: node tools/build_hq.mjs
+      - name: Stamp the build (the page shows it, and offers a reload when a newer one is out)
+        run: printf "export const VERSION = '%s';\n" "$(git rev-parse --short HEAD) $(date -u +'%Y-%m-%d %H:%M')" > js/version.js
       - name: Build the site (and check every referenced file is in it)
         run: node tools/build_site.mjs ../_site
       - uses: actions/upload-pages-artifact@v3

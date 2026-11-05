@@ -12,6 +12,7 @@ import { understandBest } from './commands.js';
 import { buildLayout, endGeometry } from './layout.js';
 import { Renderer, STATE_LABELS } from './render.js';
 import { World, taxiDestination } from './world.js';
+import { VERSION } from './version.js';
 import { M_PER_NM } from './geo.js';
 import { generatedWind, liveWind, windText } from './weather.js';
 
@@ -24,10 +25,10 @@ const store = {
   set(k, v) { try { localStorage.setItem(`tower.${k}`, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
-const settings = { effects: 'auto', tts: true, radioFx: true, accents: true, builtinVoices: false, autoRunways: false, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
+const settings = { effects: 'auto', voiceQuality: 'best', tts: true, radioFx: true, accents: true, builtinVoices: false, autoRunways: false, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
 const saveSettings = () => store.set('settings', settings);
 // voices vary per aircraft; the Speaker reads these keys
-const speakerSettings = { tts: settings.tts, radioFx: settings.radioFx, accents: settings.accents, builtinVoices: settings.builtinVoices, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
+const speakerSettings = { efficient: settings.voiceQuality === 'efficient', tts: settings.tts, radioFx: settings.radioFx, accents: settings.accents, builtinVoices: settings.builtinVoices, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
 const speaker = new Speaker(speakerSettings);
 speaker.neural = new NeuralVoices();
 
@@ -786,6 +787,16 @@ document.addEventListener('keyup', (e) => { if (e.code === 'Space') stopTalk(); 
 
 $('#set-tts').checked = settings.tts;
 $('#set-radio').checked = settings.radioFx;
+$$('#voicequality button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.vq === settings.voiceQuality)));
+$('#voicequality').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-vq]');
+  if (!b) return;
+  settings.voiceQuality = b.dataset.vq;
+  speakerSettings.efficient = b.dataset.vq === 'efficient';
+  saveSettings();
+  $$('#voicequality button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  speaker.stop();
+});
 $('#set-askrwy').checked = !settings.autoRunways;
 $('#set-askrwy').addEventListener('change', (e) => { settings.autoRunways = !e.target.checked; saveSettings(); });
 $('#set-accents').checked = settings.accents;
@@ -822,7 +833,11 @@ $('#set-lang').addEventListener('change', (e) => { settings.lang = listener.lang
 // changes while paused, and every frame while you pan or zoom (that is cheap).
 // If the device still can't keep up the game lowers its own detail, step by step.
 const COARSE = !!window.matchMedia?.('(pointer: coarse)').matches;
-const perf = { drawMs: COARSE ? 1000 / 30 : 0, level: 0 };
+// minInterval: the shortest time between pictures the game has been forced to by a struggling device
+const perf = { minInterval: 0, level: 0 };
+// How often a picture is drawn. Aircraft move slowly, so on a touch device a normal-speed game
+// needs 20 a second, and only a fast-forwarded one 30 (a laptop draws every frame it can).
+const drawInterval = () => Math.max(perf.minInterval, COARSE ? (game.view !== 'map' || game.speed < 2 ? 50 : 33) : 0);
 const PANEL_MS = 150;
 let lastDraw = 0;
 let lastPanel = 0;
@@ -871,16 +886,20 @@ function watchFrameRate(delta) {
     game.scene3d?.resize();
     applyEffects();
     sys('The device is still struggling, so the game lowered the picture resolution.');
-  } else if (perf.drawMs < 1000 / 20) {
-    perf.drawMs = 1000 / 20; // 3: fewer pictures
-    sys('The device is still struggling, so the game draws 20 pictures a second.');
+  } else if (perf.minInterval < 1000 / 15) {
+    perf.minInterval = perf.minInterval ? 1000 / 15 : 1000 / 20; // 3: fewer pictures
+    sys(`The device is still struggling, so the game draws ${perf.minInterval > 55 ? 15 : 20} pictures a second.`);
   }
 }
 
 // what is on screen, so a paused game redraws only when it changed
 const signature = (w) => `${game.selected}|${game.view}|${game.plan?.result?.nodes?.length ?? ''}|${w.ac.length}|${renderer.theme}|${renderer.chart}|${game.scene3d?.mode}`;
 
+// what the game spends, for the Performance readout in Settings
+const stats = { since: performance.now(), rafs: 0, draws: 0, jsMs: 0, talk0: 0, work0: 0 };
 function frame(now) {
+  const started = performance.now();
+  stats.rafs += 1;
   const w = game.world;
   watchFrameRate(now - game.last);
   if (w) {
@@ -893,8 +912,9 @@ function frame(now) {
     handleEvents(w.drain());
     const interacting = now - (renderer.viewChangedAt || 0) < 250 || (game.scene3d?.pointers?.size > 0);
     const sig = signature(w);
-    const due = interacting || sig !== lastSig || now - lastDraw >= (game.speed === 0 ? 500 : perf.drawMs) - 3;
+    const due = interacting || sig !== lastSig || now - lastDraw >= (game.speed === 0 ? 500 : drawInterval()) - 3;
     if (due) {
+      stats.draws += 1;
       lastDraw = now;
       lastSig = sig;
       if (game.plan && now - (game.plan.at || 0) > 1000) updatePlan();
@@ -911,8 +931,53 @@ function frame(now) {
     }
   }
   game.last = now;
+  stats.jsMs += performance.now() - started;
   requestAnimationFrame(frame);
 }
+
+// the Performance readout: updated once a second while the Settings section is open
+const settingsBox = document.querySelector('details.settings');
+let perfTimer = null;
+function perfReport() {
+  const t = performance.now();
+  const dt = (t - stats.since) / 1000 || 1;
+  const talk = speaker.talkMs || 0;
+  const work = speaker.neural?.workMs || 0;
+  const lines = [
+    `Screen ${(stats.rafs / dt).toFixed(0)} frames/s, pictures ${(stats.draws / dt).toFixed(0)}/s${game.speed === 0 ? ' (paused)' : ''}`,
+    `Game code (main thread): ${(stats.jsMs / dt / 10).toFixed(1)}% of a second`,
+    `Speaking: ${((talk - stats.talk0) / dt / 10).toFixed(0)}% of the time${settings.builtinVoices ? `, built-in voices computing ${((work - stats.work0) / dt / 10).toFixed(0)}%` : ' (device voices)'}`,
+    `View ${game.view} · effects ${document.documentElement.classList.contains('solid') ? 'Fast' : 'Full'}${perf.level ? ` (lowered ${perf.level}x)` : ''} · resolution up to ${renderer.maxDpr || 2}x · radio sound ${settings.radioFx ? 'on' : 'off'} · audio engine ${speaker.fx.ctx?.state || 'off'}`,
+    `Aircraft ${game.world ? game.world.ac.length : 0} · game speed ${game.speed}x · touch device ${COARSE ? 'yes' : 'no'}`,
+    `Version ${VERSION}`,
+  ];
+  Object.assign(stats, { since: t, rafs: 0, draws: 0, jsMs: 0, talk0: talk, work0: work });
+  $('#perf-report').textContent = lines.join('\n');
+}
+settingsBox?.addEventListener('toggle', () => {
+  clearInterval(perfTimer);
+  if (settingsBox.open) { Object.assign(stats, { since: performance.now(), rafs: 0, draws: 0, jsMs: 0, talk0: speaker.talkMs || 0, work0: speaker.neural?.workMs || 0 }); perfTimer = setInterval(perfReport, 1000); }
+});
+$('#perf-copy').addEventListener('click', () => navigator.clipboard?.writeText($('#perf-report').textContent).catch(() => {}));
+$('#version').textContent = `Version ${VERSION}`;
+
+// A page that stays open keeps running the version it loaded. Look for a newer one now and then.
+let lastUpdateCheck = 0;
+async function checkForUpdate() {
+  if (VERSION === 'dev' || Date.now() - lastUpdateCheck < 120000) return;
+  lastUpdateCheck = Date.now();
+  try {
+    const text = await (await fetch(`js/version.js?${Date.now()}`, { cache: 'no-store' })).text();
+    const latest = text.match(/VERSION = '([^']+)'/)?.[1];
+    if (latest && latest !== VERSION) $('#update-bar').hidden = false;
+  } catch { /* offline: nothing to say */ }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+$('#update-reload').addEventListener('click', async () => {
+  try { for (const r of await navigator.serviceWorker?.getRegistrations?.() || []) await r.update(); } catch { /* ignore */ }
+  location.reload();
+});
+setTimeout(checkForUpdate, 3000);
 
 window.addEventListener('resize', () => { renderer.resize(); game.scene3d?.resize(); });
 renderer.resize();

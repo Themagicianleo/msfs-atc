@@ -419,8 +419,8 @@ What was slow, and what changed:
   one, anti-aliasing is only on laptop screens, and phones get a lower pixel density and the efficient GPU.
 - **Route search** (taxi routes, the route preview) uses A* with a plain Dijkstra as a check in the tests: a route at
   Daxing takes 2 to 8 ms instead of 9 to 14. Taxi routes are no longer searched just to decide whether to show a button.
-- **Drawing rate:** 30 pictures a second on touch devices, the screen's rate on a laptop, every frame while you pan or
-  zoom, and only when something changed while paused. The simulation always runs on real time. Side-panel text
+- **Drawing rate:** 20 pictures a second on touch devices at normal game speed (30 when fast-forwarding), the screen's rate
+  on a laptop, every frame while you pan or zoom, and only when something changed while paused. The simulation always runs on real time. Side-panel text
   updates a few times a second.
 - **The game tunes itself.** If the screen's frame rate stays under 25 a second while you play, it switches to Fast
   effects, then lowers the picture resolution, then draws 20 pictures a second, and says so in the radio log. (The

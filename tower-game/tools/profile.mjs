@@ -39,7 +39,7 @@ if (effects === 'noanim') await page.addStyleTag({ content: '.ambient { animatio
 if (effects === 'noblur') await page.addStyleTag({ content: '* { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }' });
 if (effects === 'lightblur') await page.addStyleTag({ content: '.ambient { animation: none !important; } .map-tools *, .map-config, .plan-bar, .map-wrap .glass-ctl { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; } * { -webkit-backdrop-filter: blur(8px) !important; backdrop-filter: blur(8px) !important; }' });
 if (view !== 'map') { await page.click(`#view button[data-view="${view}"]`); await sleep(500); }
-await page.click('.speed button[data-speed="4"]');
+await page.click(`.speed button[data-speed="${process.env.SPEED || 4}"]`);
 // time the operations we suspect, and keep the slowest few
 await page.evaluate(() => {
   const { game, renderer } = window.towerGame;

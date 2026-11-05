@@ -12,11 +12,13 @@ import { RadioFx } from './radio.js';
 // macOS / iOS joke voices and the old "Eloquence" set: never for pilots
 const NOVELTY = /^(albert|bad news|bahh|bells|boing|bubbles|cellos|deranged|good news|hysterical|jester|organ|pipe organ|superstar|trinoids|whisper|wobble|zarvox|junior|ralph|kathy|fred|princess|eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley)\b/i;
 
-export function voiceScore(v) {
+// efficient: prefer the compact voices. Premium, Enhanced and neural voices sound better but the phone
+// computes them every time a pilot speaks, which is a lot of work on a busy frequency (and heat).
+export function voiceScore(v, efficient = false) {
   const name = v.name || '';
   if (NOVELTY.test(name)) return -100;
   let s = 0;
-  if (/premium|enhanced|natural|neural|siri/i.test(name)) s += 40; // Apple's downloadable and Edge's neural voices
+  if (/premium|enhanced|natural|neural|siri/i.test(name)) s += efficient ? -45 : 40; // Apple's downloadable and Edge's neural voices
   if (/online/i.test(name)) s += 30; // Microsoft "... Online (Natural)"
   if (/google/i.test(name)) s += 25; // Chrome's network voices
   if (/^(samantha|daniel|karen|moira|tessa|rishi|serena|arthur|martha|catherine|gordon|aaron|nicky|evan|zoe|tom|ava|allison|susan|joelle|nathan|noelle|oliver|stephanie|ting-ting|tingting|lili|yu-shu|meijia|sinji)\b/i.test(name)) s += 15;
@@ -25,11 +27,11 @@ export function voiceScore(v) {
 }
 
 // the better voices of a language, best first
-export function rankVoices(voices, langPrefix) {
+export function rankVoices(voices, langPrefix, efficient = false) {
   const want = langPrefix.toLowerCase();
   return voices
     .filter((v) => (v.lang || '').toLowerCase().replace('_', '-').startsWith(want))
-    .map((v) => ({ v, s: voiceScore(v) }))
+    .map((v) => ({ v, s: voiceScore(v, efficient) }))
     .filter((x) => x.s > -50)
     .sort((a, b) => b.s - a.s)
     .map((x) => x.v);
@@ -83,7 +85,7 @@ export class Speaker {
     this.onVoices?.(this.voices);
   }
 
-  englishVoices() { return rankVoices(this.voices, 'en'); }
+  englishVoices() { return rankVoices(this.voices, 'en', !!this.settings.efficient); }
 
   unlock() {
     this.fx.unlock();
@@ -97,7 +99,8 @@ export class Speaker {
   // a good voice, stable per pilot; several pilots share the best few voices
   pick(pool, key) {
     if (!pool.length) return null;
-    const top = pool.filter((v) => voiceScore(v) >= voiceScore(pool[0]) - 30).slice(0, 12);
+    const eff = !!this.settings.efficient;
+    const top = pool.filter((v) => voiceScore(v, eff) >= voiceScore(pool[0], eff) - 30).slice(0, 12);
     return top[hash(key) % top.length];
   }
 
@@ -106,7 +109,7 @@ export class Speaker {
     if (chosen && !this.settings.varyVoices) return chosen;
     if (this.settings.accents !== false) {
       for (const lang of accentFor(airline)) {
-        const pool = rankVoices(this.voices, lang);
+        const pool = rankVoices(this.voices, lang, !!this.settings.efficient);
         if (pool.length) return this.pick(pool, unitKey || 'x');
       }
     }
@@ -115,7 +118,7 @@ export class Speaker {
 
   // a voice for another language (e.g. 'zh' -> a zh-CN system voice), stable per key
   voiceForLang(lang, unitKey) {
-    let pool = rankVoices(this.voices, lang);
+    let pool = rankVoices(this.voices, lang, !!this.settings.efficient);
     if (lang.toLowerCase() === 'zh') {
       const cn = pool.filter((v) => /cn|hans/i.test(v.lang));
       if (cn.length) pool = cn;
@@ -128,6 +131,7 @@ export class Speaker {
   speak(text, unitKey, lang = 'en', { reply = false, airline = '', range = 3000 } = {}) {
     if (!this.settings.tts || !text) return;
     this.fx.enabled = this.settings.radioFx !== false;
+    if (this.fx.enabled || this.settings.builtinVoices) this.fx.wake(); // ready by the time the pilot talks
     const pause = reply ? 600 + Math.random() * 900 : 150 + Math.random() * 500;
     // on a busy frequency calls queue up; one that has waited too long is
     // not read out late (it is still in the radio log)
@@ -142,7 +146,12 @@ export class Speaker {
       const audio = this.neural.synth(text, voice);
       audio.catch(() => {});
       this.chain = this.chain.then(wait).then(() => audio)
-        .then((s) => (stale() ? true : this.fx.play(s.pcm, s.sampleRate, { pitch: voice.pitch, key: unitKey, range, volume: 1 - Math.min(0.25, (range || 0) / 80000) })))
+        .then((s) => {
+          if (stale()) return true;
+          const t0 = performance.now();
+          return Promise.resolve(this.fx.play(s.pcm, s.sampleRate, { pitch: voice.pitch, key: unitKey, range, volume: 1 - Math.min(0.25, (range || 0) / 80000) }))
+            .then((played) => { this.talkMs = (this.talkMs || 0) + performance.now() - t0; return played; });
+        })
         .then((played) => (played ? null : this.say(text, unitKey, lang, airline, range)))
         .catch((e) => (e?.message === 'stale' ? null : this.say(text, unitKey, lang, airline, range)));
       return;
@@ -161,12 +170,13 @@ export class Speaker {
     u.rate = (Number(this.settings.rate) || 1) * shape.rate;
     u.pitch = (Number(this.settings.pitch) || 1) * shape.pitch;
     this.fx.enabled = this.settings.radioFx !== false;
-    u.onstart = () => this.fx.keyUp({ key: unitKey, range });
+    let began = 0;
+    u.onstart = () => { began = performance.now(); this.fx.keyUp({ key: unitKey, range }); };
     // Safari can stay "paused" after the app was in the background
     if (window.speechSynthesis.paused) window.speechSynthesis.resume();
     // finished when the sentence ends, so the next call waits for it
     return new Promise((resolve) => {
-      const done = (quiet) => { clearTimeout(guard); this.fx.keyDown(quiet); resolve(); };
+      const done = (quiet) => { clearTimeout(guard); if (began) this.talkMs = (this.talkMs || 0) + performance.now() - began; this.fx.keyDown(quiet); resolve(); };
       const guard = setTimeout(() => done(true), 4000 + text.length * 150);
       u.onend = () => done(false);
       u.onerror = () => done(true);

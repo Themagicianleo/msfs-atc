@@ -262,7 +262,7 @@ export class Scene3D {
     // 'low-power' asks a phone for its efficient GPU path.
     const touch = !!window.matchMedia?.('(pointer: coarse)').matches;
     this.gl = new THREE.WebGLRenderer({ canvas: this.cv, antialias: !touch, powerPreference: 'low-power' });
-    this.maxDpr = touch ? 1.25 : 1.5;
+    this.maxDpr = touch ? (Math.min(window.innerWidth, window.innerHeight) < 700 ? 1 : 1.25) : 1.5; // a phone 1, an iPad 1.25
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, 1, 1, 60000);
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x445533, 1.4);

@@ -96,6 +96,7 @@
     <button id="new-shift" class="capsule glass-ctl" type="button">New shift</button>
   </header>
 
+  <div id="update-bar" class="banner update-bar" hidden role="status">A newer version of the game is out. <button id="update-reload" class="btn btn-small btn-primary" type="button">Reload</button></div>
   <div id="alert" class="banner banner-danger alert-bar hidden" role="alert"></div>
 
   <main class="game">
@@ -170,6 +171,16 @@
               <button type="button" data-fx="auto" aria-pressed="true">Automatic</button><button type="button" data-fx="fast" aria-pressed="false">Fast</button><button type="button" data-fx="full" aria-pressed="false">Full</button>
             </span>
             <p id="fx-note" class="muted small"></p>
+          </div>
+          <div class="field"><span class="label">Voice quality (device voices)</span>
+            <span class="seg" id="voicequality" role="group" aria-label="Voice quality">
+              <button type="button" data-vq="best" aria-pressed="true">Best</button><button type="button" data-vq="efficient" aria-pressed="false">Efficient</button>
+            </span>
+            <p class="muted small">Efficient picks the compact voices: they sound plainer but ask much less of the phone than Premium and Enhanced ones, so it stays cooler.</p>
+          </div>
+          <div class="field"><span class="label">Performance <button id="perf-copy" class="btn btn-small" type="button">Copy</button></span>
+            <pre id="perf-report" class="perf muted small">Open this section while playing to see it.</pre>
+            <p id="version" class="muted small"></p>
           </div>
           <label class="check"><input type="checkbox" id="set-askrwy" checked> Ask which runways to use when a shift starts</label>
           <label class="check"><input type="checkbox" id="set-tts" checked> Speak pilot calls</label>
