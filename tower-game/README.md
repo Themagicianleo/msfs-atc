@@ -61,8 +61,9 @@ when you first open a 3D view, so the 2D map stays as fast as before.
   Real heights are not in the data.
 - **Tower:** at Daxing it stands where the CAAC aircraft parking chart (ZBAD 2P-1, 2025-03-15) shows the west
   tower, TWR(W), in the courtyard south-west of the terminal; the position was read off the chart against
-  nearby stands, so it is approximate. OpenStreetMap has no usable tower position for Changi and San Francisco,
-  so there the game puts it in the open space nearest the middle of the terminals. The cab is at about 72 m.
+  nearby stands, so it is approximate. At Changi it is at the coordinates the AIP Singapore aerodrome chart gives
+  for the control tower (01°21'33"N 103°59'22"E). At San Francisco the game puts it in the open space nearest the
+  middle of the terminals. The cab is at about 72 m.
   Set `meta.tower_pos` in `data/traffic/<ICAO>.json` to move it.
 - **Appearance:** light and dark follow the game's appearance; dark looks like dusk, with runway lights.
 
@@ -111,6 +112,11 @@ To refresh the layouts, run the **Tower game - fetch OpenStreetMap airport data*
 workflow, or `python tools/fetch_osm.py` where the OSM servers are reachable, then
 `node tools/build_hq.mjs`. The build prints a quality report: exits per runway, entries,
 and whether every stand can reach every runway.
+
+**Changi checked against the AIP Singapore aerodrome chart (AD-2-WSSS-ADC-2):** all 191 stands in the chart's
+coordinate table are in the game with the right number, typically within 25 m of the chart's position (the game
+parks at the end of the painted lead-in line). The one stand OpenStreetMap has that the chart doesn't, "209", is no
+longer used.
 
 ### Beijing Daxing: Chinese radio, metric units
 

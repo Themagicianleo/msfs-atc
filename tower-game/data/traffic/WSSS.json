@@ -6,7 +6,9 @@
   "municipality": "Singapore",
   "country": "SG",
   "elevation_ft": 22,
-  "tower": "Changi Tower"
+  "tower": "Changi Tower",
+  "tower_pos": { "lat": 1.359167, "lon": 103.989444, "source": "Control tower 01°21'33\"N 103°59'22\"E on the AIP Singapore aerodrome chart AD-2-WSSS-ADC-2" },
+  "not_stands": ["209"]
  },
  "about": "Representative traffic for the game: airlines that serve this airport, their ICAO code and radio callsign, a typical fleet mix there and destinations. Not a real schedule; weights are rough shares of movements. Edit freely: types must exist in data/aircraft.json.",
  "airlines": [
