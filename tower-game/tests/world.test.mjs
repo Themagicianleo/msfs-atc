@@ -275,3 +275,18 @@ test('pilots word their calls in different ways, all with the callsign and the f
   }
   assert.ok(seen.size >= 3, [...seen].join(' | '));
 });
+
+test('the destination of aircraft on the ground: holding point for departures, stand for arrivals', async () => {
+  const { taxiDestination, destinationPoint } = await import('../js/world.js');
+  const w = newWorld();
+  const dep = w.spawnDeparture();
+  dep.state = 'pushed';
+  assert.deepEqual(taxiDestination(dep), { kind: 'runway', id: '27', short: 'RWY 27', long: 'holding point runway 27' });
+  assert.ok(destinationPoint(w.L, taxiDestination(dep)));
+  dep.state = 'holding';
+  assert.equal(taxiDestination(dep), null);
+  const arr = { kind: 'arr', state: 'vacated', gate: w.L.gates[0].id, end: '27' };
+  assert.equal(taxiDestination(arr).short, `STAND ${arr.gate}`);
+  assert.deepEqual(destinationPoint(w.L, taxiDestination(arr)), w.L.graph.nodes[w.L.gates[0].node].p);
+  assert.equal(taxiDestination({ ...arr, state: 'final' }), null);
+});

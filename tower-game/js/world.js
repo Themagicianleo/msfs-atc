@@ -949,3 +949,23 @@ export class World {
 }
 
 export function angleOk(a, b, tol) { return angleDiff(a, b) <= tol; }
+
+// where an aircraft on the ground is going: the holding point of its runway
+// (departures, from pushback until it gets there) or its stand (arrivals,
+// from landing until parked). null otherwise.
+const TO_RUNWAY = new Set(['gate', 'pushback', 'pushed', 'taxi_out']);
+const TO_STAND = new Set(['rollout', 'vacated', 'taxi_in']);
+export function taxiDestination(ac) {
+  if (ac.kind === 'dep' && TO_RUNWAY.has(ac.state) && ac.end) return { kind: 'runway', id: ac.end, short: `RWY ${ac.end}`, long: `holding point runway ${ac.end}` };
+  if (ac.kind === 'arr' && TO_STAND.has(ac.state) && ac.gate) return { kind: 'stand', id: ac.gate, short: `STAND ${ac.gate}`, long: `stand ${ac.gate}` };
+  return null;
+}
+
+// its map position: the runway's holding point or the stand
+export function destinationPoint(L, dest) {
+  if (!dest) return null;
+  const g = L.graph;
+  if (dest.kind === 'runway') { const h = L.holdPoints?.[dest.id]; return h ? g.nodes[h.h].p : null; }
+  const gate = L.gates.find((x) => x.id === dest.id);
+  return gate ? g.nodes[gate.node].p : null;
+}

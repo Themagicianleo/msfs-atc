@@ -2,6 +2,7 @@
 
 import { M_PER_NM, add, dist, fromHeading, mul, perp, sub, norm } from './geo.js';
 import { endGeometry } from './layout.js';
+import { destinationPoint, taxiDestination } from './world.js';
 
 // radar-style (dark) and airport-diagram style ("chart") colours
 const DARK = {
@@ -261,6 +262,20 @@ export class Renderer {
     }
 
     if (plan) this.drawPlan(plan, world);
+    // where the selected aircraft is going
+    if (sel) {
+      const dest = taxiDestination(sel);
+      const p = destinationPoint(world.L, dest);
+      if (p) {
+        const q = this.toScreen(p);
+        const c = this.ctx;
+        c.save();
+        c.strokeStyle = C.req; c.lineWidth = 2; c.setLineDash([4, 3]);
+        c.beginPath(); c.arc(q[0], q[1], 11, 0, Math.PI * 2); c.stroke();
+        c.restore();
+        this.text(dest.short, p, { color: C.req, size: 12, bold: true, dy: -16 });
+      }
+    }
     for (const ac of world.ac) this.drawAircraft(ac, ac.id === selectedId, now);
   }
 
@@ -352,6 +367,8 @@ export class Renderer {
     else if (ac.state !== 'final' && kt > 2) info += m ? ` ${Math.round(ac.v * 3.6)}km/h` : ` ${kt}kt`;
     if (ac.alt > 50) info += m ? ` ${Math.round(ac.alt * 0.3048 / 10) * 10}m` : ` ${Math.round(ac.alt / 100) * 100}ft`;
     if (ac.hold) info += ' HOLD';
+    const dest = taxiDestination(ac);
+    if (dest) info += ` → ${dest.short}`;
     if (ac.blockedBy) info += ' WAIT';
     const lx = p[0] + size * 0.6 + 6;
     const ly = p[1] - size * 0.6 - 6;

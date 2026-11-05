@@ -11,7 +11,7 @@ import { Listener, voiceSupport } from './lib/voice.js';
 import { understand } from './commands.js';
 import { buildLayout, endGeometry } from './layout.js';
 import { Renderer, STATE_LABELS } from './render.js';
-import { World } from './world.js';
+import { World, taxiDestination } from './world.js';
 import { M_PER_NM } from './geo.js';
 import { generatedWind, liveWind, windText } from './weather.js';
 
@@ -509,12 +509,14 @@ function renderPanel() {
   if (!w) return;
   const ac = w.find(game.selected);
   if (!ac && game.selected != null) game.selected = null;
-  const selKey = JSON.stringify([game.selected, ac?.state, ac?.req?.type, ac?.hold, ac?.crossings?.map((c) => c.cleared), ac?.cleared]);
+  const selKey = JSON.stringify([game.selected, ac?.state, ac?.gate, ac?.end, ac?.req?.type, ac?.hold, ac?.crossings?.map((c) => c.cleared), ac?.cleared]);
   if (selKey !== lastSel) {
     lastSel = selKey;
     $('#sel-cs').textContent = ac ? `${ac.cs.t}  (${ac.callsign} ${ac.type.code})` : 'No aircraft selected';
     $('#sel-state').textContent = ac ? (STATE_LABELS[ac.state] || ac.state) + (ac.end ? ` · RWY ${ac.end}` : '') + (ac.gate ? ` · ${ac.gate}` : '') : '';
-    $('#sel-req').textContent = ac?.req ? `Request: ${REQ_TEXT[ac.req.type] || ac.req.type}` : '';
+    const dest = ac && taxiDestination(ac);
+    const req = ac?.req ? `Request: ${REQ_TEXT[ac.req.type] || ac.req.type}` : '';
+    $('#sel-req').textContent = [req, dest ? `Going to ${dest.long}` : ''].filter(Boolean).join(' · ');
     const box = $('#sel-buttons');
     box.innerHTML = '';
     if (ac) {
@@ -557,7 +559,9 @@ function renderPanel() {
     const a = w.find(Number(d.dataset.id));
     if (!a) continue;
     const route = a.other ? (a.kind === 'arr' ? ` from ${a.other}` : ` to ${a.other}`) : '';
-    const txt = `${a.type.code} · ${stripState(a)} · ${a.kind === 'arr' ? 'ARR' : 'DEP'} ${a.end || ''}${route}`;
+    const dest = taxiDestination(a);
+    const rwy = dest?.kind === 'runway' ? '' : ` ${a.end || ''}`; // the runway is already in the destination
+    const txt = `${a.type.code} · ${stripState(a)}${dest ? ` → ${dest.short}` : ''} · ${a.kind === 'arr' ? 'ARR' : 'DEP'}${rwy}${route}`;
     const st = d.querySelector('.st');
     if (st.textContent !== txt) st.textContent = txt;
   }

@@ -18,6 +18,9 @@ Open the site, type an airport (ICAO code, name or city, e.g. `EGLL`, `Haneda`,
 
 - **Select** an aircraft by tapping it on the map or its strip. A yellow ring and a
   highlighted strip mean it is calling you; the blue button is the usual answer.
+- **Where it's going:** aircraft on the ground show their destination on the strip, the map label and
+  the 3D label. Departures go to the holding point of their runway, e.g. *→ RWY 02C*; arrivals go to their
+  stand, e.g. *→ STAND 12*. The destination is ringed on the map when you select the aircraft.
 - **Talk:** tap **Start talking**, say the callsign and the instruction, then tap **Stop and send**
   (it also sends by itself when you pause). On a PC you can hold the **space bar** instead. With an
   aircraft selected you can skip the callsign.

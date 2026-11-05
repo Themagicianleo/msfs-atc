@@ -5,6 +5,7 @@
 
 import * as THREE from './vendor/three.module.min.js';
 import { STATE_LABELS } from './render.js';
+import { taxiDestination } from './world.js';
 import { M_PER_NM } from './geo.js';
 
 const FT = 0.3048;
@@ -574,6 +575,8 @@ export class Scene3D {
       let info = STATE_LABELS[ac.state] || ac.state;
       if (ac.state === 'final') info += metric ? ` ${(ac.dist / 1000).toFixed(1)}km` : ` ${(ac.dist / M_PER_NM).toFixed(1)}NM`;
       if (ac.hold) info += ' HOLD';
+      const dest = taxiDestination(ac);
+      if (dest) info += ` → ${dest.short}`;
       const line = `${ac.type?.code || ''} ${info}`;
       if (tag.firstChild.textContent !== ac.callsign) tag.firstChild.textContent = ac.callsign;
       if (tag.lastChild.textContent !== line) tag.lastChild.textContent = line;
