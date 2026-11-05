@@ -41,6 +41,23 @@ async function main() {
     if (/Failed to load resource/.test(m.text())) console.log('network:', m.text());
     else errors.push(m.text());
   });
+  // a stand-in for the browser's speech recogniser: hears "<callsign> pushback approved"
+  await page.addInitScript(() => {
+    window.__heard = 'say again';
+    class FakeRec {
+      start() { setTimeout(() => this.onstart?.(), 20); }
+      stop() {
+        setTimeout(() => {
+          this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: window.__heard }], { isFinal: true })] });
+          this.onend?.();
+        }, 20);
+      }
+      abort() { this.onend?.(); }
+    }
+    for (const name of ['SpeechRecognition', 'webkitSpeechRecognition']) {
+      Object.defineProperty(window, name, { value: FakeRec, configurable: true, writable: true });
+    }
+  });
   await page.goto(`http://127.0.0.1:${port}/`);
 
   // airport search from the built index
@@ -74,6 +91,21 @@ async function main() {
   await page.click('#cmd-form button');
   await page.waitForFunction((id) => !window.towerGame.game.world.find(id)?.req, r.id, { timeout: 5000 });
   console.log('typed:', await page.evaluate(() => [...document.querySelectorAll('#log .msg')].slice(-2).map((m) => m.textContent)));
+
+  // talk button: tap to start, tap again to stop and send
+  await page.waitForFunction(() => window.towerGame.game.world.ac.some((a) => a.req?.type === 'push'), null, { timeout: 90000 });
+  const caller2 = await page.evaluate(() => window.towerGame.game.world.ac.find((a) => a.req?.type === 'push'));
+  {
+    await page.evaluate((t) => { window.__heard = t; }, `${caller2.tel} ${caller2.num} pushback approved`);
+    if ((await page.textContent('#ptt-label')) !== 'Start talking') throw new Error('talk button should say Start talking');
+    await page.click('#ptt');
+    await page.waitForFunction(() => document.querySelector('#ptt-label').textContent === 'Stop and send');
+    await page.click('#ptt');
+    await page.waitForFunction((id) => !window.towerGame.game.world.find(id)?.req, caller2.id, { timeout: 5000 });
+    console.log('voice (simulated):', await page.evaluate(() => [...document.querySelectorAll('#log .msg')].slice(-2).map((m) => m.textContent)));
+    const sel = await page.evaluate(() => getComputedStyle(document.querySelector('#ptt')).webkitUserSelect || getComputedStyle(document.querySelector('#ptt')).userSelect);
+    if (sel !== 'none') throw new Error(`talk button text is selectable (${sel})`);
+  }
 
   // set the wind by hand
   await page.click('details.settings summary');

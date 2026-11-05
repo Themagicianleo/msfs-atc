@@ -18,8 +18,9 @@ Open the site, type an airport (ICAO code, name or city, e.g. `EGLL`, `Haneda`,
 
 - **Select** an aircraft by tapping it on the map or its strip. A yellow ring and a
   highlighted strip mean it is calling you; the blue button is the usual answer.
-- **Talk:** hold **Hold to talk** (on a PC, hold the **space bar**) and say the
-  callsign, then the instruction. With an aircraft selected you can skip the callsign.
+- **Talk:** tap **Start talking**, say the callsign and the instruction, then tap **Stop and send**
+  (it also sends by itself when you pause). On a PC you can hold the **space bar** instead. With an
+  aircraft selected you can skip the callsign.
 - **Instructions understood:**
   - *Speedbird 123, runway 27, cleared to land* · *continue approach* · *go around*
   - *pushback approved*

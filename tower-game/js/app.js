@@ -381,6 +381,7 @@ const listener = new Listener({
   onFinal: (t) => { $('#ptt-interim').textContent = ''; issueText(t); },
   onState: (state, detail) => {
     $('#ptt').classList.toggle('live', state === 'listening');
+    setTalkLabel(state === 'listening');
     if (state === 'listening') $('#voice-status').textContent = 'Listening...';
     else if (state === 'error') $('#voice-status').textContent = `${detail} Try again, or type / use the buttons.`;
     else if (state === 'disabled') renderVoice();
@@ -404,16 +405,23 @@ function renderVoice() {
   const s = voiceSupport();
   $('#voice-diag').textContent = s.ok ? `Speech recognition available${s.standalone ? ' (Home Screen app: if it fails, use a Safari tab)' : ''}.` : s.reason;
   $('#ptt').classList.toggle('disabled', listener.disabled);
-  $('#ptt-label').textContent = listener.disabled ? 'Voice unavailable: type or use buttons' : 'Hold to talk';
+  if (listener.disabled) $('#ptt-label').textContent = 'Voice unavailable: type or use buttons';
+  else setTalkLabel(listener.active);
   if (listener.disabled) $('#voice-status').textContent = listener.reason;
 }
 
+// One tap starts listening, the next tap stops and sends (no holding, so the
+// phone doesn't start selecting text). Recognition also ends by itself after
+// a pause, and what was heard is sent then.
+function setTalkLabel(live) {
+  if (listener.disabled) return;
+  $('#ptt-label').textContent = live ? 'Stop and send' : 'Start talking';
+  $('#ptt').setAttribute('aria-pressed', String(!!live));
+}
 const ptt = $('#ptt');
-const startTalk = () => { if (!listener.disabled && !listener.active) { speaker.stop(); listener.start(); } };
-const stopTalk = () => { if (listener.active) listener.stop(); };
-ptt.addEventListener('pointerdown', (e) => { e.preventDefault(); ptt.setPointerCapture?.(e.pointerId); startTalk(); });
-ptt.addEventListener('pointerup', stopTalk);
-ptt.addEventListener('pointercancel', stopTalk);
+const startTalk = () => { if (!listener.disabled && !listener.active) { speaker.stop(); listener.start(); setTalkLabel(true); } };
+const stopTalk = () => { if (listener.active) listener.stop(); setTalkLabel(false); };
+ptt.addEventListener('click', () => (listener.active ? stopTalk() : startTalk()));
 ptt.addEventListener('contextmenu', (e) => e.preventDefault());
 // PC: hold the space bar to talk (not while typing in a field)
 document.addEventListener('keydown', (e) => {
