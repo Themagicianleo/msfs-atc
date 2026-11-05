@@ -6,6 +6,7 @@ import { unpackLayout } from './osm.js';
 import { chooseConfig, runwayChoices } from './ops.js';
 import { taxiwayNames } from './layout.js';
 import { Speaker } from './lib/speech.js';
+import { MODELS, NeuralVoices, cachedModels, deleteVoices, modelsFor } from './lib/neural.js';
 import { Listener, voiceSupport } from './lib/voice.js';
 import { understand } from './commands.js';
 import { buildLayout, endGeometry } from './layout.js';
@@ -23,11 +24,12 @@ const store = {
   set(k, v) { try { localStorage.setItem(`tower.${k}`, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
-const settings = { tts: true, radioFx: true, accents: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
+const settings = { tts: true, radioFx: true, accents: true, builtinVoices: false, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
 const saveSettings = () => store.set('settings', settings);
 // voices vary per aircraft; the Speaker reads these keys
-const speakerSettings = { tts: settings.tts, radioFx: settings.radioFx, accents: settings.accents, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
+const speakerSettings = { tts: settings.tts, radioFx: settings.radioFx, accents: settings.accents, builtinVoices: settings.builtinVoices, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
 const speaker = new Speaker(speakerSettings);
+speaker.neural = new NeuralVoices();
 
 const game = { world: null, phr: null, airlines: {}, speed: 1, selected: null, wind: null, last: 0, index: null };
 const renderer = new Renderer($('#map'));
@@ -171,6 +173,7 @@ async function startShift(code, traffic) {
   renderer.fit(layout);
   $('#start').classList.add('hidden');
   game.last = performance.now();
+  ensureVoices();
 }
 
 $('#start-form').addEventListener('submit', async (e) => {
@@ -350,6 +353,53 @@ renderer.onTap = (pos, q) => {
   const ac = renderer.pick(game.world, q);
   game.selected = ac ? ac.id : null;
 };
+
+// ---------------------------------------------------------------- built-in voices
+// Downloads (once per device) the voice models this airport's airlines need.
+let voiceJob = null;
+function airportAirlines() {
+  if (game.profile?.airlines) return game.profile.airlines.map((a) => ({ code: a.code, lang: game.phrZh ? (a.lang || 'en') : 'en' }));
+  return Object.keys(game.airlines || {}).filter((k) => /^[A-Z]{3}$/.test(k)).map((code) => ({ code, lang: 'en' }));
+}
+
+async function renderBuiltin(progress = null) {
+  const st = $('#builtin-status');
+  const bar = $('#builtin-progress');
+  bar.hidden = !progress;
+  if (progress) {
+    bar.max = progress.total; bar.value = progress.done;
+    st.textContent = `Downloading built-in voices: ${Math.round(progress.done)} of ${Math.round(progress.total)} MB${progress.label ? ` (${progress.label})` : ''}. The device's voices are used until then.`;
+    return;
+  }
+  const ready = [...(speaker.neural?.ready || [])];
+  const cached = await cachedModels();
+  $('#builtin-delete').hidden = !cached.length;
+  if (!settings.builtinVoices) {
+    st.textContent = cached.length ? `Downloaded on this device: ${cached.map((k) => MODELS[k].label).join('; ')}.` : 'Off: pilots use this device\'s own voices.';
+    return;
+  }
+  st.textContent = ready.length
+    ? `Ready: ${ready.map((k) => `${MODELS[k].label} (${MODELS[k].voices} voice${MODELS[k].voices > 1 ? 's' : ''})`).join('; ')}.`
+    : 'Built-in voices load when a shift starts.';
+}
+
+function ensureVoices() {
+  if (!settings.builtinVoices || !game.world || voiceJob) { renderBuiltin(); return; }
+  const keys = modelsFor(airportAirlines());
+  if (keys.every((k) => speaker.neural.ready.has(k))) { renderBuiltin(); return; }
+  const fresh = keys.filter((k) => !speaker.neural.ready.has(k));
+  voiceJob = speaker.neural.load(keys, (done, total, label) => renderBuiltin({ done, total, label }))
+    .then(() => {
+      voiceJob = null;
+      renderBuiltin();
+      if (fresh.length) sys(`Built-in voices ready: ${fresh.map((k) => MODELS[k].label).join('; ')}.`);
+    }, async (err) => {
+      voiceJob = null;
+      await renderBuiltin();
+      const some = speaker.neural.ready.size ? `${$('#builtin-status').textContent} Missing: ` : 'Couldn\'t load the built-in voices: ';
+      $('#builtin-status').textContent = `${some}${err.message}. The device's voices fill in; the download is tried again at the next shift.`;
+    });
+}
 
 // ---------------------------------------------------------------- choosing the taxi route
 // Tap taxiways on the map in the order the aircraft should use them; tap a
@@ -582,6 +632,23 @@ document.addEventListener('keyup', (e) => { if (e.code === 'Space') stopTalk(); 
 $('#set-tts').checked = settings.tts;
 $('#set-radio').checked = settings.radioFx;
 $('#set-accents').checked = settings.accents;
+$('#set-builtin').checked = settings.builtinVoices;
+$('#set-builtin').addEventListener('change', (e) => {
+  settings.builtinVoices = speakerSettings.builtinVoices = e.target.checked;
+  saveSettings();
+  if (e.target.checked) ensureVoices(); else renderBuiltin();
+});
+$('#builtin-delete').addEventListener('click', async () => {
+  await deleteVoices();
+  speaker.neural?.worker?.terminate();
+  speaker.neural = new NeuralVoices();
+  voiceJob = null;
+  settings.builtinVoices = speakerSettings.builtinVoices = false;
+  $('#set-builtin').checked = false;
+  saveSettings();
+  renderBuiltin();
+});
+renderBuiltin();
 $('#set-accents').addEventListener('change', (e) => { settings.accents = speakerSettings.accents = e.target.checked; saveSettings(); });
 $('#set-radio').addEventListener('change', (e) => { settings.radioFx = speakerSettings.radioFx = e.target.checked; saveSettings(); });
 $('#set-tts').addEventListener('change', (e) => { settings.tts = speakerSettings.tts = e.target.checked; saveSettings(); if (!e.target.checked) speaker.stop(); });
@@ -626,4 +693,4 @@ if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWor
 requestAnimationFrame(frame);
 
 // for the end-to-end test
-window.towerGame = { game, endGeometry, renderer };
+window.towerGame = { game, endGeometry, renderer, speaker };

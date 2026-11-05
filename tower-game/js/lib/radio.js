@@ -28,6 +28,8 @@ export class RadioFx {
 
   // must run inside a tap on iOS
   unlock() {
+    // iOS: play even with the ring/silent switch on, like speech does
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older Safari */ }
     const ctx = this.context();
     if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
   }
@@ -122,6 +124,42 @@ export class RadioFx {
     b.src.stop(t + 0.06);
     for (const o of b.extra) o.stop(t + 0.05);
     if (!quiet) this.burst(this.tail || 0.14, 0.22, 2600);
+  }
+
+  // play generated speech (built-in voices) through the radio: band-limited
+  // to what an airband radio passes, a little overdriven and compressed, with
+  // the squelch and static around it. Resolves when it has finished; false
+  // if the sound can't play (audio not unlocked yet).
+  play(pcm, sampleRate, { pitch = 1, volume = 1, key = '', range = 3000 } = {}) {
+    const ctx = this.context();
+    if (!ctx || ctx.state !== 'running') return Promise.resolve(false);
+    const buf = ctx.createBuffer(1, pcm.length, sampleRate);
+    buf.copyToChannel(pcm, 0);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = pitch;
+    const out = ctx.createGain();
+    out.gain.value = volume;
+    if (this.enabled) {
+      const ch = radioCharacter(key);
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 280 + ch.q * 150;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2700 + ch.q * 900;
+      const peak = ctx.createBiquadFilter(); peak.type = 'peaking'; peak.frequency.value = ch.band; peak.gain.value = 5; peak.Q.value = 1;
+      const drive = ctx.createWaveShaper();
+      const k = 2 + 4 * Math.min(1, range / 20000); // weaker signal, rougher sound
+      const curve = new Float32Array(1024);
+      for (let i = 0; i < curve.length; i += 1) { const x = (i / (curve.length - 1)) * 2 - 1; curve[i] = Math.tanh(k * x) / Math.tanh(k); }
+      drive.curve = curve;
+      const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -24; comp.ratio.value = 6;
+      src.connect(hp).connect(lp).connect(peak).connect(drive).connect(comp).connect(out);
+      out.gain.value = volume * 0.8;
+    } else src.connect(out);
+    out.connect(ctx.destination);
+    return new Promise((resolve) => {
+      src.onended = () => { this.keyDown(); resolve(true); };
+      this.keyUp({ key, range });
+      src.start(ctx.currentTime + 0.06);
+    });
   }
 
   // the controller's own transmit click

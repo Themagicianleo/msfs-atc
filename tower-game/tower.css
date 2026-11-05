@@ -54,6 +54,8 @@ body { display: flex; flex-direction: column; overflow: hidden; min-height: 0;
 .plan-btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .plan-cross { margin-right: auto; font-size: 13px; }
 .plan-cross[hidden] { display: none; }
+.builtin progress { width: 100%; height: 8px; accent-color: var(--blue); }
+.builtin progress[hidden], .builtin [hidden] { display: none; }
 .map-tools { position: absolute; right: 12px; top: 12px; left: 12px; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; z-index: 2; pointer-events: none; }
 .map-tools > * { pointer-events: auto; }
 .map-tools [hidden] { display: none; }

@@ -146,6 +146,13 @@
           <label class="check"><input type="checkbox" id="set-tts" checked> Speak pilot calls</label>
           <label class="check"><input type="checkbox" id="set-radio" checked> Radio sound (squelch and static)</label>
           <label class="check"><input type="checkbox" id="set-accents" checked> Pilot accents (from the airline's country, if your device has the voice)</label>
+          <div class="field builtin">
+            <label class="check"><input type="checkbox" id="set-builtin"> Built-in voices: the same pilots on every device</label>
+            <p class="muted small">Free, open-source Piper voices that run in the game. Over a thousand pilot voices, with accents. Each device downloads them once (about 170 to 260 MB per airport, depending on its airlines), then they work offline. Without them the device's own voices are used.</p>
+            <progress id="builtin-progress" max="1" value="0" hidden></progress>
+            <p id="builtin-status" class="muted small"></p>
+            <button id="builtin-delete" class="btn btn-small" type="button" hidden>Delete downloaded voices</button>
+          </div>
           <label class="field"><span class="label">Voice speed</span><input type="range" id="set-rate" min="0.8" max="1.6" step="0.05" value="1.15"></label>
           <label class="field"><span class="label">Recognition language (English airports)</span>
             <select id="set-lang" class="input"><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option><option value="en-AU">English (Australia)</option><option value="en-IN">English (India)</option></select>

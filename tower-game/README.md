@@ -216,7 +216,45 @@ Without the data build you can still play `DEMO`.
 
 ## Pilot voices
 
-Pilots speak with your device's own voices. To sound less like one robot:
+### Built-in voices: the same on every device
+
+Turn on **Settings → Built-in voices** to make pilots sound the same on your iPad, PC and phone, whatever voices
+those devices have installed. The game then speaks with free, open-source
+[Piper](https://github.com/rhasspy/piper) neural voices that run inside the browser.
+
+- **Variety:** over a thousand different pilot voices. Each airline gets fitting ones:
+  - American carriers: American voices (904 speakers).
+  - British, European and Australian carriers: voices from around the British Isles (109 speakers).
+  - Chinese, Korean, Vietnamese, Indian, Arab and Spanish-speaking crews: English spoken with those accents
+    (24 speakers recorded by non-native speakers).
+  - Chinese crews at Daxing: one Chinese voice, varied in pitch per pilot.
+- **Real radio sound:** the speech itself goes through an airband-radio filter (narrow band, a little
+  overdriven, compressed), on top of the squelch and static.
+- **Download, once per device:** the browser downloads what the airport's airlines need and keeps it for
+  offline play:
+  - Changi or Daxing: about 170–185 MB.
+  - San Francisco and other airports: about 265 MB.
+  - Later shifts at the same airport download nothing.
+  - **Delete downloaded voices** frees the space.
+- **Where it downloads from:**
+  - The speech runtime from jsDelivr.
+  - The voice models from Hugging Face. If Hugging Face is blocked, as in mainland China, it uses its mirror
+    hf-mirror.com.
+- **While downloading, or if it fails:** the device's own voices fill in.
+- **Wait before speaking:** generating a call takes a moment. In a test on a desktop computer, a 5-second call
+  took 1–2 seconds, and the next call is generated while the current one plays. Not yet measured on an iPad;
+  an older one may make pilots answer a bit later.
+- **Not part of this repository:** neither the voices nor the runtime are in the site's files. Credits and
+  licences:
+  - Piper voices from [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices), trained on LibriTTS-R
+    (CC BY 4.0), VCTK (CC BY 4.0), L2-ARCTIC (CC BY-NC 4.0, non-commercial) and the Huayan Chinese dataset
+    (see its model card).
+  - ONNX Runtime Web (MIT).
+  - Piper's phonemizer built for the web by Diffusion Studio (MIT), which includes eSpeak NG (GPL-3.0).
+
+### Device voices
+
+Without built-in voices, pilots speak with your device's own voices. To sound less like one robot:
 - Each pilot gets one of the better voices on the device and keeps it. The game prefers "Premium",
   "Enhanced", "Natural", "Online" and Google voices, and never uses joke or old voices (Bells, Zarvox, Fred...).
 - Each pilot has a different pitch and pace.
@@ -275,6 +313,7 @@ No build step: plain HTML, CSS and JavaScript modules.
 npm test                               # layout generator, routing, traffic sim, commands, weather
 python -m unittest discover -s tests   # airport data builder
 node tools/e2e.mjs                     # headless Chromium plays the site (needs Playwright)
+TOWER_TEST_VOICES=<folder> node tools/e2e.mjs   # also tests built-in voices with local copies of their files
 ```
 
 | Path | What |
@@ -286,7 +325,7 @@ node tools/e2e.mjs                     # headless Chromium plays the site (needs
 | `js/scene3d.js` | 3D tower and orbit views, low-poly aircraft (three.js in `js/vendor/`) |
 | `js/app.js` | the page: loading, radio log, voice, buttons |
 | `js/weather.js` | live METAR or generated wind |
-| `js/lib/` | small helpers: text/speech formatting, number words, runway choice, speech output and input, radio sounds |
+| `js/lib/` | small helpers: text/speech formatting, number words, runway choice, speech output and input, radio sounds, built-in voices (`neural.js`, `neural-worker.js`) |
 
 ## Limitations
 

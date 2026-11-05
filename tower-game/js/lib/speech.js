@@ -126,12 +126,33 @@ export class Speaker {
   // opts.reply: a readback, said after a short pause as a person would
   // radio: { airline, range } of the aircraft talking
   speak(text, unitKey, lang = 'en', { reply = false, airline = '', range = 3000 } = {}) {
-    if (!this.supported || !this.settings.tts || !text) return;
+    if (!this.settings.tts || !text) return;
+    this.fx.enabled = this.settings.radioFx !== false;
     const pause = reply ? 600 + Math.random() * 900 : 150 + Math.random() * 500;
-    this.chain = this.chain.then(() => new Promise((r) => setTimeout(r, pause))).then(() => this.say(text, unitKey, lang, airline, range));
+    // on a busy frequency calls queue up; one that has waited too long is
+    // not read out late (it is still in the radio log)
+    const queued = Date.now();
+    const stale = () => Date.now() - queued > 25000;
+    const wait = () => (stale() ? Promise.reject(new Error('stale')) : new Promise((r) => setTimeout(r, pause)));
+    // built-in voices: start generating now, while earlier calls are still playing
+    const nv = this.settings.builtinVoices && this.neural?.voiceFor(unitKey || 'x', airline, lang);
+    if (nv) {
+      const rate = Number(this.settings.rate) || 1;
+      const voice = { ...nv, rate: nv.rate * rate };
+      const audio = this.neural.synth(text, voice);
+      audio.catch(() => {});
+      this.chain = this.chain.then(wait).then(() => audio)
+        .then((s) => (stale() ? true : this.fx.play(s.pcm, s.sampleRate, { pitch: voice.pitch, key: unitKey, range, volume: 1 - Math.min(0.25, (range || 0) / 80000) })))
+        .then((played) => (played ? null : this.say(text, unitKey, lang, airline, range)))
+        .catch((e) => (e?.message === 'stale' ? null : this.say(text, unitKey, lang, airline, range)));
+      return;
+    }
+    if (!this.supported) return;
+    this.chain = this.chain.then(wait).then(() => this.say(text, unitKey, lang, airline, range)).catch(() => {});
   }
 
   say(text, unitKey, lang, airline, range) {
+    if (!this.supported) return null;
     const u = new SpeechSynthesisUtterance(text);
     const voice = lang && lang !== 'en' ? this.voiceForLang(lang, unitKey) : this.voiceFor(unitKey, airline);
     u.volume = 1 - Math.min(0.25, (range || 0) / 80000); // a far aircraft is a little quieter
@@ -141,11 +162,16 @@ export class Speaker {
     u.pitch = (Number(this.settings.pitch) || 1) * shape.pitch;
     this.fx.enabled = this.settings.radioFx !== false;
     u.onstart = () => this.fx.keyUp({ key: unitKey, range });
-    u.onend = () => this.fx.keyDown();
-    u.onerror = () => this.fx.keyDown(true);
     // Safari can stay "paused" after the app was in the background
     if (window.speechSynthesis.paused) window.speechSynthesis.resume();
-    window.speechSynthesis.speak(u);
+    // finished when the sentence ends, so the next call waits for it
+    return new Promise((resolve) => {
+      const done = (quiet) => { clearTimeout(guard); this.fx.keyDown(quiet); resolve(); };
+      const guard = setTimeout(() => done(true), 4000 + text.length * 150);
+      u.onend = () => done(false);
+      u.onerror = () => done(true);
+      window.speechSynthesis.speak(u);
+    });
   }
 
   stop() {

@@ -5,7 +5,7 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,8 +31,18 @@ let page = null;
 
 async function main() {
   await sleep(800);
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
   page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+  // built-in voices: TOWER_TEST_VOICES is a folder with local copies of the
+  // speech runtime and voice model files (by file name); others are "offline"
+  const VOICES = process.env.TOWER_TEST_VOICES;
+  if (VOICES) {
+    await page.route(/^https:\/\//, (route) => {
+      const f = join(VOICES, route.request().url().split('/').pop());
+      if (existsSync(f)) return route.fulfill({ body: readFileSync(f), headers: { 'access-control-allow-origin': '*' } });
+      return route.fulfill({ status: 404, body: 'offline' });
+    });
+  }
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   // failed network loads (the unknown airport's 404, a blocked METAR fetch) are expected
@@ -81,6 +91,23 @@ async function main() {
   await page.waitForSelector('#start', { state: 'hidden' });
   console.log('DEMO:', await page.textContent('#log'));
   await page.click('.speed button[data-speed="4"]');
+
+  if (VOICES) {
+    // switch built-in voices on: what's available loads, pilots then talk with it through the radio filter
+    await page.evaluate(() => {
+      const fx = window.towerGame.speaker.fx;
+      const play = fx.play.bind(fx);
+      window.__plays = [];
+      fx.play = (pcm, rate, o) => { window.__plays.push(pcm.length / rate); return play(pcm, rate, o); };
+      document.querySelector('#set-builtin').click();
+    });
+    await page.waitForFunction(() => window.towerGame.speaker.neural.ready.size > 0, null, { timeout: 120000 });
+    await page.waitForFunction(() => window.__plays.length > 0, null, { timeout: 90000 });
+    await page.waitForFunction(() => /Missing/.test(document.querySelector('#builtin-status').textContent), null, { timeout: 60000 });
+    console.log('built-in voices:', await page.textContent('#builtin-status'), '| played', await page.evaluate(() => window.__plays.map((s) => `${s.toFixed(1)} s`)));
+    // off again: generating speech nonstop slows this test machine down
+    await page.evaluate(() => document.querySelector('#set-builtin').click());
+  }
 
   await page.waitForFunction(() => window.towerGame.game.world.ac.some((a) => a.req), null, { timeout: 60000 });
   const r = await page.evaluate(() => window.towerGame.game.world.ac.filter((a) => a.req)
@@ -156,12 +183,15 @@ async function main() {
   await page.waitForFunction(() => /Wind 090\/14/.test(document.querySelector('#wind').textContent));
 
   for (let i = 0; i < 40; i += 1) {
-    const strip = await page.$('.strip.req');
-    if (strip) {
-      await strip.click();
-      const btn = await page.$('#sel-buttons button.primary');
-      if (btn) await btn.click();
-    }
+    // strips are redrawn all the time: a click can miss one that just went away
+    try {
+      const strip = await page.$('.strip.req');
+      if (strip) {
+        await strip.click({ timeout: 2000 });
+        const btn = await page.$('#sel-buttons button.primary');
+        if (btn) await btn.click({ timeout: 2000 });
+      }
+    } catch { /* try again next round */ }
     await sleep(500);
   }
   console.log('stats:', JSON.stringify(await page.evaluate(() => ({ ...window.towerGame.game.world.stats, score: window.towerGame.game.world.score }))));
