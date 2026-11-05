@@ -296,6 +296,21 @@ python -m http.server 8000            # then open http://localhost:8000/
 
 Without the data build you can still play `DEMO`.
 
+## How close to real life
+
+- **Separation:** ICAO wake-turbulence minima on final (e.g. heavy behind heavy 4 NM, medium behind heavy 5 NM) and
+  between departures from one runway (2 to 3 minutes), plus radar minimum spacing. Departing with an arrival
+  inside 2 NM of the same runway costs points.
+- **Wind matters:** ground speed is airspeed minus the headwind, so arrivals close slower into a headwind and
+  take-off rolls are shorter. Pilots **refuse** a landing or take-off clearance on a runway with more than 10 kt of
+  tailwind or 30 kt of crosswind (*"unable, tailwind 14 knots is above our limit"*); choose the runways for the wind.
+- **Approach speed:** arrivals slow from about 25 kt above their approach speed at 10 NM to it by 4 NM, like a
+  real speed-controlled approach.
+- **Taxiing:** about 20 kt on straights, 10 kt in normal turns and 6 kt in sharp ones; pushbacks give way to
+  aircraft taxiing past; aircraft stop at the hold line of every runway they must cross until cleared.
+- **Not modelled:** ATIS, clearance delivery, separate ground and tower frequencies, intersection departures,
+  runway changes, gusts, wet runways and low-visibility procedures.
+
 ## Pilot voices
 
 ### Built-in voices: the same on every device

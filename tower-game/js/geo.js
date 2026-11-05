@@ -68,6 +68,24 @@ export class Path {
     this.length = this.cum[this.cum.length - 1];
   }
 
+  // the sharp turns of the path: [{s, angle}] (degrees, measured over 15 m either side of the corner so that a
+  // curve made of many small segments counts as one turn). Used to slow taxiing aircraft for corners.
+  turns() {
+    if (!this._turns) {
+      const out = [];
+      for (let i = 1; i < this.pts.length - 1; i += 1) {
+        const a = this.at(this.cum[i] - 15).dir;
+        const b = this.at(this.cum[i] + 15).dir;
+        const angle = (Math.acos(Math.max(-1, Math.min(1, dot(a, b)))) * 180) / Math.PI;
+        if (angle < 25) continue;
+        const last = out[out.length - 1];
+        if (last && this.cum[i] - last.s < 25) { if (angle > last.angle) { last.angle = angle; last.s = this.cum[i]; } } else out.push({ s: this.cum[i], angle });
+      }
+      this._turns = out;
+    }
+    return this._turns;
+  }
+
   // position and direction (unit vector) at distance s along the path
   at(s) {
     const c = Math.max(0, Math.min(this.length, s));

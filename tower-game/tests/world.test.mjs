@@ -213,7 +213,7 @@ test('a busy session runs without errors and keeps score', () => {
     for (const ac of w.ac) {
       if (ac.state === 'holding' && !ac.cleared.takeoff) {
         const st = w.runwayStatus(w.L.runways[0]);
-        if (!st.occupants.length && !((st.nextArrivalNm ?? 99) < 3)) w.command(ac.id, { type: 'takeoff' });
+        if (!st.occupants.length && !((st.nextArrivalNm ?? 99) < 4)) w.command(ac.id, { type: 'takeoff' });
       }
       const want = ac.req?.type;
       if (!want) continue;
@@ -303,4 +303,67 @@ test('a voiced route with "hold short of runway": the pilot reads it back and st
   assert.equal(r.ok, true, r.text);
   assert.match(r.text, /hold short of runway 09/);
   assert.match(r.text, new RegExp(`via ${plain.via[0]}`));
+});
+
+// ---- real-world mechanics
+test('wind: pilots refuse a runway with a strong tailwind or crosswind', () => {
+  const w = newWorld(); // runway 27, wind from 260 at 10 kt
+  w.wind = { available: true, wind_dir: 90, wind_kt: 18 }; // 18 kt straight down the runway: tailwind
+  const ac = w.spawnArrival(null, 6);
+  const r = w.command(ac.id, { type: 'land' });
+  assert.equal(r.ok, false);
+  assert.match(r.text, /tailwind 18 knots is above our limit/);
+  assert.ok(!ac.cleared.land);
+  w.wind = { available: true, wind_dir: 180, wind_kt: 35 }; // 35 kt across
+  assert.match(w.command(ac.id, { type: 'land' }).text, /crosswind 35 knots/);
+  w.wind = { available: true, wind_dir: 260, wind_kt: 12 };
+  assert.equal(w.command(ac.id, { type: 'land' }).ok, true);
+});
+
+test('wind: a headwind slows the closing speed on final, and the approach slows down towards the runway', () => {
+  const closing = (wind) => {
+    const w = newWorld();
+    w.wind = wind;
+    const ac = w.spawnArrival(null, 10);
+    const d0 = ac.dist;
+    w.step(10);
+    return (d0 - ac.dist) / 10;
+  };
+  const head = closing({ available: true, wind_dir: 270, wind_kt: 20 });
+  const tail = closing({ available: true, wind_dir: 90, wind_kt: 8 });
+  assert.ok(head < tail - 10, `headwind ${head.toFixed(1)} m/s vs tailwind ${tail.toFixed(1)} m/s`);
+  const w = newWorld();
+  const ac = w.spawnArrival(null, 10);
+  w.step(1);
+  const far = ac.v;
+  const near = (() => { ac.dist = 2 * 1852; w.step(1); return ac.v; })();
+  assert.ok(far > near + 8, 'faster at 10 NM than at 2 NM');
+});
+
+test('a departure cleared with an arrival inside 2 NM is penalised', () => {
+  const w = newWorld();
+  const dep = w.spawnDeparture();
+  dep.callAt = 0;
+  w.step(0.5);
+  w.command(dep.id, { type: 'push' });
+  assert.ok(runUntil(w, () => dep.state === 'pushed'));
+  w.command(dep.id, { type: 'taxi' });
+  assert.ok(runUntil(w, () => dep.state === 'holding'));
+  const arr = w.spawnArrival(null, 1.5);
+  const before = w.score;
+  w.command(dep.id, { type: 'takeoff' });
+  assert.ok(w.score <= before + SCORE.shortFinalDeparture, `score ${before} -> ${w.score}`);
+  assert.ok(w.drain().some((e) => e.kind === 'score' && /keep 2 NM/.test(e.reason)));
+  void arr;
+});
+
+test('taxiing aircraft slow down for corners', async () => {
+  const { Path } = await import('../js/geo.js');
+  const p = new Path([[0, 0], [100, 0], [100, 100]]);
+  assert.deepEqual(p.turns().map((t) => [t.s, Math.round(t.angle)]), [[100, 90]]);
+  const gentle = new Path([[0, 0], [100, 0], [200, 10]]);
+  assert.equal(gentle.turns().length, 0);
+  // a curve of small steps is one turn, not many
+  const curve = new Path([[0, 0], [50, 0], [60, 5], [67, 13], [70, 22], [70, 70]]);
+  assert.equal(curve.turns().length, 1);
 });

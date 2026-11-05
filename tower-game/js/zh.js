@@ -201,6 +201,8 @@ const REASONS = [
   [/^there is no stand (\S+)$/, (m) => `没有停机位${m[1]}`],
   [/^stand (\S+) is occupied$/, (m) => `停机位${m[1]}被占用`],
   [/^stand (\S+) is too small for us$/, (m) => `停机位${m[1]}太小`],
+  [/^tailwind (\d+) knots is above our limit$/, (m) => `顺风${Math.round(m[1] / 1.943844)}米每秒，超出限制`],
+  [/^crosswind (\d+) knots is above our limit$/, (m) => `侧风${Math.round(m[1] / 1.943844)}米每秒，超出限制`],
   [/^we are taxiing for runway (\S+)$/, (m) => `我们正滑向跑道${m[1]}`],
 ];
 export function zhReason(reason, table = {}) {

@@ -7,6 +7,7 @@ import { Formatter, render } from './lib/format.js';
 import { M_PER_NM, KT, Path, add, dist, dot, headingOf, mul, norm, sub, fromHeading, angleDiff } from './geo.js';
 import { endGeometry, onRunway, route, routeCrossings, routeNames, runwayForEnd, taxiwayNames, unknownVia } from './layout.js';
 import { zhDigits, zhReason, zhRunway, zhWind } from './zh.js';
+import { windComponents } from './lib/runway.js';
 
 // Generic aircraft performance (approach speed and rotation speed in knots).
 // Used when an airport has no traffic profile (data/traffic/<ICAO>.json).
@@ -37,16 +38,23 @@ export const TRAFFIC_LEVELS = {
 };
 
 const SPAWN_NM = 10;
-const GAME_SPACING_NM = 1; // added to the separation minimum so there is room to work
+const GAME_SPACING_NM = 1.5; // added to the separation minimum so there is room to work
 const TAXI_SPEED = 10; // m/s, about 20 kt
 const REPEAT_S = { takeoff: 120, cross: 90, default: 45 }; // pilots call again after this long
 const GROUND = new Set(['gate', 'pushback', 'pushed', 'taxi_out', 'holding', 'lineup', 'lined_up', 'takeoff',
   'rollout', 'vacated', 'taxi_in', 'parked']);
+// Real pilots refuse a runway whose wind is beyond what the aircraft is certified for (typical airliner limits)
+const MAX_TAILWIND_KT = 10;
+const MAX_CROSSWIND_KT = 30;
+// Arrivals inside this distance (NM) when a departure starts its roll on the same runway: not allowed in practice
+const MIN_DEP_ARRIVAL_NM = 2;
+// Taxi speed through a corner (m/s) by how sharp it is: about 10 kt in a normal turn, 6 kt in a hairpin
+const turnSpeed = (angle) => (angle < 45 ? 7 : angle < 90 ? 5 : angle < 135 ? 3.5 : 3);
 const MOVING_ON_TAXIWAYS = new Set(['pushback', 'taxi_out', 'taxi_in', 'lineup', 'rollout']);
 
 export const SCORE = {
   arrived: 50, departed: 50, departedNoHandoff: 15, goAroundNoClearance: -100, goAroundRunwayBusy: -150,
-  runwayConflict: -250, groundConflict: -200, repeatCall: -10, gridlock: -30, wake: -75,
+  runwayConflict: -250, groundConflict: -200, repeatCall: -10, gridlock: -30, wake: -75, shortFinalDeparture: -50,
 };
 
 export class World {
@@ -337,6 +345,24 @@ export class World {
     return mean * (0.4 + 0.6 * -Math.log(1 - this.rng() * 0.95));
   }
 
+  // ---------------------------------------------------------------- wind
+  // headwind (m/s, negative = tailwind) and crosswind (knots) on a runway end
+  windOn(end) {
+    const e = end && endGeometry(this.L, end);
+    const w = this.wind;
+    if (!e || !w || w.wind_dir == null || !w.wind_kt) return { head: 0, headKt: 0, crossKt: 0 };
+    const c = windComponents(e.heading, w.wind_dir, w.wind_kt);
+    return { head: c.headwind * KT, headKt: c.headwind, crossKt: Math.abs(c.crosswind) };
+  }
+
+  // a reason the pilot would give for refusing this runway, or null
+  windLimit(ac) {
+    const w = this.windOn(ac.end);
+    if (-w.headKt > MAX_TAILWIND_KT) return `tailwind ${Math.round(-w.headKt)} knots is above our limit`;
+    if (w.crossKt > MAX_CROSSWIND_KT) return `crosswind ${Math.round(w.crossKt)} knots is above our limit`;
+    return null;
+  }
+
   // ---------------------------------------------------------------- movement
   placeOnFinal(ac) {
     const e = endGeometry(this.L, ac.end);
@@ -430,11 +456,20 @@ export class World {
       if (dist(o.p, ac.p) > look + 40) continue;
       // a pushback swings its tail across the lane: keep more room
       const room = o.state === 'pushback' || ac.state === 'pushback' ? 55 : 32;
-      if (!pts.some((q) => dist(q, o.p) < room)) continue;
       const oDir = o.moveDir || (o.path ? o.path.at(o.ps).dir : null);
+      // Aircraft crossing or coming towards us are seen where they will be in a few seconds, not only where they
+      // are: two aircraft closing on the same junction must notice each other in time to stop.
+      const aim = [o.p];
+      if (o.path && o.v > 1 && oDir && dot(oDir, here) < 0.7) {
+        const ahead = Math.min(45, o.v * 4);
+        aim.push(o.path.at(o.ps + ahead / 2).p, o.path.at(o.ps + ahead).p);
+      }
+      if (!pts.some((q) => aim.some((r) => dist(q, r) < room))) continue;
       const headOn = oDir && dot(oDir, here) < -0.7;
       const theyYield = !headOn && o.blockedBy === ac.id && ac.id < o.id && dist(o.p, ac.p) > 45;
-      if (!theyYield) return o;
+      // a pushback waits for aircraft taxiing past (the tug driver gives way), whatever their numbers
+      const pushWaits = o.state === 'pushback' && ac.state !== 'pushback' && o.blockedBy === ac.id && dist(o.p, ac.p) > 20;
+      if (!theyYield && !pushWaits) return o;
     }
     return null;
   }
@@ -466,6 +501,15 @@ export class World {
     if (ac.exitAt !== undefined && ac.ps < ac.exitAt) {
       target = Math.min(target, Math.max(ac.exitSpeed, Math.sqrt(ac.exitSpeed ** 2 + 2 * ac.brake * (ac.exitAt - ac.ps))));
     } else if (ac.exitAt !== undefined) target = Math.min(target, ac.exitSpeed);
+    // slow for corners on taxiways, as pilots do (not on a landing roll, nor lining up)
+    if (ac.pathSpeed <= TAXI_SPEED && (ac.state === 'taxi_out' || ac.state === 'taxi_in' || ac.state === 'pushed')) {
+      for (const t of P.turns()) {
+        if (t.s < ac.ps - 6) continue;
+        const d = Math.max(0, t.s - ac.ps);
+        if (d > 80) break;
+        target = Math.min(target, Math.sqrt(turnSpeed(t.angle) ** 2 + 2 * decel * d));
+      }
+    }
     const blocker = MOVING_ON_TAXIWAYS.has(ac.state) && ac.state !== 'rollout' ? this.trafficAhead(ac, P, decel) : null;
     ac.blockedBy = blocker?.id || null;
     if (ac.hold || blocker) target = 0;
@@ -589,7 +633,12 @@ export class World {
   }
 
   updateFinal(ac, dt) {
-    ac.dist -= ac.v * dt;
+    // Pilots slow down on the way in: about 25 kt above the approach speed at 10 NM, down to it by 4 NM. What
+    // counts for the spacing is the ground speed, so a headwind slows the closing speed (and a tailwind speeds it).
+    const nm = ac.dist / M_PER_NM;
+    ac.v = (ac.type.vapp + Math.max(0, Math.min(25, (nm - 4) * 4))) * KT;
+    const gs = Math.max(30, ac.v - this.windOn(ac.end).head * 0.8);
+    ac.dist -= gs * dt;
     this.placeOnFinal(ac);
     const e = endGeometry(this.L, ac.end);
     if (!ac.cleared.land) {
@@ -610,6 +659,7 @@ export class World {
     const e = endGeometry(this.L, ac.end);
     ac.state = 'rollout';
     ac.alt = 0;
+    ac.v = Math.max(35, ac.v - this.windOn(ac.end).head * 0.8); // touchdown ground speed
     // first exit the aircraft can make with normal braking (about 2 m/s2) at turn-off speed
     const exitSpeed = 15; // m/s, about 30 kt
     ac.brake = 2.0;
@@ -648,7 +698,18 @@ export class World {
         || (o.state === 'climb' && o.alt < 400 && onRunway(e.runway, o.p, 200))));
   }
 
+  // an arrival on short final of the same runway when a departure is cleared or rolls: a controller error
+  checkDepartureSeparation(ac) {
+    if (ac.flags.sepChecked) return;
+    const rw = runwayForEnd(this.L, ac.end);
+    const near = this.ac.find((o) => o.state === 'final' && runwayForEnd(this.L, o.end) === rw && o.dist < MIN_DEP_ARRIVAL_NM * M_PER_NM);
+    if (!near) return;
+    ac.flags.sepChecked = true;
+    this.points(SCORE.shortFinalDeparture, `${ac.callsign} cleared for take-off with ${near.callsign} ${(near.dist / M_PER_NM).toFixed(1)} NM from the runway (keep ${MIN_DEP_ARRIVAL_NM} NM)`, ac);
+  }
+
   startRoll(ac) {
+    this.checkDepartureSeparation(ac);
     ac.state = 'takeoff';
     // wake turbulence: too soon behind a heavier departure from the same runway?
     const rw = runwayForEnd(this.L, ac.end)?.id;
@@ -663,8 +724,8 @@ export class World {
 
   updateTakeoff(ac, dt) {
     const e = endGeometry(this.L, ac.end);
-    ac.v += 2.2 * dt;
-    ac.p = add(ac.p, mul(e.dir, ac.v * dt));
+    ac.v += 2.2 * dt; // airspeed; into a headwind the aircraft covers less ground before it reaches rotation speed
+    ac.p = add(ac.p, mul(e.dir, Math.max(0, ac.v - this.windOn(ac.end).head * 0.8) * dt));
     ac.hdg = e.heading;
     if (ac.v >= ac.type.vr * KT) { ac.state = 'climb'; ac.climbFrom = [...e.thr]; }
     return null;
@@ -783,6 +844,7 @@ export class World {
       case 'land':
         if (s !== 'final') return this.unable(ac, 'we are not on final');
         if (runwayArg && runwayArg !== ac.end) return this.unable(ac, `we are lined up for runway ${ac.end}`);
+        { const lim = this.windLimit(ac); if (lim) return this.unable(ac, lim); }
         ac.cleared.land = true;
         return done('land');
       case 'continue':
@@ -843,8 +905,9 @@ export class World {
       case 'takeoff': {
         if (!['taxi_out', 'holding', 'lineup', 'lined_up'].includes(s)) return this.unable(ac, 'we are not at the runway');
         if (runwayArg && runwayArg !== ac.end) return this.unable(ac, `we are taxiing for runway ${ac.end}`);
+        if (cmd.type === 'takeoff') { const lim = this.windLimit(ac); if (lim) return this.unable(ac, lim); }
         ac.cleared.lineup = true;
-        if (cmd.type === 'takeoff') ac.cleared.takeoff = true;
+        if (cmd.type === 'takeoff') { ac.cleared.takeoff = true; this.checkDepartureSeparation(ac); }
         if (s === 'holding') this.startLineup(ac);
         return done(cmd.type === 'takeoff' ? 'takeoff' : 'lineup');
       }
