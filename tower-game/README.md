@@ -376,6 +376,20 @@ TOWER_TEST_VOICES=<folder> node tools/e2e.mjs   # also tests built-in voices wit
 | `js/weather.js` | live METAR or generated wind |
 | `js/lib/` | small helpers: text/speech formatting, number words, runway choice, speech output and input, radio sounds, built-in voices (`neural.js`, `neural-worker.js`) |
 
+## Speed and heat
+
+A phone that redraws a big map 60 times a second gets hot. Daxing's map has about 15,000 taxiway segments, and
+redrawing it each frame cost about 80 ms in a test, so the game was busy all the time. Now:
+- The map under the aircraft (runways, taxiways, labels, stands) is drawn once into a hidden picture and copied
+  each frame; it is redrawn only when you zoom, pan, change the theme or chart style, or change the runways.
+  That frame went from about 80 ms to under 1 ms in the test. The cached picture is checked to be identical to a
+  full redraw (`node tools/perf-check.mjs`; `node tools/perf.mjs ZBAD` measures a frame).
+- The picture is drawn 30 times a second (10 while paused); the simulation still runs on real time. The side
+  panel updates a few times a second.
+- The 3D views draw at most 1.5 pixels per screen point, not 2.
+- **Built-in voices** (Settings) use much more battery and heat than the device's own voices, because the
+  speech is generated on the device. If the device still gets warm, turn them off.
+
 ## Limitations
 
 - **Aircraft:** arrivals fly a straight-in final with no radar vectors and no wake

@@ -29,6 +29,21 @@ const LIGHT = {
 };
 let C = DARK;
 
+// the layout's segments sorted by how they are drawn (done once per layout)
+function edgeGroups(L) {
+  if (!L._edgeGroups) {
+    const groups = { twy: [], lane: [], stand: [], line: [], standLine: [] };
+    for (const e of L.graph.edges) {
+      if (e.kind === 'runway') continue;
+      if (e.kind === 'stand') { groups.stand.push(e); groups.standLine.push(e); continue; }
+      (e.kind === 'lane' ? groups.lane : groups.twy).push(e);
+      groups.line.push(e);
+    }
+    L._edgeGroups = groups;
+  }
+  return L._edgeGroups;
+}
+
 const SHORT = {
   final: 'FINAL', rollout: 'LAND', vacated: 'VACATED', taxi_in: 'TAXI IN', parked: 'PARKED',
   gate: 'STAND', pushback: 'PUSH', pushed: 'READY TAXI', taxi_out: 'TAXI', holding: 'HOLDING',
@@ -53,6 +68,7 @@ export class Renderer {
     this.cv.width = Math.round(r.width * dpr);
     this.cv.height = Math.round(r.height * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.cache = null;
   }
 
   // fit the whole airport (and a bit of the final approach) on screen
@@ -165,9 +181,8 @@ export class Renderer {
     c.fillText(str, s[0] + dx, s[1] + dy);
   }
 
-  draw(world, { selectedId = null, now = 0, plan = null } = {}) {
-    C = this.chart ? CHART : (this.theme === 'light' ? LIGHT : DARK);
-    this.metric = !!world.metric;
+  // everything that does not move: the background, runways, taxiways, labels and stands
+  drawBase(world) {
     const c = this.ctx;
     const L = world.L;
     const s = this.view.s;
@@ -191,17 +206,14 @@ export class Renderer {
     for (const ring of L.buildings || []) this.poly(ring, C.building);
     for (const ring of L.real ? L.terminals : [L.terminal].filter(Boolean)) this.poly(ring, C.terminal);
 
-    // taxiways under runways
+    // taxiways under runways: one stroke per kind (the layout has thousands of segments)
     const g = L.graph;
-    for (const e of g.edges) {
-      if (e.kind === 'runway') continue;
-      const w = { stand: 8, lane: 15 }[e.kind] || 23;
-      this.line(g.nodes[e.a].p, g.nodes[e.b].p, Math.max(2, w * s), e.kind === 'lane' ? C.lane : C.twy);
-    }
-    for (const e of g.edges) {
-      if (e.kind === 'runway' || (e.kind === 'stand' && s < 0.3)) continue;
-      this.line(g.nodes[e.a].p, g.nodes[e.b].p, 1, C.twyLine);
-    }
+    const groups = edgeGroups(L);
+    this.strokeEdges(g, groups.twy, Math.max(2, 23 * s), C.twy);
+    this.strokeEdges(g, groups.lane, Math.max(2, 15 * s), C.lane);
+    this.strokeEdges(g, groups.stand, Math.max(2, 8 * s), C.twy);
+    this.strokeEdges(g, groups.line, 1, C.twyLine);
+    if (s >= 0.3) this.strokeEdges(g, groups.standLine, 1, C.twyLine);
 
     for (const r of L.runways) {
       const n = mul(perp(r.dir), r.width / 2);
@@ -250,6 +262,72 @@ export class Renderer {
       }
       if (s > 0.3) for (const gate of L.gates) this.text(gate.id, g.nodes[gate.node].p, { color: C.muted, size: 10, dy: 14 });
     }
+  }
+
+  // The map under the aircraft is drawn once into a hidden canvas and copied
+  // every frame; it is drawn again only when the view, theme or runways change
+  // (while panning or zooming the old picture is moved and scaled, then
+  // sharpened when the gesture settles).
+  paintBase(world) {
+    const v = this.view;
+    const c = this.ctx;
+    const key = `${this.chart ? 'chart' : this.theme}|${this.w}x${this.h}|${world.arrEnd}`;
+    const vk = `${v.cx}|${v.cy}|${v.s}`;
+    const now = performance.now();
+    if (vk !== this.lastViewKey) { this.lastViewKey = vk; this.viewChangedAt = now; }
+    let cache = this.cache;
+    const sameWorld = cache && cache.L === world.L && cache.key === key;
+    const k = sameWorld ? v.s / cache.s : 0;
+    const exact = sameWorld && cache.vk === vk;
+    if (!exact && (!sameWorld || now - this.viewChangedAt > 120 || k < 0.6 || k > 1.7)) {
+      if (!this.off) this.off = document.createElement('canvas');
+      this.off.width = this.cv.width;
+      this.off.height = this.cv.height;
+      const octx = this.off.getContext('2d');
+      const dpr = this.cv.width / this.w;
+      octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.ctx = octx;
+      this.drawBase(world);
+      this.ctx = c;
+      cache = this.cache = { L: world.L, key, vk, cx: v.cx, cy: v.cy, s: v.s };
+    } else if (!exact) {
+      // stale picture, moved to where it belongs
+      c.fillStyle = C.bg;
+      c.fillRect(0, 0, this.w, this.h);
+      const x0 = this.w / 2 - (this.w / 2) * k + (cache.cx - v.cx) * v.s;
+      const y0 = this.h / 2 - (this.h / 2) * k - (cache.cy - v.cy) * v.s;
+      c.drawImage(this.off, 0, 0, this.off.width, this.off.height, x0, y0, this.w * k, this.h * k);
+      return;
+    }
+    c.drawImage(this.off, 0, 0, this.off.width, this.off.height, 0, 0, this.w, this.h);
+  }
+
+  // one path for many segments, skipping those off screen
+  strokeEdges(g, edges, width, color) {
+    const c = this.ctx;
+    const m = width + 4;
+    c.beginPath();
+    for (const e of edges) {
+      const p = this.toScreen(g.nodes[e.a].p);
+      const q = this.toScreen(g.nodes[e.b].p);
+      if ((p[0] < -m && q[0] < -m) || (p[0] > this.w + m && q[0] > this.w + m) || (p[1] < -m && q[1] < -m) || (p[1] > this.h + m && q[1] > this.h + m)) continue;
+      c.moveTo(p[0], p[1]);
+      c.lineTo(q[0], q[1]);
+    }
+    c.lineWidth = width;
+    c.strokeStyle = color;
+    c.lineJoin = 'round';
+    c.stroke();
+  }
+
+  draw(world, { selectedId = null, now = 0, plan = null } = {}) {
+    C = this.chart ? CHART : (this.theme === 'light' ? LIGHT : DARK);
+    this.metric = !!world.metric;
+    const c = this.ctx;
+    const L = world.L;
+    const s = this.view.s;
+    const g = L.graph;
+    this.paintBase(world);
 
     // selected aircraft route
     const sel = world.ac.find((a) => a.id === selectedId);

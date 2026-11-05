@@ -1,0 +1,52 @@
+// How heavy is one frame of the map? node tools/perf.mjs [ICAO]  (ZBAD has 15,000 taxiway segments)
+import { createRequire } from 'node:module';
+import { spawn } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { buildSite } from './build_site.mjs';
+const require = createRequire(import.meta.url);
+const { chromium } = require('playwright');
+const SITE = mkdtempSync(join(tmpdir(), 'perf-site-'));
+buildSite(SITE);
+const port = 25000 + Math.floor(Math.random() * 900);
+const server = spawn('python3', ['-m', 'http.server', String(port), '--bind', '127.0.0.1', '--directory', SITE], { stdio: 'ignore' });
+await new Promise((r) => setTimeout(r, 700));
+const browser = await chromium.launch();
+const page = await (await browser.newContext({ viewport: { width: 430, height: 900 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true })).newPage();
+await page.goto(`http://127.0.0.1:${port}/`);
+const code = process.argv[2] || 'ZBAD';
+await page.click(`.featured button[data-code="${code}"]`);
+await page.click('#start-form button[type=submit]');
+await page.waitForSelector('#rwy-step:not([hidden])');
+await page.click('#rwy-begin');
+await page.waitForSelector('#start', { state: 'hidden' });
+await page.click('.speed button[data-speed="2"]');
+await new Promise((r) => setTimeout(r, 3000));
+const r = await page.evaluate(async () => {
+  const { game, renderer } = window.towerGame;
+  const w = game.world;
+  const g = w.L.graph;
+  const out = { edges: g.edges.length, nodes: g.nodes.length, aircraft: w.ac.length, canvas: [renderer.cv.width, renderer.cv.height] };
+  const time = (fn, n = 30) => { const t0 = performance.now(); for (let i = 0; i < n; i += 1) fn(); return +((performance.now() - t0) / n).toFixed(2); };
+  const now = performance.now();
+  out.drawFit = time(() => renderer.draw(w, { selectedId: null, now }));
+  renderer.view.s *= 3;
+  out.drawZoomed = time(() => renderer.draw(w, { selectedId: null, now }));
+  renderer.view.s /= 3;
+  out.stepMs = time(() => w.step(0.2));
+  // real frame rate and busy time over 3 seconds
+  let frames = 0; let busy = 0;
+  await new Promise((resolve) => {
+    const t0 = performance.now();
+    const orig = renderer.draw.bind(renderer);
+    renderer.draw = (...a) => { const s = performance.now(); orig(...a); busy += performance.now() - s; frames += 1; };
+    setTimeout(() => { renderer.draw = orig; resolve(); }, 3000);
+  });
+  out.fps = +(frames / 3).toFixed(1);
+  out.drawBusyPercent = +(busy / 30).toFixed(1);
+  return out;
+});
+console.log(code, JSON.stringify(r));
+await browser.close();
+server.kill();

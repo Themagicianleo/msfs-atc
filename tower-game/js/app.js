@@ -815,6 +815,14 @@ $('#set-lang').value = settings.lang;
 $('#set-lang').addEventListener('change', (e) => { settings.lang = listener.lang = e.target.value; saveSettings(); });
 
 // ---------------------------------------------------------------- main loop
+// A phone that redraws 60 times a second gets hot, and aircraft move slowly: the
+// simulation runs on real time, but the picture is drawn 30 times a second
+// (10 while paused) and the panel text a few times a second.
+const DRAW_MS = 1000 / 30;
+const PAUSED_DRAW_MS = 100;
+const PANEL_MS = 150;
+let lastDraw = 0;
+let lastPanel = 0;
 function frame(now) {
   const w = game.world;
   if (w) {
@@ -825,14 +833,20 @@ function frame(now) {
       dt -= step;
     }
     handleEvents(w.drain());
-    if (game.plan && now - (game.plan.at || 0) > 1000) updatePlan();
-    if (game.view === 'map') renderer.draw(w, { selectedId: game.selected, now, plan: game.plan?.result });
-    else game.scene3d.draw(w, { selectedId: game.selected, now, theme: renderer.theme });
-    renderPanel();
-    $('#score').textContent = w.score;
-    const t = Math.floor(w.t);
-    $('#clock').textContent = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
-    $('#score').title = `Arrived ${w.stats.arrived}, departed ${w.stats.departed}, go-arounds ${w.stats.goArounds}, conflicts ${w.stats.conflicts}`;
+    if (now - lastDraw >= (game.speed === 0 ? PAUSED_DRAW_MS : DRAW_MS) - 3) {
+      lastDraw = now;
+      if (game.plan && now - (game.plan.at || 0) > 1000) updatePlan();
+      if (game.view === 'map') renderer.draw(w, { selectedId: game.selected, now, plan: game.plan?.result });
+      else game.scene3d.draw(w, { selectedId: game.selected, now, theme: renderer.theme });
+    }
+    if (now - lastPanel >= PANEL_MS) {
+      lastPanel = now;
+      renderPanel();
+      $('#score').textContent = w.score;
+      const t = Math.floor(w.t);
+      $('#clock').textContent = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+      $('#score').title = `Arrived ${w.stats.arrived}, departed ${w.stats.departed}, go-arounds ${w.stats.goArounds}, conflicts ${w.stats.conflicts}`;
+    }
   }
   game.last = now;
   requestAnimationFrame(frame);

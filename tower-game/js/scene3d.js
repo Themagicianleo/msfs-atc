@@ -273,7 +273,7 @@ export class Scene3D {
   resize() {
     const r = this.wrap.getBoundingClientRect();
     this.w = r.width; this.h = r.height;
-    this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); // sharp enough, and a third less to draw than 2x
     this.gl.setSize(r.width, r.height, false);
     this.camera.aspect = r.width / Math.max(1, r.height);
     this.camera.updateProjectionMatrix();
