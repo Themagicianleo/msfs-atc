@@ -168,3 +168,38 @@ test('Chinese voice: all guesses of the recogniser are kept, in order', async ()
   l.final = '四川八九拐五';
   assert.deepEqual(l.alternatives(), ['四川八九拐五', '死川八九拐舞']);
 });
+
+// ---- taxi paths: the route the tower gives, as in real life
+test('taxi routes: ICAO letters, several pieces, hold short', async () => {
+  const { parseInstruction, parseInstructionZh, understandBest, fixHeard } = await import('../js/commands.js');
+  const ZH = JSON.parse(readFileSync(new URL('../data/phraseology-zh.json', import.meta.url))).commands;
+  const known = new Set(['A', 'B', 'B1', 'C', 'M', 'WA', 'X']);
+  const en = (t) => parseInstruction(t, R, known);
+  assert.deepEqual(en('taxi to holding point runway 27 via alpha, bravo one, hold short of runway 15'),
+    { type: 'taxi', runway: '27', via: ['A', 'B1'], holdShort: ['15'] });
+  assert.deepEqual(en('taxi via taxiway whiskey alpha, then bravo, cross runway 15'), { type: 'taxi', via: ['WA', 'B'], cross: ['15'] });
+  assert.deepEqual(en('taxi to holding point runway 27 via alpha, cross runway 15, then via mike'),
+    { type: 'taxi', runway: '27', via: ['A', 'M'], cross: ['15'] });
+  assert.deepEqual(en('taxi to stand 12 via x-ray and charley to the gate'), { type: 'taxi', gate: '12', via: ['X', 'C'] });
+  assert.deepEqual(en('taxi to stand 12 via X ray'), { type: 'taxi', gate: '12', via: ['X'] });
+  // a route that ends at a stop is still a taxi instruction
+  assert.deepEqual(en('via alpha bravo hold short of runway 15'), { type: 'taxi', via: ['A', 'B'], holdShort: ['15'] });
+  assert.deepEqual(en('hold short runway 15'), { type: 'hold_short', runway: '15' });
+  // what the recogniser writes for the code words and the digits
+  assert.deepEqual(en('taxi to holding point runway too seven left via alfa charley one').via, ['A', 'C1']);
+  assert.equal(fixHeard('cleared to land runway to seven'), 'cleared to land runway 2 seven');
+  assert.equal(fixHeard('cleared to land runway 27 for departure'), 'cleared to land runway 27 for departure');
+  assert.equal(en('runway for left cleared for take off').runway, '04L');
+  // Chinese sentence, English code words
+  const zh = (t) => parseInstructionZh(t, ZH, known);
+  assert.deepEqual(zh('经Alpha Bravo，在跑道15外等待'), { type: 'taxi', via: ['A', 'B'], holdShort: ['15'] });
+  assert.deepEqual(zh('滑行道阿尔法，然后布拉沃一，滑到跑道三五右外等待点'), { type: 'taxi', runway: '35R', via: ['A', 'B1'] });
+  assert.deepEqual(zh('经阿尔法 布拉沃，穿越跑道15，再经查理滑到跑道27外等待点'), { type: 'taxi', runway: '27', via: ['A', 'B', 'C'], cross: ['15'] });
+  assert.deepEqual(zh('滑到跑道27外等待点，经A，在跑道15左外等待'), { type: 'taxi', runway: '27', via: ['A'], holdShort: ['15L'] });
+  assert.deepEqual(zh('经X-ray，Charlie滑到停机位201'), { type: 'taxi', gate: '201', via: ['X', 'C'] });
+  assert.deepEqual(zh('经A滑到跑道17右外等待'), { type: 'taxi', runway: '17R', via: ['A'] });
+  // the guess whose taxiways exist wins over a guess that is only as complete
+  const ac = [{ id: 1, code: 'BAW', tel: 'Speedbird', num: '123', callsign: 'BAW123' }];
+  const best = understandBest(['Speedbird 123 taxi via alpha zulu', 'Speedbird 123 taxi via alpha bravo'], ac, R, null, known);
+  assert.deepEqual(best.cmd.via, ['A', 'B']);
+});

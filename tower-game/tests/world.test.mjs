@@ -290,3 +290,17 @@ test('the destination of aircraft on the ground: holding point for departures, s
   assert.deepEqual(destinationPoint(w.L, taxiDestination(arr)), w.L.graph.nodes[w.L.gates[0].node].p);
   assert.equal(taxiDestination({ ...arr, state: 'final' }), null);
 });
+
+test('a voiced route with "hold short of runway": the pilot reads it back and stops there', () => {
+  const w = newWorld();
+  const ac = w.spawnDeparture();
+  ac.callAt = 0;
+  w.step(0.5);
+  w.command(ac.id, { type: 'push' });
+  assert.ok(runUntil(w, () => ac.state === 'pushed'));
+  const plain = w.planTaxi(ac, {});
+  const r = w.command(ac.id, { type: 'taxi', via: plain.via.slice(0, 1), holdShort: ['09'] });
+  assert.equal(r.ok, true, r.text);
+  assert.match(r.text, /hold short of runway 09/);
+  assert.match(r.text, new RegExp(`via ${plain.via[0]}`));
+});

@@ -45,14 +45,26 @@ lets you pick them:
 - **Talk:** tap **Start talking**, say the callsign and the instruction, then tap **Stop and send**
   (it also sends by itself when you pause). On a PC you can hold the **space bar** instead. With an
   aircraft selected you can skip the callsign.
+- **Like a real radio:** while you talk, every other aircraft is muted (whoever was speaking is cut off; it is
+  still in the radio log, tap it to hear it again). Pilots who call meanwhile wait, and are heard when you let go,
+  after the readback to your instruction.
+- **Faster and more accurate listening:** the recogniser is told what to expect (the callsigns on frequency,
+  the ICAO alphabet, this airport's taxiway names and the usual phrases; Chrome and Edge use this). Once what you
+  said is a whole instruction and has stopped changing, it is sent without waiting for the browser's own
+  end-of-speech delay (a taxi route gets a little longer, since controllers pause between taxiways).
 - **Instructions understood:**
   - *Speedbird 123, runway 27, cleared to land* · *continue approach* · *go around*
   - *pushback approved [, expect runway 27R for departure]*
-  - *taxi to holding point runway 27 [via alpha] [cross runway 15]* · *taxi to stand 12 [via bravo]*
+  - **Taxi routes, as in real life:** *taxi to holding point runway 27 via alpha, bravo one, cross runway 15, hold
+    short of runway 09* · *taxi to stand 12 via whiskey alpha, then bravo* · *taxi via alpha, cross runway 15,
+    then via mike* (the route can come in pieces; *taxiway* is optional). *Hold short of runway 15* inside a
+    route stops the aircraft there until you clear it to cross.
   - *hold position* · *continue taxi* · *cross runway 15* · *hold short runway 27*
   - *runway 27, line up and wait* · *cleared for take-off* · *contact departure, good day*
 
-  Numbers work as "two seven" or "twenty seven", letters as "alpha" or "a".
+  Numbers work as "two seven" or "twenty seven", letters as "alpha" or "a". The whole ICAO alphabet is understood
+  with the usual recogniser spellings (alfa, juliett, x-ray, whisky, charley...), and words heard for a digit
+  ("runway **to** seven left", "stand one **for**") are fixed when they stand next to a number.
 - **Choose the taxi route on the map:** select an aircraft that is ready to taxi (or taxiing) and tap
   **Choose route on map**.
   - Tap points on the taxiways in the order it should use them. The route is drawn in yellow, and the bar
@@ -202,6 +214,9 @@ matching:
 - **Taxiway letters** can be said as Latin letters (A B2), as the Chinese letter sounds (诶 比 西 迪 伊 ... 贼),
   as code words (阿尔法 布拉沃 查理 ... 祖鲁, or English alpha bravo), or run together (AB2 is split into the
   airport's real taxiway names). 「经诶、比二、西幺滑到跑道17右外等待点」 is *via A, B2, C1*.
+  The ICAO alphabet is also understood **inside Chinese sentences** (「经 Alpha Bravo 滑到跑道17右外等待点」,
+  「滑行道阿尔法，然后布拉沃一」). A route can come in pieces (「经A，穿越跑道15，再经查理...」) and can include a
+  stop: 「经A、B，在跑道15外等待」.
 - **Several guesses:** the recogniser gives up to five guesses for what you said; the game tries them in order
   and uses the first that is a whole instruction (an aircraft and a command). This also helps in English.
 - **When it still fails**, the radio log shows how the game read your words (「听成：四川8975 …」), so you can

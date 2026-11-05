@@ -126,20 +126,7 @@
     </section>
 
     <aside class="side">
-      <section id="selected" class="card sel-card">
-        <div class="card-head"><h2 id="sel-cs">No aircraft selected</h2><span id="sel-state" class="muted small"></span></div>
-        <div class="card-body">
-          <div id="sel-req" class="sel-req"></div>
-          <div id="sel-buttons" class="cmds"></div>
-        </div>
-      </section>
-
-      <form id="cmd-form" class="cmd-row">
-        <input id="cmd-input" class="input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
-               placeholder="BAW123 cleared to land runway 27 · 南方3101 可以落地" aria-label="Type an instruction">
-        <button class="btn btn-primary" type="submit">Send</button>
-      </form>
-
+      <div class="talk">
       <div class="ptt-row">
         <button id="ptt" class="ptt hero-tile" type="button"><span id="ptt-label">Start talking</span><span id="ptt-interim" class="interim"></span></button>
         <span id="mic-lang" class="seg mic-lang" role="group" aria-label="Microphone language" hidden>
@@ -148,15 +135,34 @@
       </div>
       <p id="voice-status" class="muted small"></p>
 
-      <section class="card">
+      <form id="cmd-form" class="cmd-row">
+        <input id="cmd-input" class="input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+               placeholder="BAW123 taxi runway 27 via alpha bravo · 南方3101 经A B滑到跑道17右外等待点" aria-label="Type an instruction">
+        <button class="btn btn-primary" type="submit">Send</button>
+      </form>
+
+      </div>
+
+      <section id="selected" class="card sel-card">
+        <div class="card-head"><h2 id="sel-cs">No aircraft selected</h2><span id="sel-state" class="muted small"></span></div>
+        <div class="card-body">
+          <div id="sel-req" class="sel-req"></div>
+          <div id="sel-buttons" class="cmds"></div>
+        </div>
+      </section>
+
+      <div class="side-lists">
+      <section class="card" id="traffic-card">
         <div class="card-head"><h2>Traffic</h2></div>
         <div class="card-body"><div id="strips" class="strips"></div></div>
       </section>
 
-      <section class="card">
+      <section class="card" id="radio-card">
         <div class="card-head"><h2>Radio</h2></div>
         <div class="card-body"><div id="log" class="log" aria-live="polite"></div></div>
       </section>
+
+      </div>
 
       <details class="card settings">
         <summary class="card-head"><h2>Settings and help</h2></summary>
@@ -208,9 +214,9 @@
           </form>
           <div class="help small">
             <p>Say the callsign, then the instruction:</p>
-            <p><i>Speedbird 123, runway 27, cleared to land</i> · <i>pushback approved, expect runway 28R</i> · <i>taxi to holding point runway 28R via alpha, bravo</i> · <i>taxi to stand 12</i> · <i>cross runway 01L</i> · <i>hold short runway 27</i> · <i>hold position</i> · <i>continue taxi</i> · <i>line up and wait</i> · <i>cleared for take-off</i> · <i>contact departure</i> · <i>go around</i></p>
-            <p>大兴（中国航空公司用中文）：<i>南方三幺洞幺，跑道三五右，可以落地</i> · <i>可以推出，预计跑道17右起飞</i> · <i>经A、B2滑到跑道17右外等待点</i> (字母可以说 诶 比 西，或 阿尔法 布拉沃) · <i>滑到停机位201</i> · <i>穿越跑道17左</i> · <i>原地等待</i> · <i>进跑道等待</i> · <i>可以起飞</i> · <i>联系离场，再见</i></p>
-            <p>Tap <b>Start talking</b>, speak, then tap <b>Stop and send</b> (it also sends by itself after a pause). Tap an aircraft and you can leave out the callsign. On a PC you can also hold the space bar.</p>
+            <p><i>Speedbird 123, runway 27, cleared to land</i> · <i>pushback approved, expect runway 28R</i> · <i>taxi to holding point runway 28R via alpha, bravo, cross runway 01L, hold short of runway 28L</i> · <i>taxi to stand 12</i> · <i>cross runway 01L</i> · <i>hold short runway 27</i> · <i>hold position</i> · <i>continue taxi</i> · <i>line up and wait</i> · <i>cleared for take-off</i> · <i>contact departure</i> · <i>go around</i></p>
+            <p>大兴（中国航空公司用中文）：<i>南方三幺洞幺，跑道三五右，可以落地</i> · <i>可以推出，预计跑道17右起飞</i> · <i>经A、B2滑到跑道17右外等待点</i> (字母可以说 诶 比 西，或 阿尔法 布拉沃，也可以直接说 Alpha Bravo) · <i>滑到停机位201</i> · <i>穿越跑道17左</i> · <i>原地等待</i> · <i>进跑道等待</i> · <i>可以起飞</i> · <i>联系离场，再见</i></p>
+            <p>Tap <b>Start talking</b>, speak, then tap <b>Stop and send</b> (it also sends by itself after a pause). Like a real radio, the other aircraft are muted while you talk and are heard again when you let go. Tap an aircraft and you can leave out the callsign. On a PC you can also hold the space bar.</p>
           </div>
           <p id="voice-diag" class="muted small"></p>
         </div>

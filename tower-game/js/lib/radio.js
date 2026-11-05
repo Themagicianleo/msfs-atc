@@ -179,10 +179,19 @@ export class RadioFx {
     } else src.connect(out);
     out.connect(ctx.destination);
     return new Promise((resolve) => {
-      src.onended = () => { this.keyDown(); resolve(true); };
+      this.current = src;
+      src.onended = () => { if (this.current === src) this.current = null; this.keyDown(); resolve(true); };
       this.keyUp({ key, range });
       src.start(ctx.currentTime + 0.06);
     });
+  }
+
+  // stop the speech that is playing now (the controller keyed the microphone); its promise still resolves
+  cut() {
+    const src = this.current;
+    this.current = null;
+    if (!src) return;
+    try { src.stop(); } catch { /* already finished */ }
   }
 
   // the controller's own transmit click

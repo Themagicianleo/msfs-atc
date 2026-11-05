@@ -78,12 +78,15 @@ export function zhCanon(s) {
 
 // taxiway letters: how they are said in Chinese, and as code words
 const CODE_WORDS = [
-  ['A', 'ALPHA|ALFA|阿尔法|阿尔发|阿法'], ['B', 'BRAVO|布拉沃|布拉伏'], ['C', 'CHARLIE|查理|恰理'], ['D', 'DELTA|德尔塔|戴尔塔|德而塔'],
-  ['E', 'ECHO|艾科|艾可|埃科|回声'], ['F', 'FOXTROT|福克斯特罗特|福克斯特|福克斯'], ['G', 'GOLF|高尔夫'], ['H', 'HOTEL|赫特尔|荷特尔|酒店'],
-  ['I', 'INDIA|因的亚|印度'], ['J', 'JULIET|JULIETT|朱丽叶|茱莉叶'], ['K', 'KILO|基洛|凯罗|公斤'], ['L', 'LIMA|利马|里马'], ['M', 'MIKE|迈克'],
-  ['N', 'NOVEMBER|诺维姆博|十一月'], ['O', 'OSCAR|奥斯卡'], ['P', 'PAPA|帕帕|爸爸'], ['Q', 'QUEBEC|魁北克|奎贝克'], ['R', 'ROMEO|罗密欧|罗米欧'],
-  ['S', 'SIERRA|塞拉|谢拉|赛拉'], ['T', 'TANGO|探戈'], ['U', 'UNIFORM|优尼佛姆|尤尼福姆|制服'], ['V', 'VICTOR|维克多'], ['W', 'WHISKEY|WHISKY|威士忌'],
-  ['X', 'XRAY|X-RAY|艾克斯雷'], ['Y', 'YANKEE|洋基|扬基'], ['Z', 'ZULU|祖鲁|祖路'],
+  ['A', 'ALPHA|ALFA|ALFAH|AL FA|阿尔法|阿尔发|阿法|阿尔夫|啊尔法|爱尔法'], ['B', 'BRAVO|BREVO|BRAVA|布拉沃|布拉伏|布拉窝|不拉我|波拉沃'],
+  ['C', 'CHARLIE|CHARLEY|CHARLY|查理|恰理|察理|查里'], ['D', 'DELTA|德尔塔|戴尔塔|德而塔|得尔塔|代尔塔'],
+  ['E', 'ECHO|ECKO|艾科|艾可|埃科|回声|爱科'], ['F', 'FOXTROT|FOX TROT|FOX-TROT|福克斯特罗特|福克斯特|福克斯'], ['G', 'GOLF|GULF|高尔夫|古尔夫'],
+  ['H', 'HOTEL|赫特尔|荷特尔|酒店|豪特尔'], ['I', 'INDIA|INDYA|因的亚|印度|英迪亚'], ['J', 'JULIETT|JULIET|JULIETTE|朱丽叶|茱莉叶|朱莉叶'],
+  ['K', 'KILO|基洛|凯罗|公斤|奇洛'], ['L', 'LIMA|利马|里马|莉玛'], ['M', 'MIKE|迈克|麦克'], ['N', 'NOVEMBER|诺维姆博|十一月|诺文博'],
+  ['O', 'OSCAR|OSKAR|奥斯卡'], ['P', 'PAPA|POPPA|帕帕|爸爸|趴趴'], ['Q', 'QUEBEC|KEBEC|魁北克|奎贝克'], ['R', 'ROMEO|ROMIO|罗密欧|罗米欧|罗蜜欧'],
+  ['S', 'SIERRA|SIERA|CIARA|塞拉|谢拉|赛拉|西拉'], ['T', 'TANGO|探戈|唐果'], ['U', 'UNIFORM|优尼佛姆|尤尼福姆|制服|有你服'],
+  ['V', 'VICTOR|VIKTOR|维克多|威克多'], ['W', 'WHISKEY|WHISKY|WISKEY|威士忌|维斯基'], ['X', 'X[ -]?RAY|EX[ -]?RAY|艾克斯雷|爱克斯雷|X光'],
+  ['Y', 'YANKEE|YANKY|洋基|扬基|杨基'], ['Z', 'ZULU|ZOOLU|祖鲁|祖路|租鲁'],
 ];
 const CODE_RE = CODE_WORDS.map(([l, words]) => [l, new RegExp(words, 'g')]);
 

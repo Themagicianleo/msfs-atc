@@ -1,0 +1,60 @@
+// Words the speech recogniser should expect. Recognisers guess far better when they are told what the
+// speaker is likely to say: here the callsigns on frequency, the ICAO alphabet for taxiway names, the
+// airport's own taxiway names and the controller's usual phrases. (Chrome takes them as "contextual
+// biasing" phrases; recognisers that don't support it ignore them.)
+
+const WORDS = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet', 'kilo', 'lima', 'mike',
+  'november', 'oscar', 'papa', 'quebec', 'romeo', 'sierra', 'tango', 'uniform', 'victor', 'whiskey', 'x-ray', 'yankee', 'zulu'];
+const LETTERS = Object.fromEntries(WORDS.map((w) => [w[0], w]));
+const DIGITS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'niner'];
+const ZH_WORDS = { A: '阿尔法', B: '布拉沃', C: '查理', D: '德尔塔', E: '艾科', F: '福克斯特', G: '高尔夫', H: '赫特尔', I: '印度', J: '朱丽叶', K: '基洛',
+  L: '利马', M: '迈克', N: '诺维姆博', O: '奥斯卡', P: '帕帕', Q: '魁北克', R: '罗密欧', S: '塞拉', T: '探戈', U: '优尼佛姆', V: '维克多', W: '威士忌',
+  X: '艾克斯雷', Y: '洋基', Z: '祖鲁' };
+const ZH_DIGITS = '洞幺两三四五六拐八九';
+
+const EN_COMMANDS = ['cleared to land', 'cleared for take-off', 'line up and wait', 'hold position', 'hold short of runway', 'cross runway',
+  'taxi to holding point runway', 'taxi to stand', 'via', 'pushback approved', 'expect runway', 'continue taxi', 'continue approach', 'go around',
+  'contact departure', 'taxiway', 'good day'];
+const ZH_COMMANDS = ['可以落地', '可以起飞', '进跑道等待', '原地等待', '外等待点', '穿越跑道', '滑到跑道', '滑到停机位', '经', '滑行道', '可以推出', '预计跑道',
+  '继续滑行', '继续进近', '复飞', '联系离场', '再见'];
+
+// "B1" -> "bravo one"; "WA" -> "whiskey alpha"
+export function spellTaxiway(name, zh = false) {
+  return [...String(name).toUpperCase()].map((c) => {
+    if (/\d/.test(c)) return zh ? ZH_DIGITS[Number(c)] : DIGITS[Number(c)];
+    return zh ? (ZH_WORDS[c] || c) : (LETTERS[c.toLowerCase()] || c);
+  }).join(zh ? '' : ' ');
+}
+
+// a flight number said digit by digit
+function spokenNumber(num, zh) {
+  return [...String(num)].map((c) => (zh ? ZH_DIGITS[Number(c)] : DIGITS[Number(c)])).join(zh ? '' : ' ');
+}
+
+// aircraft: [{tel, telZh, num, callsign}]; taxiways: iterable of names. Returns [{text, boost}]
+// (boost 1..10), at most `max` phrases, most useful first.
+export function recognitionHints({ aircraft = [], taxiways = [], zh = false, max = 180 } = {}) {
+  const out = [];
+  const seen = new Set();
+  const add = (text, boost) => { if (text && !seen.has(text)) { seen.add(text); out.push({ text, boost }); } };
+  for (const ac of aircraft) {
+    const chinese = zh && !!ac.telZh;
+    add(`${chinese ? ac.telZh : ac.tel}${chinese ? '' : ' '}${spokenNumber(ac.num, chinese)}`.trim(), 10);
+    add(String(ac.callsign || '').trim(), 6);
+  }
+  for (const t of (zh ? ZH_COMMANDS : EN_COMMANDS)) add(t, 5);
+  for (const w of WORDS) add(w, 7);
+  if (zh) for (const w of Object.values(ZH_WORDS)) add(w, 6);
+  for (const t of taxiways) add(spellTaxiway(t, zh), 4);
+  return out.slice(0, max);
+}
+
+// gives the phrases to a recogniser that supports them (Chrome's SpeechRecognition.phrases); true if it took them
+export function applyHints(rec, hints) {
+  try {
+    const Phrase = typeof window !== 'undefined' && window.SpeechRecognitionPhrase;
+    if (!Phrase || !('phrases' in rec) || !hints?.length) return false;
+    rec.phrases = hints.map((h) => new Phrase(h.text, h.boost));
+    return true;
+  } catch { return false; }
+}

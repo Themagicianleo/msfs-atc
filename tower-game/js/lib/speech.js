@@ -72,6 +72,9 @@ export class Speaker {
     this.voices = [];
     this.fx = new RadioFx();
     this.chain = Promise.resolve();
+    this.gen = 0; // bumped by stop(): calls queued before it are not spoken
+    this.muted = false; // the controller is transmitting: nothing is heard
+    this.held = []; // calls that came in meanwhile, played when the key is released
     if (this.supported) {
       this.loadVoices();
       window.speechSynthesis.addEventListener?.('voiceschanged', () => this.loadVoices());
@@ -128,16 +131,21 @@ export class Speaker {
 
   // opts.reply: a readback, said after a short pause as a person would
   // radio: { airline, range } of the aircraft talking
-  speak(text, unitKey, lang = 'en', { reply = false, airline = '', range = 3000 } = {}) {
+  speak(text, unitKey, lang = 'en', opts = {}) {
     if (!this.settings.tts || !text) return;
+    // like a real radio: while the controller holds the key nobody else is heard. Calls from pilots
+    // who wait their turn are played afterwards (see release()).
+    if (this.muted) { this.held.push({ args: [text, unitKey, lang, opts], at: Date.now() }); return; }
+    const { reply = false, airline = '', range = 3000 } = opts;
     this.fx.enabled = this.settings.radioFx !== false;
     if (this.fx.enabled || this.settings.builtinVoices) this.fx.wake(); // ready by the time the pilot talks
     const pause = reply ? 600 + Math.random() * 900 : 150 + Math.random() * 500;
     // on a busy frequency calls queue up; one that has waited too long is
     // not read out late (it is still in the radio log)
     const queued = Date.now();
-    const stale = () => Date.now() - queued > 25000;
-    const wait = () => (stale() ? Promise.reject(new Error('stale')) : new Promise((r) => setTimeout(r, pause)));
+    const gen = this.gen;
+    const stale = () => gen !== this.gen || Date.now() - queued > 25000; // stop() or mute() makes everything queued before it stale
+    const wait = () => (stale() ? Promise.reject(new Error('stale')) : new Promise((resolve, reject) => setTimeout(() => (stale() ? reject(new Error('stale')) : resolve()), pause)));
     // built-in voices: start generating now, while earlier calls are still playing
     const nv = this.settings.builtinVoices && this.neural?.voiceFor(unitKey || 'x', airline, lang);
     if (nv) {
@@ -185,8 +193,28 @@ export class Speaker {
   }
 
   stop() {
+    this.gen += 1;
     this.chain = Promise.resolve();
+    this.fx.cut();
     this.fx.keyDown(true);
     if (this.supported) window.speechSynthesis.cancel();
+  }
+
+  // The controller presses the transmit key: whoever is talking is cut off (the call stays in the radio
+  // log, tap it to hear it again) and nothing else is heard until the key is released.
+  mute() {
+    if (this.muted) return;
+    this.muted = true;
+    this.stop();
+  }
+
+  // Key released. Calls that came in meanwhile are played now (those that waited too long are dropped).
+  // Call this after issuing the instruction, so the pilot's readback is queued before them.
+  release() {
+    if (!this.muted) return;
+    this.muted = false;
+    const held = this.held;
+    this.held = [];
+    for (const h of held) if (Date.now() - h.at < 20000) this.speak(...h.args);
   }
 }

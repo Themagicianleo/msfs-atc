@@ -5,6 +5,13 @@
 // class reports its state and gives up after repeated failures. The app
 // then hides the button and the phrase buttons and text box carry on.
 
+import { applyHints } from './hints.js';
+
+// After this long without the words changing, a transcript that already is a whole instruction is sent
+// without waiting for the recogniser's own (slower) end-of-speech decision. (isComplete may return its own
+// delay: a taxi route is given more time, since controllers pause between taxiways.)
+const SETTLE_MS = 700;
+
 const FATAL = new Set(['not-allowed', 'service-not-allowed', 'language-not-supported']);
 const MAX_FAILURES = 3;
 
@@ -17,13 +24,15 @@ export function voiceSupport() {
 }
 
 export class Listener {
-  constructor({ lang = 'en-US', onFinal, onInterim, onState }) {
+  constructor({ lang = 'en-US', onFinal, onInterim, onState, isComplete = null, getHints = null }) {
     const s = voiceSupport();
     this.support = s;
     this.lang = lang;
     this.onFinal = onFinal;
     this.onInterim = onInterim;
     this.onState = onState;
+    this.isComplete = isComplete; // (text) => true when the words so far are a whole instruction
+    this.getHints = getHints; // () => [{text, boost}] for the recogniser
     this.failures = 0;
     this.disabled = !s.ok;
     this.reason = s.ok ? '' : s.reason;
@@ -40,6 +49,7 @@ export class Listener {
     rec.interimResults = true;
     rec.continuous = false; // continuous mode has hung on iPad in the past
     rec.maxAlternatives = 5; // the game tries each guess and takes the first it understands
+    try { applyHints(rec, this.getHints?.()); } catch { /* hints are optional */ }
     this.final = '';
     this.interim = '';
     this.segments = []; // each final result's list of guesses
@@ -58,6 +68,7 @@ export class Listener {
       }
       this.interim = interim;
       this.onInterim?.(this.final + interim);
+      this.settle();
     };
     rec.onerror = (e) => {
       this.errored = true;
@@ -72,6 +83,7 @@ export class Listener {
     rec.onend = () => {
       this.active = false;
       clearTimeout(this.watchdog);
+      clearTimeout(this.settleTimer);
       const text = (this.final || this.interim).trim();
       if (text) {
         this.failures = 0;
@@ -99,7 +111,21 @@ export class Listener {
     }, 4000);
   }
 
+  // Faster than waiting for the recogniser to notice the silence: once the words have stopped changing and
+  // they already make a whole instruction, stop listening.
+  settle() {
+    clearTimeout(this.settleTimer);
+    if (!this.isComplete || !this.active) return;
+    const heard = this.final + this.interim;
+    const ready = this.isComplete(heard);
+    if (!ready) return;
+    this.settleTimer = setTimeout(() => {
+      if (this.active && heard === this.final + this.interim) this.stop();
+    }, typeof ready === 'number' ? ready : SETTLE_MS);
+  }
+
   stop() {
+    clearTimeout(this.settleTimer);
     if (!this.rec || !this.active) return;
     try { this.rec.stop(); } catch { /* ignore */ }
     // if Safari never sends onend, finish ourselves

@@ -883,6 +883,21 @@ export class World {
     return { t: names.join(' '), s: names.map((v) => this.f.spell(v)).join(', ') };
   }
 
+  // "hold short of runway 15" given with a taxi route: stop there until cleared to cross
+  applyHoldShort(ac, hold = []) {
+    for (const ident of hold) {
+      const r = runwayForEnd(this.L, ident);
+      for (const c of ac.crossings) if (r && c.runway === r.id) c.cleared = false;
+    }
+  }
+
+  holdText(cmd, ac) {
+    if (!cmd.holdShort?.length) return null;
+    if (ac && this.zh(ac)) { const r = cmd.holdShort.map(zhRunway); return { t: r.map((x) => x.t).join('、'), s: r.map((x) => x.s).join('、') }; }
+    const r = cmd.holdShort.map((id) => this.f.runway(id));
+    return { t: r.map((x) => x.t).join(', '), s: r.map((x) => x.s).join(', ') };
+  }
+
   crossText(cmd, ac) {
     if (!cmd.cross?.length) return null;
     if (ac && this.zh(ac)) { const r = cmd.cross.map(zhRunway); return { t: r.map((x) => x.t).join('、'), s: r.map((x) => x.s).join('、') }; }
@@ -928,7 +943,8 @@ export class World {
     ac.cleared = {};
     this.setPath(ac, r.points, { nodes: r.nodes });
     this.applyCrossClearances(ac, cmd.cross);
-    return done('taxi_out', { via: this.viaText(cmd, ac), cross: this.crossText(cmd, ac) });
+    this.applyHoldShort(ac, cmd.holdShort);
+    return done('taxi_out', { via: this.viaText(cmd, ac), cross: this.crossText(cmd, ac), hold: this.holdText(cmd, ac) });
   }
 
   taxiIn(ac, cmd, done) {
@@ -947,8 +963,9 @@ export class World {
     ac.hold = false;
     this.setPath(ac, r.points, { nodes: r.nodes });
     this.applyCrossClearances(ac, cmd.cross);
+    this.applyHoldShort(ac, cmd.holdShort);
     gate = null;
-    return done('taxi_in', { via: this.viaText(cmd, ac), cross: this.crossText(cmd, ac) });
+    return done('taxi_in', { via: this.viaText(cmd, ac), cross: this.crossText(cmd, ac), hold: this.holdText(cmd, ac) });
   }
 
   // what the controller says for a planned route (see planTaxi)

@@ -8,7 +8,8 @@ import { taxiwayNames } from './layout.js';
 import { Speaker } from './lib/speech.js';
 import { MODELS, NeuralVoices, cachedModels, deleteVoices, modelsFor } from './lib/neural.js';
 import { Listener, voiceSupport } from './lib/voice.js';
-import { understandBest } from './commands.js';
+import { understand, understandBest } from './commands.js';
+import { recognitionHints } from './lib/hints.js';
 import { buildLayout, endGeometry } from './layout.js';
 import { Renderer, STATE_LABELS } from './render.js';
 import { World, taxiDestination } from './world.js';
@@ -734,14 +735,29 @@ $('#strips').addEventListener('click', (e) => {
 const listener = new Listener({
   lang: settings.lang,
   onInterim: (t) => { $('#ptt-interim').textContent = t; },
-  onFinal: (t, alts) => { $('#ptt-interim').textContent = ''; issueText(t, alts); },
+  // the instruction goes in first, so the pilot's readback is queued before the calls that waited for the key
+  onFinal: (t, alts) => { $('#ptt-interim').textContent = ''; issueText(t, alts); speaker.release(); },
   onState: (state, detail) => {
     $('#ptt').classList.toggle('live', state === 'listening');
     setTalkLabel(state === 'listening');
-    if (state === 'listening') $('#voice-status').textContent = 'Listening...';
+    if (state === 'listening') $('#voice-status').textContent = 'Listening... (other aircraft are muted while you talk)';
     else if (state === 'error') $('#voice-status').textContent = `${detail} Try again, or type / use the buttons.`;
     else if (state === 'disabled') renderVoice();
     else $('#voice-status').textContent = '';
+    if (state === 'error' || state === 'disabled') speaker.release();
+  },
+  // sends as soon as the words so far are a whole instruction and have stopped changing
+  isComplete: (t) => {
+    const w = game.world;
+    if (!w) return false;
+    const u = understand(t, w.ac, game.phr.commands, game.selected, game.known, game.phrZh?.commands || null);
+    if (u.error || /(\bvia|\band|\bthen|\btaxiway|\bcross|\bshort( of)?|经|然后|穿越|在)$/i.test(t.trim())) return false;
+    return u.cmd.type === 'taxi' ? 1200 : 700;
+  },
+  // what the recogniser should listen for: callsigns on frequency, the ICAO alphabet, this airport's taxiways
+  getHints: () => {
+    const w = game.world;
+    return recognitionHints({ aircraft: w?.ac || [], taxiways: game.known || [], zh: listener.lang.toLowerCase().startsWith('zh') });
   },
 });
 
@@ -775,7 +791,8 @@ function setTalkLabel(live) {
   $('#ptt').setAttribute('aria-pressed', String(!!live));
 }
 const ptt = $('#ptt');
-const startTalk = () => { if (!listener.disabled && !listener.active) { speaker.stop(); listener.start(); setTalkLabel(true); } };
+// Pressing the key mutes the radio, like a real one: nobody else is heard while you transmit.
+const startTalk = () => { if (!listener.disabled && !listener.active) { speaker.mute(); listener.start(); setTalkLabel(true); } };
 const stopTalk = () => { if (listener.active) listener.stop(); setTalkLabel(false); };
 ptt.addEventListener('click', () => (listener.active ? stopTalk() : startTalk()));
 ptt.addEventListener('contextmenu', (e) => e.preventDefault());
