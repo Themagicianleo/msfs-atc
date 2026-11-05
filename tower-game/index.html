@@ -78,7 +78,10 @@
   <main class="game">
     <section class="map-wrap card">
       <canvas id="map" aria-label="Airport map"></canvas>
-      <div class="map-tools"><button id="chart" class="capsule glass-ctl" type="button">Chart</button><button id="fit" class="capsule glass-ctl" type="button">Fit</button></div>
+      <div class="map-tools">
+        <span id="view" class="seg view-seg" role="group" aria-label="View"><button type="button" data-view="map" aria-pressed="true">Map</button><button type="button" data-view="tower" aria-pressed="false">Tower</button><button type="button" data-view="orbit" aria-pressed="false">3D</button></span>
+        <button id="chart" class="capsule glass-ctl" type="button">Chart</button><button id="follow" class="capsule glass-ctl" type="button" hidden>Follow</button><button id="fit" class="capsule glass-ctl" type="button">Fit</button>
+      </div>
       <div class="map-config glass-ctl">
         <label>Arr <select id="arr-rwy" class="input small-input"></select></label>
         <label>Dep <select id="dep-rwy" class="input small-input"></select></label>
@@ -86,7 +89,7 @@
           <select id="traffic" class="input small-input"><option value="off">None</option><option value="calm">Calm</option><option value="normal">Normal</option><option value="busy">Busy</option></select>
         </label>
       </div>
-      <div class="map-hint muted">Drag to pan · pinch or scroll to zoom · tap an aircraft to select it</div>
+      <div id="map-hint" class="map-hint muted">Drag to pan · pinch or scroll to zoom · tap an aircraft to select it</div>
     </section>
 
     <aside class="side">

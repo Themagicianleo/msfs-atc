@@ -40,7 +40,7 @@ export function checkSite(out) {
     seen.add(rel);
     if (!existsSync(join(out, rel))) { missing.push(`${rel} (import)`); return; }
     const src = readFileSync(join(out, rel), 'utf8');
-    for (const m of src.matchAll(/from '(\.[^']+)'/g)) walk(join(dirname(rel), m[1]).replace(/\\/g, '/'));
+    for (const m of src.matchAll(/(?:from |import\()'(\.[^']+)'/g)) walk(join(dirname(rel), m[1]).replace(/\\/g, '/'));
   };
   walk('js/app.js');
   if (missing.length) throw new Error(`site is missing files:\n  ${missing.join('\n  ')}`);

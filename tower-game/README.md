@@ -41,6 +41,28 @@ Open the site, type an airport (ICAO code, name or city, e.g. `EGLL`, `Haneda`,
     occupied, −250 runway conflict, −200 ground conflict, −10 per repeated call, −30 gridlock.
 - **Controls:** pause/1x/2x/4x speed; traffic None, Calm, Normal or Busy. Change the
   landing and departure runways with **Arr/Dep**, and the wind under **Settings and help**.
+- **Views:** the switch over the map has three settings:
+  - **Map:** the 2D map (and **Chart**).
+  - **Tower:** the view from the tower cab. Drag to look around; pinch or scroll to zoom like binoculars.
+  - **3D:** a free camera. Drag to orbit, pinch or scroll to zoom. **Follow** keeps the selected aircraft in view.
+
+  **Fit** resets the camera. You can select aircraft by tapping them in every view.
+
+### 3D views
+
+The 3D views use [three.js](https://threejs.org/) (MIT licence, included as `js/vendor/`). It loads only
+when you first open a 3D view, so the 2D map stays as fast as before.
+
+- **Aircraft** are simple low-poly models built from each type's real length and wingspan. Four-engine types
+  (A380, 747) get four engines. The tail colour is a plain colour per airline, not its livery.
+- **Ground** is built from the same layout as the map: runways with centrelines, threshold and aiming-point
+  marks, numbers and edge lights; taxiways with yellow centrelines; aprons; red holding points.
+- **Buildings** are the terminal and hangar outlines, raised to a fixed height (22 m terminals, 16 m others).
+  Real heights are not in the data.
+- **Tower** is placed by the game, not taken from the data: OpenStreetMap has no usable tower position for
+  these airports. It goes in the open space nearest the middle of the terminals, with the cab at about 72 m,
+  so the view is close to the real one but not the same.
+- **Appearance:** light and dark follow the game's appearance; dark looks like dusk, with runway lights.
 
 ### The detailed airports: WSSS, ZBAD, KSFO
 
@@ -204,6 +226,7 @@ node tools/e2e.mjs                     # headless Chromium plays the site (needs
 | `js/world.js` | traffic simulation, conflicts, scoring (no DOM) |
 | `js/commands.js` | understanding spoken or typed instructions |
 | `js/render.js` | map drawing, pan/zoom/tap |
+| `js/scene3d.js` | 3D tower and orbit views, low-poly aircraft (three.js in `js/vendor/`) |
 | `js/app.js` | the page: loading, radio log, voice, buttons |
 | `js/weather.js` | live METAR or generated wind |
 | `js/lib/` | small helpers: text/speech formatting, number words, runway choice, speech output and input |
@@ -217,4 +240,5 @@ node tools/e2e.mjs                     # headless Chromium plays the site (needs
 - **Generated layouts:** unusual airports (very close parallel runways, many crossing
   runways) can give odd taxiway layouts. The layout generator has been tested on made-up
   airports only, because the real data download was not available when it was built.
-- **Speed on an iPad:** not measured.
+- **Speed on an iPad:** not measured, for the 2D map or the 3D views. The 3D views have been tested only in
+  headless Chromium with software rendering.

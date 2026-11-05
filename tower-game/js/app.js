@@ -195,7 +195,55 @@ $('#wind-form').addEventListener('submit', (e) => {
 });
 
 $('#new-shift').addEventListener('click', () => $('#start').classList.remove('hidden'));
-$('#fit').addEventListener('click', () => game.world && renderer.fit(game.world.L));
+$('#fit').addEventListener('click', () => {
+  if (!game.world) return;
+  if (game.view === 'map') renderer.fit(game.world.L); else game.scene3d?.reset();
+});
+
+// Map (2D), Tower (the cab view) or 3D (orbit camera). three.js loads on first use.
+const HINTS = {
+  map: 'Drag to pan · pinch or scroll to zoom · tap an aircraft to select it',
+  tower: 'Drag to look around · pinch or scroll to zoom (binoculars) · tap an aircraft to select it',
+  orbit: 'Drag to orbit · pinch or scroll to zoom · Follow keeps the selected aircraft in view',
+};
+game.view = 'map';
+async function setView(view) {
+  if (view !== 'map' && !game.scene3d) {
+    try {
+      const { Scene3D } = await import('./scene3d.js');
+      game.scene3d = new Scene3D($('.map-wrap'));
+      game.scene3d.onTap = (q) => {
+        if (!game.world) return;
+        const ac = game.scene3d.pick(game.world, q);
+        game.selected = ac ? ac.id : null;
+      };
+      window.towerGame.scene3d = game.scene3d;
+    } catch (err) {
+      sys(`The 3D view could not start on this device (${err.message}). The map still works.`);
+      view = 'map';
+    }
+  }
+  game.view = view;
+  const three = view !== 'map';
+  $('#map').hidden = three;
+  game.scene3d?.show(three);
+  if (three) game.scene3d.setMode(view);
+  $('#chart').hidden = three;
+  $('#follow').hidden = view !== 'orbit';
+  $('#map-hint').textContent = HINTS[view];
+  $$('#view button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.view === view)));
+  if (!three) renderer.resize();
+}
+$('#view').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-view]');
+  if (b) setView(b.dataset.view);
+});
+$('#follow').addEventListener('click', () => {
+  if (!game.scene3d) return;
+  game.scene3d.follow = !game.scene3d.follow;
+  if (game.scene3d.follow) game.scene3d.orbit.d = Math.min(game.scene3d.orbit.d, 400);
+  $('#follow').classList.toggle('on', game.scene3d.follow);
+});
 $('#arr-rwy').addEventListener('change', (e) => { game.world?.setRunways(e.target.value.split('+'), game.world.depEnds); sys(`New arrivals will land runway ${e.target.value.replace('+', ' and ')}.`); });
 $('#dep-rwy').addEventListener('change', (e) => { game.world?.setRunways(game.world.arrEnds, e.target.value.split('+')); sys(`New departures will use runway ${e.target.value.replace('+', ' and ')}.`); });
 $('#chart').addEventListener('click', () => {
@@ -447,7 +495,8 @@ function frame(now) {
       dt -= step;
     }
     handleEvents(w.drain());
-    renderer.draw(w, { selectedId: game.selected, now });
+    if (game.view === 'map') renderer.draw(w, { selectedId: game.selected, now });
+    else game.scene3d.draw(w, { selectedId: game.selected, now, theme: renderer.theme });
     renderPanel();
     $('#score').textContent = w.score;
     const t = Math.floor(w.t);
@@ -458,7 +507,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-window.addEventListener('resize', () => renderer.resize());
+window.addEventListener('resize', () => { renderer.resize(); game.scene3d?.resize(); });
 renderer.resize();
 renderVoice();
 $('#start-icao').value = settings.airport || '';

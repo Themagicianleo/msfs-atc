@@ -38,8 +38,20 @@ body { display: flex; flex-direction: column; overflow: hidden; min-height: 0;
 /* ---------- main area ---------- */
 .game { flex: 1; display: flex; gap: 12px; min-height: 0; padding: 0 12px 12px; }
 .map-wrap { position: relative; flex: 1; min-width: 0; overflow: hidden; border-radius: 24px; }
-#map { width: 100%; height: 100%; display: block; touch-action: none; border-radius: 24px; }
-.map-tools { position: absolute; right: 12px; top: 12px; display: flex; gap: 8px; }
+#map, .map3d { width: 100%; height: 100%; display: block; touch-action: none; border-radius: 24px; }
+#map[hidden], .map3d[hidden], .labels3d[hidden] { display: none; }
+.labels3d { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.tag3d { position: absolute; left: 0; top: 0; margin: -34px 0 0 8px; padding: 2px 7px; border-radius: 8px; white-space: nowrap;
+  font: 11px/1.25 -apple-system, system-ui, sans-serif; color: #fff; background: rgba(0,0,0,.45); border-left: 3px solid #0a84ff; }
+.tag3d.dep { border-left-color: #ff9f0a; }
+.tag3d b { display: block; font-size: 13px; font-weight: 600; }
+.tag3d.sel { background: rgba(0,0,0,.75); outline: 1.5px solid #fff; }
+.tag3d.req { outline: 2px solid #ffd60a; }
+.tag3d[hidden] { display: none; }
+.view-seg button { min-width: 52px; }
+.map-tools { position: absolute; right: 12px; top: 12px; left: 12px; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; z-index: 2; pointer-events: none; }
+.map-tools > * { pointer-events: auto; }
+.map-tools [hidden] { display: none; }
 .map-tools .capsule { color: var(--blue); }
 .map-tools .capsule.on { background: #ffd400; color: #000; }
 .map-config { position: absolute; left: 12px; bottom: 34px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;

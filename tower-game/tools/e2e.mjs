@@ -125,6 +125,7 @@ async function main() {
   }
   console.log('stats:', JSON.stringify(await page.evaluate(() => ({ ...window.towerGame.game.world.stats, score: window.towerGame.game.world.score }))));
   await page.screenshot({ path: join(shots, 'landscape.png') });
+  await check3d('demo');
   // Beijing Daxing: real OSM layout (if built), Chinese radio for Chinese airlines, metric units
   if (existsSync(join(ROOT, 'data', 'hq', 'ZBAD.json'))) {
     await page.click('#new-shift');
@@ -152,6 +153,7 @@ async function main() {
     await page.screenshot({ path: join(shots, 'zbad-chart.png') });
     await page.click('#chart');
     await page.screenshot({ path: join(shots, 'zbad.png') });
+    await check3d('zbad');
   }
   await page.setViewportSize({ width: 820, height: 1180 });
   await sleep(400);
@@ -161,6 +163,31 @@ async function main() {
   await browser.close();
   console.log('screenshots in', shots);
   console.log('E2E OK');
+}
+
+// the tower cab and orbit views: three.js loads, draws something, shows tags, taps select
+async function check3d(name) {
+  await page.click('#view button[data-view="tower"]');
+  await page.waitForFunction(() => window.towerGame.scene3d && !document.querySelector('.map3d').hidden);
+  await sleep(600);
+  const pressed = await page.evaluate(() => [...document.querySelectorAll('#view button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.view).join());
+  if (pressed !== 'tower') throw new Error(`view switch shows ${pressed}, expected tower`);
+  const tags = await page.evaluate(() => [...document.querySelectorAll('.tag3d')].filter((t) => !t.hidden).length);
+  const shot = await page.screenshot({ path: join(shots, `${name}-tower.png`) });
+  console.log(`${name} tower view: ${tags} aircraft tags, screenshot ${shot.length} bytes`);
+  if (shot.length < 20000) throw new Error('tower view looks empty');
+  const q = await page.evaluate(() => window.towerGame.game.world.ac.length > 0);
+  await page.click('#view button[data-view="orbit"]');
+  await page.evaluate(() => { const g = window.towerGame.game; g.selected = g.world.ac.find((a) => a.state !== 'final')?.id ?? g.world.ac[0]?.id; });
+  await page.click('#follow');
+  await sleep(1200);
+  await page.screenshot({ path: join(shots, `${name}-orbit.png`) });
+  const selTag = await page.evaluate(() => !!document.querySelector('.tag3d.sel:not([hidden])'));
+  console.log(`${name} orbit view, following the selected aircraft: tag shown ${selTag}`, q ? '' : '(no aircraft)');
+  if (q && !selTag) throw new Error('selected aircraft not shown in the orbit view');
+  await page.click('#follow');
+  await page.click('#view button[data-view="map"]');
+  await page.waitForFunction(() => !document.querySelector('#map').hidden && document.querySelector('.map3d').hidden);
 }
 
 function cleanup() {
