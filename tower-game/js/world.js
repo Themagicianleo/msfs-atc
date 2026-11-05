@@ -757,7 +757,9 @@ export class World {
         {
           const g = this.L.gates.find((x) => x.id === ac.gate);
           const nodes = this.L.graph.nodes;
-          this.setPath(ac, [nodes[g.node].p, nodes[g.lane].p], { speed: 1.5, backwards: true });
+          // push back along the stand's lead-in line (real stands), or straight out
+          const ids = g.push || [g.node, g.lane];
+          this.setPath(ac, ids.map((id) => nodes[id].p), { speed: 1.5, backwards: true });
         }
         return done('push');
       case 'taxi':

@@ -470,4 +470,4 @@ if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWor
 requestAnimationFrame(frame);
 
 // for the end-to-end test
-window.towerGame = { game, endGeometry };
+window.towerGame = { game, endGeometry, renderer };

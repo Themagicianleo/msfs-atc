@@ -383,75 +383,117 @@ function addExitsAndHolds(L, apronCentre) {
   }
 }
 
-// stands: parking_position nodes or ways with a ref, linked to the nearest taxilane
+// Stands: OSM parking_position lines (lead-in lines from the taxilane to the
+// stop point) with a stand number. The line's connection to the taxiway
+// network is used as drawn; the parking spot is its free end. Boarding gates
+// (aeroway=gate, e.g. "B21/B22") are terminal gates, not stands, so they are
+// not used. Stands without a number are drawn but get no traffic.
 function addStands(L, els, proj) {
   const g = L.graph;
-  const lanes = g.edges.filter((e) => e.kind === 'lane' || e.kind === 'twy');
-  const raw = [];
-  for (const e of els) {
-    const t = tagsOf(e);
-    if (t.aeroway !== 'parking_position' && t.aeroway !== 'gate') continue;
-    // "D64/D65" (a stand that can be used as two) -> "D64"
-    const ref = (firstRef(t) || String(t.name || '').toUpperCase()).split('/')[0].trim();
-    if (!ref) continue;
-    if (e.type === 'node') raw.push({ ref, p: proj.toXY(e.lat, e.lon), kind: t.aeroway });
-    else if (e.type === 'way' && e.geometry) {
-      const a = proj.toXY(e.geometry[0].lat, e.geometry[0].lon);
-      const b = proj.toXY(e.geometry[e.geometry.length - 1].lat, e.geometry[e.geometry.length - 1].lon);
-      // the stop point is the end further from the taxilanes
-      const near = (p) => Math.min(...lanes.slice(0, 4000).map((x) => pointSegmentDistance(p, g.nodes[x.a].p, g.nodes[x.b].p).d));
-      raw.push({ ref, p: near(a) > near(b) ? a : b, kind: t.aeroway });
-    }
-  }
-  // parking positions win over gates with the same name
-  const byRef = new Map();
-  for (const s of raw.sort((x, y) => (x.kind === 'parking_position' ? 0 : 1) - (y.kind === 'parking_position' ? 0 : 1))) {
-    if (!byRef.has(s.ref)) byRef.set(s.ref, s);
-  }
-  const stands = [...byRef.values()];
-  for (const s of stands) {
+  const taxi = (id) => id !== undefined && ['twy', 'lane', 'hold', 'x'].includes(g.nodes[id].kind);
+  const taxiEdges = g.edges.filter((e) => e.kind === 'lane' || e.kind === 'twy');
+  const nearestEdge = (p) => {
     let best = null;
-    for (const e of lanes) {
-      const q = pointSegmentDistance(s.p, g.nodes[e.a].p, g.nodes[e.b].p);
+    for (const e of taxiEdges) {
+      const a = g.nodes[e.a].p; const b = g.nodes[e.b].p;
+      if (Math.abs(a[0] - p[0]) > STAND_LINK_MAX + 400 && Math.abs(b[0] - p[0]) > STAND_LINK_MAX + 400) continue;
+      const q = pointSegmentDistance(p, a, b);
       if (!best || q.d < best.q.d) best = { e, q };
     }
-    if (!best || best.q.d > STAND_LINK_MAX || best.q.d < 15) continue;
-    s.link = best;
+    return best;
+  };
+  const stands = [];
+  L.otherStands = [];
+  for (const e of els) {
+    const t = tagsOf(e);
+    if (t.aeroway !== 'parking_position') continue;
+    // "D64/D65" (a stand that can be used as two) -> "D64"
+    const ref = (firstRef(t) || '').split('/')[0].trim();
+    if (e.type === 'node') {
+      const p = proj.toXY(e.lat, e.lon);
+      if (ref) stands.push({ ref, stop: p, pts: [p], attach: null, dir: null });
+      else L.otherStands.push(p);
+      continue;
+    }
+    if (e.type !== 'way' || !e.geometry) continue;
+    const pts = e.geometry.map((q) => proj.toXY(q.lat, q.lon));
+    const ids = e.nodes.map((id) => g.byOsm.get(id));
+    const shared = ids.map((id, k) => (taxi(id) ? k : -1)).filter((k) => k >= 0);
+    let stopIdx; let attachIdx = null;
+    if (shared.length) {
+      const n = ids.length - 1;
+      if (!taxi(ids[0])) { stopIdx = 0; attachIdx = Math.min(...shared); }
+      else if (!taxi(ids[n])) { stopIdx = n; attachIdx = Math.max(...shared); }
+      else continue; // both ends on taxiways: not a stand lead-in
+    } else {
+      // not connected: the parking spot is the end further from the taxiways
+      const da = nearestEdge(pts[0])?.q.d ?? 0;
+      const db = nearestEdge(pts[pts.length - 1])?.q.d ?? 0;
+      stopIdx = da > db ? 0 : pts.length - 1;
+    }
+    const stop = pts[stopIdx];
+    if (!ref) { L.otherStands.push(stop); continue; }
+    const step = stopIdx === 0 ? -1 : 1;
+    const from = attachIdx ?? (stopIdx === 0 ? pts.length - 1 : 0);
+    const line = [];
+    for (let k = from; k !== stopIdx + step; k += step) line.push(k);
+    stands.push({ ref, stop, attach: attachIdx === null ? null : ids[attachIdx],
+      pts: line.map((k) => pts[k]), dir: pts.length > 1 ? sub(stop, pts[stopIdx - step]) : null });
   }
-  // stand size from the spacing to the neighbours (stands are laid out for the wingspan)
-  const linked = stands.filter((s) => s.link);
-  for (const s of linked) {
+  // the same number twice: keep the first
+  const seen = new Set();
+  const unique = stands.filter((s) => (seen.has(s.ref) ? false : (seen.add(s.ref), true)));
+  // stand size from the spacing to every neighbouring stand (numbered or not)
+  const allStops = [...unique.map((s) => s.stop), ...L.otherStands];
+  for (const s of unique) {
     let near = Infinity;
-    for (const o of linked) if (o !== s) near = Math.min(near, dist(o.p, s.p));
+    for (const o of allStops) if (o !== s.stop) near = Math.min(near, dist(o, s.stop));
     s.maxSpan = Math.max(24, Math.min(80, near + 4));
   }
-  // insert the link points into the taxilane edges, then add the stand edges
+  // stands not drawn connected: join the start of the line to the nearest taxiway
   const cuts = new Map();
-  for (const s of linked) {
-    const k = s.link.e.id;
-    if (!cuts.has(k)) cuts.set(k, []);
-    cuts.get(k).push(s);
+  for (const s of unique) {
+    if (s.attach !== null) continue;
+    const best = nearestEdge(s.pts[0]);
+    if (!best || best.q.d > STAND_LINK_MAX) { s.skip = true; continue; }
+    s.link = best;
+    if (!cuts.has(best.e.id)) cuts.set(best.e.id, []);
+    cuts.get(best.e.id).push(s);
   }
-  const newEdges = [];
-  for (const e of g.edges) {
-    const list = cuts.get(e.id);
-    if (!list) { newEdges.push(e); continue; }
-    list.sort((x, y) => x.link.q.t - y.link.q.t);
-    let prev = e.a;
-    for (const s of list) {
-      const p = add(g.nodes[e.a].p, mul(sub(g.nodes[e.b].p, g.nodes[e.a].p), s.link.q.t));
-      const id = g.node(p, 'lane');
-      s.lane = id;
-      newEdges.push({ ...e, a: prev, b: id });
-      prev = id;
+  if (cuts.size) {
+    const newEdges = [];
+    for (const e of g.edges) {
+      const list = cuts.get(e.id);
+      if (!list) { newEdges.push(e); continue; }
+      list.sort((x, y) => x.link.q.t - y.link.q.t);
+      let prev = e.a;
+      for (const s of list) {
+        const id = g.node(add(g.nodes[e.a].p, mul(sub(g.nodes[e.b].p, g.nodes[e.a].p), s.link.q.t)), 'lane');
+        s.attach = id;
+        newEdges.push({ ...e, a: prev, b: id });
+        prev = id;
+      }
+      newEdges.push({ ...e, a: prev, b: e.b });
     }
-    newEdges.push({ ...e, a: prev, b: e.b });
+    g.edges = newEdges;
   }
-  g.edges = newEdges;
-  for (const s of linked) {
-    const node = g.node(s.p, 'gate', { gate: s.ref });
-    g.edge(s.lane, node, s.ref, 'stand');
-    L.gates.push({ id: s.ref, node, lane: s.lane, heading: headingOf(sub(s.p, g.nodes[s.lane].p)), maxSpan: s.maxSpan });
+  for (const s of unique) {
+    if (s.skip || s.attach === null) continue;
+    // lead-in line: attach node -> (bends) -> stop point
+    let prev = s.attach;
+    const push = [s.attach];
+    for (let k = 1; k < s.pts.length - 1; k += 1) {
+      const id = g.node(s.pts[k], 'lane');
+      g.edge(prev, id, s.ref, 'stand');
+      prev = id;
+      push.push(id);
+    }
+    const node = g.node(s.stop, 'gate', { gate: s.ref });
+    g.edge(prev, node, s.ref, 'stand');
+    push.push(node);
+    const dir = s.dir || sub(s.stop, g.nodes[s.attach].p);
+    L.gates.push({ id: s.ref, node, lane: s.attach, heading: headingOf(dir), maxSpan: s.maxSpan,
+      push: push.reverse() });
   }
   L.gates.sort((a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }));
   g.finish();
@@ -494,6 +536,7 @@ export function packLayout(L) {
     terminals: L.terminals.map((ring) => ring.map((p) => p.map(r1))),
     buildings: L.buildings.map((ring) => ring.map((p) => p.map(r1))),
     taxiLabels: L.taxiLabels.map((l) => ({ ...l, p: l.p.map(r1), ang: Math.round(l.ang * 1000) / 1000 })),
+    otherStands: (L.otherStands || []).map((p) => p.map(r1)),
     kinds, ekinds,
   };
 }
@@ -524,6 +567,7 @@ export function unpackLayout(d) {
   // keep the generated-layout fields the map uses: one apron/terminal for "fit"
   return { airport: d.airport, proj, graph: net, runways, closedRunways, holdPoints: d.holdPoints, exits: d.exits, gates: d.gates,
     aprons: d.aprons, terminals: d.terminals, buildings: d.buildings, taxiLabels: d.taxiLabels, real: true,
+    otherStands: d.otherStands || [],
     terminal: d.terminals.flat().length ? d.terminals.flat() : null };
 }
 

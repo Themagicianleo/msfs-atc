@@ -225,7 +225,19 @@ export class Renderer {
     }
     if (L.taxiLabels) {
       this.drawTaxiLabels(L.taxiLabels, s);
-      if (s > 0.28) for (const gate of L.gates) this.text(gate.id, g.nodes[gate.node].p, { color: C.muted, size: 10, dy: 12 });
+      if (s > 0.28) {
+        // stands without a number in OpenStreetMap: drawn, never used for traffic
+        const c = this.ctx;
+        c.strokeStyle = C.muted;
+        c.lineWidth = 1;
+        for (const p of L.otherStands || []) {
+          const q = this.toScreen(p);
+          c.beginPath();
+          c.arc(q[0], q[1], 3, 0, Math.PI * 2);
+          c.stroke();
+        }
+        for (const gate of L.gates) this.text(gate.id, g.nodes[gate.node].p, { color: C.muted, size: 10, dy: 12 });
+      }
     } else if (s > 0.05) {
       const named = new Set();
       for (const e of g.edges) {
