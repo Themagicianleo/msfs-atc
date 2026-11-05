@@ -4,7 +4,9 @@ const NUMBER_WORDS = {
   zero: '0', oh: '0', one: '1', won: '1', two: '2', three: '3', tree: '3', four: '4',
   five: '5', fife: '5', six: '6', seven: '7', eight: '8', nine: '9', niner: '9',
 };
-const SIDES = { left: 'l', right: 'r', center: 'c', centre: 'c' };
+// runway side words, with what recognisers write for them ("lift", "write")
+const SIDES = { left: 'l', lift: 'l', leftt: 'l', laft: 'l', lef: 'l', right: 'r', write: 'r', rite: 'r', wright: 'r', riot: 'r',
+  center: 'c', centre: 'c', senter: 'c', sender: 'c', centr: 'c' };
 
 // Turn free text into a compact, searchable form:
 // "climb flight level three five zero, squawk 4 7 2 1" -> "climbflightlevel350squawk4721"
@@ -50,7 +52,7 @@ export function normalize(text) {
   // "#3000" followed by "#500" was merged above; strip markers and join
   return out.map((w) => (w.startsWith('#') ? w.slice(1) : w)).join(' ')
     .replace(/(\d)\s+(?=[\d.])/g, '$1').replace(/\.\s+(?=\d)/g, '.')
-    .replace(/(\d)\s+([lrc])\b/g, '$1$2');
+    .replace(/\b(runway|rwy|cross|crossing|short|of) (\d{1,2}) ([lrc])\b/g, '$1 $2$3'); // a side belongs to a runway number only ("via b 1 c" is two taxiways)
 }
 
 export function compact(text) {

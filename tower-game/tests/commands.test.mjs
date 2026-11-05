@@ -223,3 +223,34 @@ test('fast speech: merged words, run-together letters, double and triple digits,
   assert.equal(en('go round').type, 'go_around');
   assert.equal(en('good day').type, 'contact', '"good day" is not a go-around');
 });
+
+test('runway sides: left / right / centre, in English and Chinese, however they are written or said', async () => {
+  const { parseInstruction, parseInstructionZh } = await import('../js/commands.js');
+  const ZH = JSON.parse(readFileSync(new URL('../data/phraseology-zh.json', import.meta.url))).commands;
+  const rw = (t) => parseInstruction(`${t} cleared to land`, R).runway;
+  assert.equal(rw('runway two seven left'), '27L');
+  assert.equal(rw('runway 28 right'), '28R');
+  assert.equal(rw('runway two eight R'), '28R');
+  assert.equal(rw('runway two eight lima'), '28L');
+  assert.equal(rw('runway two eight romeo'), '28R');
+  assert.equal(rw('runway 35 charlie'), '35C');
+  assert.equal(rw('runway tree five centre'), '35C');
+  assert.equal(rw('runway 27 lift'), '27L', 'recogniser writes "lift" for left');
+  assert.equal(rw('runway 27 write'), '27R', '"write" for right');
+  assert.equal(rw('runway one left'), '01L');
+  assert.equal(parseInstruction('cross runway one left', R).cross[0], '01L');
+  assert.equal(parseInstruction('hold short of runway two eight right', R).runway, '28R');
+  assert.deepEqual(parseInstruction('taxi via alpha b 1 c', R).via, ['A', 'B1', 'C'], 'letters after a taxiway are not runway sides');
+  const zh = (t) => parseInstructionZh(`${t}可以落地`, ZH).runway;
+  assert.equal(zh('跑道二七左'), '27L');
+  assert.equal(zh('跑道幺七右边'), '17R');
+  assert.equal(zh('跑道三五中间'), '35C');
+  assert.equal(zh('跑道三十五右'), '35R', 'tens: 三十五 = 35');
+  assert.equal(zh('跑道十七左'), '17L');
+  assert.equal(zh('跑道二十左'), '20L');
+  assert.equal(zh('跑道幺七，右，'), '17R', 'a pause before the side');
+  assert.equal(zh('跑道幺七 罗密欧 '), '17R', 'code word for the side');
+  assert.equal(zh('跑道17 left'), '17L');
+  assert.equal(parseInstructionZh('经A滑到跑道三十五左外等待点', ZH).runway, '35L');
+  assert.equal(parseInstructionZh('穿越跑道十七右', ZH).cross[0], '17R');
+});

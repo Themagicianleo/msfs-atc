@@ -87,7 +87,9 @@ export function numberWords(text) {
 
 function phoneticToLetters(text) {
   return text.split(' ').map((w) => PHONETIC[w] || w).join(' ')
-    .replace(/\b([a-z]) (\d{1,2})\b/g, '$1$2');
+    .replace(/\b([a-z]) (\d{1,2})\b/g, '$1$2')
+    // "runway two eight lima / romeo / charlie" is 28L / 28R / 28C (but "via b 1 c" stays three names)
+    .replace(/\b((?:runway|crossing|cross|short of) \d{1,2}) ([lrc])\b/g, '$1$2');
 }
 
 // returns {ac, score, ambiguous}

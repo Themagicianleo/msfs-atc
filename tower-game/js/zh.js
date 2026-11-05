@@ -162,6 +162,12 @@ function splitNames(s, names) {
   return parts;
 }
 
+// Runway and stand numbers said as ordinary Chinese numbers: 三十五 = 35, 十七 = 17, 二十 = 20 (after 跑道, 穿越, 机位)
+const TENS_DIGIT = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+function zhTens(s) {
+  return s.replace(/(跑道|穿越|机位|位)([一二两三四五六七八九]?)十([一二两三四五六七八九]?)/g, (m, ctx, a, b) => `${ctx}${(a ? TENS_DIGIT[a] : 1) * 10 + (b ? TENS_DIGIT[b] : 0)}`);
+}
+
 // digit words, and sound-alikes that stand next to a digit
 function foldDigits(s) {
   const a = [...s];
@@ -186,9 +192,14 @@ export function zhNormalize(text, names = []) {
     if (p.name) return p.name;
     let t = p.text;
     for (const [letter, re] of CODE_RE) t = t.replace(re, letter);
+    t = zhTens(t);
     t = foldDigits(t);
     t = t.replace(/(\d+)[,，](\d{3})(?!\d)/g, (m, a, b) => (a.length <= 3 ? a + b : m)); // 3,101
-    return t.replace(/(\d)\s*(左|做|坐|座|佐)/g, '$1L').replace(/(\d)\s*(右|又|有|友|油|诱)/g, '$1R').replace(/(\d)\s*(中|钟|终|忠)/g, '$1C');
+    // the side may come after a pause ("跑道17，右"), or as a code word (罗密欧 = R, already turned into a letter)
+    const SEP = '[\\s，,、]*';
+    return t.replace(new RegExp(`(\\d)${SEP}(左|做|坐|座|佐)`, 'g'), '$1L').replace(new RegExp(`(\\d)${SEP}(右|又|有|友|油|诱)`, 'g'), '$1R')
+      .replace(new RegExp(`(\\d)${SEP}(中|钟|终|忠)`, 'g'), '$1C')
+      .replace(/(?<=(?:跑道|穿越)\d{1,2})\s+([LRC])(?![A-Z0-9])/g, '$1');
   }).join('');
   return out.replace(/[，。、,.\s]+/g, ' ').trim();
 }
