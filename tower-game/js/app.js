@@ -23,10 +23,10 @@ const store = {
   set(k, v) { try { localStorage.setItem(`tower.${k}`, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
-const settings = { tts: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
+const settings = { tts: true, radioFx: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
 const saveSettings = () => store.set('settings', settings);
 // voices vary per aircraft; the Speaker reads these keys
-const speakerSettings = { tts: settings.tts, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
+const speakerSettings = { tts: settings.tts, radioFx: settings.radioFx, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
 const speaker = new Speaker(speakerSettings);
 
 const game = { world: null, phr: null, airlines: {}, speed: 1, selected: null, wind: null, last: 0, index: null };
@@ -296,7 +296,7 @@ function handleEvents(events) {
   for (const ev of events) {
     if (ev.kind === 'pilot') {
       addMsg('', ev.callsign, ev.text, () => speaker.speak(ev.speech, `ac${ev.voice}`, ev.lang));
-      speaker.speak(ev.speech, `ac${ev.voice}`, ev.lang);
+      speaker.speak(ev.speech, `ac${ev.voice}`, ev.lang, { reply: !!(ev.readback || ev.unable) });
     } else if (ev.kind === 'score') {
       sys(`${ev.delta > 0 ? '+' : ''}${ev.delta}  ${ev.reason}`, ev.delta > 0 ? 'good' : 'bad');
     } else if (ev.kind === 'alert') {
@@ -314,6 +314,7 @@ function issueText(text) {
   const w = game.world;
   if (!w || !text.trim()) return;
   addMsg('you', 'You', text.trim());
+  speaker.fx.click();
   const u = understand(text, w.ac, game.phr.commands, game.selected, game.known, game.phrZh?.commands || null);
   if (u.error) {
     if (u.ac) w.readback(u.ac, 'say_again');
@@ -331,6 +332,7 @@ function issueButton(type) {
   const ac = w?.find(game.selected);
   if (!ac) return;
   addMsg('you', 'You', w.controllerText(ac, type));
+  speaker.fx.click();
   w.command(ac.id, { type });
   handleEvents(w.drain());
 }
@@ -343,9 +345,96 @@ $('#cmd-form').addEventListener('submit', (e) => {
 
 renderer.onTap = (pos, q) => {
   if (!game.world) return;
+  if (game.plan) { planTap(q); return; }
   const ac = renderer.pick(game.world, q);
   game.selected = ac ? ac.id : null;
 };
+
+// ---------------------------------------------------------------- choosing the taxi route
+// Tap taxiways on the map in the order the aircraft should use them; tap a
+// holding point (departures) or a stand (arrivals) to change where it goes.
+function startPlan() {
+  const ac = game.world?.find(game.selected);
+  if (!ac) return;
+  if (game.view !== 'map') setView('map');
+  game.plan = { id: ac.id, waypoints: [], runway: ac.kind === 'dep' ? ac.end : null, gate: ac.kind === 'arr' ? ac.gate : null };
+  $('#plan').hidden = false;
+  updatePlan();
+}
+
+function endPlan() {
+  game.plan = null;
+  $('#plan').hidden = true;
+}
+
+function updatePlan() {
+  const p = game.plan;
+  const w = game.world;
+  const ac = w?.find(p?.id);
+  if (!p || !ac) { endPlan(); return; }
+  p.at = performance.now();
+  const r = w.planTaxi(ac, p);
+  if (!r) {
+    if (!w.planTaxi(ac, {})) { endPlan(); return; } // it can't taxi any more
+    p.waypoints.pop(); // that point can't be reached: forget it
+    p.result = w.planTaxi(ac, p);
+  } else p.result = r;
+  const res = p.result;
+  const dest = ac.kind === 'dep' ? `holding point runway ${res.runway}` : `stand ${res.gate}`;
+  const cross = res.cross.length ? ` · crosses runway ${res.cross.join(', ')}` : '';
+  $('#plan-text').innerHTML = '';
+  $('#plan-text').append(
+    Object.assign(document.createElement('b'), { textContent: `${ac.callsign}: ` }),
+    `${res.via.length ? `via ${res.via.join(', ')} ` : ''}to ${dest}${cross}`,
+    Object.assign(document.createElement('span'), { className: 'muted small',
+      textContent: p.waypoints.length ? '' : ` — tap taxiways to route through, ${ac.kind === 'dep' ? 'a holding point' : 'a stand'} to change the destination` }),
+  );
+  $('#plan-cross').parentElement.hidden = !res.cross.length;
+}
+
+function planTap(q) {
+  const p = game.plan;
+  const w = game.world;
+  const ac = w.find(p.id);
+  if (!ac) { endPlan(); return; }
+  const L = w.L;
+  const g = L.graph;
+  const px = (id) => { const s = renderer.toScreen(g.nodes[id].p); return Math.hypot(s[0] - q[0], s[1] - q[1]); };
+  if (ac.kind === 'dep') {
+    const hp = Object.entries(L.holdPoints).map(([end, h]) => ({ end, d: px(h.h) })).sort((a, b) => a.d - b.d)[0];
+    if (hp && hp.d < 22) { p.runway = hp.end; updatePlan(); return; }
+  } else {
+    const st = L.gates.map((x) => ({ id: x.id, d: px(x.node) })).sort((a, b) => a.d - b.d)[0];
+    if (st && st.d < 16) { p.gate = st.id; updatePlan(); return; }
+  }
+  let best = null;
+  g.nodes.forEach((n, i) => {
+    if (n.kind === 'rwy' || n.kind === 'gate') return;
+    const d = px(i);
+    if (d < 30 && (!best || d < best.d)) best = { i, d };
+  });
+  if (!best) return;
+  p.waypoints.push(best.i);
+  updatePlan();
+}
+
+$('#plan-undo').addEventListener('click', () => { game.plan?.waypoints.pop(); updatePlan(); });
+$('#plan-clear').addEventListener('click', () => { if (game.plan) game.plan.waypoints = []; updatePlan(); });
+$('#plan-cancel').addEventListener('click', endPlan);
+$('#plan-send').addEventListener('click', () => {
+  const p = game.plan;
+  const w = game.world;
+  const ac = w?.find(p?.id);
+  if (!ac || !p.result) { endPlan(); return; }
+  const res = p.result;
+  const cross = $('#plan-cross').checked ? res.cross : [];
+  addMsg('you', 'You', w.taxiText(ac, res, cross.length > 0));
+  speaker.fx.click();
+  w.command(ac.id, { type: 'taxi', waypoints: p.waypoints, via: res.via, runway: res.runway, gate: res.gate, cross });
+  handleEvents(w.drain());
+  endPlan();
+});
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && game.plan) endPlan(); });
 
 // ---------------------------------------------------------------- side panel
 const REQ_TEXT = { land: 'wants landing clearance', push: 'requests pushback', taxi: 'ready to taxi',
@@ -378,6 +467,14 @@ function renderPanel() {
     const box = $('#sel-buttons');
     box.innerHTML = '';
     if (ac) {
+      if (w.planTaxi(ac, {})) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.type = 'plan';
+        b.textContent = 'Choose route on map';
+        b.title = 'Tap the taxiways the aircraft should use';
+        box.append(b);
+      }
       for (const type of w.available(ac)) {
         const b = document.createElement('button');
         b.type = 'button';
@@ -418,7 +515,8 @@ function renderPanel() {
 // one listener per container (elements inside are replaced over time)
 $('#sel-buttons').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-type]');
-  if (b) issueButton(b.dataset.type);
+  if (b?.dataset.type === 'plan') startPlan();
+  else if (b) issueButton(b.dataset.type);
 });
 $('#strips').addEventListener('click', (e) => {
   const d = e.target.closest('.strip');
@@ -481,6 +579,8 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('keyup', (e) => { if (e.code === 'Space') stopTalk(); });
 
 $('#set-tts').checked = settings.tts;
+$('#set-radio').checked = settings.radioFx;
+$('#set-radio').addEventListener('change', (e) => { settings.radioFx = speakerSettings.radioFx = e.target.checked; saveSettings(); });
 $('#set-tts').addEventListener('change', (e) => { settings.tts = speakerSettings.tts = e.target.checked; saveSettings(); if (!e.target.checked) speaker.stop(); });
 $('#set-rate').value = settings.rate;
 $('#set-rate').addEventListener('change', (e) => { settings.rate = speakerSettings.rate = Number(e.target.value); saveSettings(); });
@@ -498,7 +598,8 @@ function frame(now) {
       dt -= step;
     }
     handleEvents(w.drain());
-    if (game.view === 'map') renderer.draw(w, { selectedId: game.selected, now });
+    if (game.plan && now - (game.plan.at || 0) > 1000) updatePlan();
+    if (game.view === 'map') renderer.draw(w, { selectedId: game.selected, now, plan: game.plan?.result });
     else game.scene3d.draw(w, { selectedId: game.selected, now, theme: renderer.theme });
     renderPanel();
     $('#score').textContent = w.score;

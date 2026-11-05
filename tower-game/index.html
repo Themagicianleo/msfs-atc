@@ -89,6 +89,16 @@
           <select id="traffic" class="input small-input"><option value="off">None</option><option value="calm">Calm</option><option value="normal">Normal</option><option value="busy">Busy</option></select>
         </label>
       </div>
+      <div id="plan" class="plan-bar glass-ctl" hidden>
+        <div id="plan-text" class="plan-text"></div>
+        <div class="plan-btns">
+          <button type="button" class="btn btn-small" id="plan-undo">Undo</button>
+          <button type="button" class="btn btn-small" id="plan-clear">Clear</button>
+          <label class="check plan-cross"><input type="checkbox" id="plan-cross" checked> Clear to cross runways</label>
+          <button type="button" class="btn btn-small" id="plan-cancel">Cancel</button>
+          <button type="button" class="btn btn-small btn-primary" id="plan-send">Send</button>
+        </div>
+      </div>
       <div id="map-hint" class="map-hint muted">Drag to pan · pinch or scroll to zoom · tap an aircraft to select it</div>
     </section>
 
@@ -134,6 +144,7 @@
             </span>
           </div>
           <label class="check"><input type="checkbox" id="set-tts" checked> Speak pilot calls</label>
+          <label class="check"><input type="checkbox" id="set-radio" checked> Radio sound (squelch and static)</label>
           <label class="field"><span class="label">Voice speed</span><input type="range" id="set-rate" min="0.8" max="1.6" step="0.05" value="1.15"></label>
           <label class="field"><span class="label">Recognition language (English airports)</span>
             <select id="set-lang" class="input"><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option><option value="en-AU">English (Australia)</option><option value="en-IN">English (India)</option></select>

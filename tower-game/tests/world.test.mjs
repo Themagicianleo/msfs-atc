@@ -60,6 +60,32 @@ test('a departure: push, taxi, take-off, frequency change', () => {
   assert.equal(w.stats.conflicts, 0);
 });
 
+test('the controller picks the taxi route on the map: the aircraft follows it and reads back the taxiways', () => {
+  const w = newWorld();
+  const ac = w.spawnDeparture();
+  ac.callAt = 0;
+  w.step(0.5);
+  w.command(ac.id, { type: 'push' });
+  assert.ok(runUntil(w, () => ac.state === 'pushed'));
+  const plain = w.planTaxi(ac, {});
+  assert.ok(plain?.nodes.length > 1 && plain.via.length);
+  // a taxiway point the shortest route doesn't use
+  const g = w.L.graph;
+  const used = new Set(plain.nodes);
+  const wp = g.nodes.findIndex((n, i) => n.kind === 'twy' && !used.has(i) && g.adj[i].some((k) => !plain.via.includes(g.edges[k].name) && g.edges[k].kind === 'twy'));
+  assert.ok(wp >= 0);
+  const plan = w.planTaxi(ac, { waypoints: [wp] });
+  assert.ok(plan.nodes.includes(wp), 'route goes through the chosen point');
+  assert.notDeepEqual(plan.via, plain.via);
+  const text = w.taxiText(ac, plan, false);
+  assert.match(text, new RegExp(`taxi to holding point runway 27 via ${plan.via.join(' ')}`));
+  const r = w.command(ac.id, { type: 'taxi', waypoints: [wp], via: plan.via });
+  assert.equal(r.ok, true, r.text);
+  assert.ok(ac.routeNodes.includes(wp));
+  assert.match(r.text, new RegExp(`via ${plan.via.join(' ')}`));
+  assert.ok(runUntil(w, () => ac.state === 'holding'), `stuck in ${ac.state}`);
+});
+
 test('an arrival: landing clearance, exit, taxi to the stand', () => {
   const w = newWorld();
   const ac = w.spawnArrival(null, 6);

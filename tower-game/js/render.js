@@ -164,7 +164,7 @@ export class Renderer {
     c.fillText(str, s[0] + dx, s[1] + dy);
   }
 
-  draw(world, { selectedId = null, now = 0 } = {}) {
+  draw(world, { selectedId = null, now = 0, plan = null } = {}) {
     C = this.chart ? CHART : (this.theme === 'light' ? LIGHT : DARK);
     this.metric = !!world.metric;
     const c = this.ctx;
@@ -260,7 +260,29 @@ export class Renderer {
       }
     }
 
+    if (plan) this.drawPlan(plan, world);
     for (const ac of world.ac) this.drawAircraft(ac, ac.id === selectedId, now);
+  }
+
+  // the route being chosen on the map: thick line, the end, runway crossings
+  drawPlan(plan, world) {
+    const c = this.ctx;
+    const pts = plan.points.map((p) => this.toScreen(p));
+    c.save();
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    c.strokeStyle = 'rgba(255,214,10,0.35)'; c.lineWidth = 10;
+    c.beginPath(); pts.forEach((q, i) => (i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1]))); c.stroke();
+    c.strokeStyle = C.req; c.lineWidth = 3;
+    c.stroke();
+    const end = pts[pts.length - 1];
+    c.fillStyle = C.req;
+    c.beginPath(); c.arc(end[0], end[1], 7, 0, Math.PI * 2); c.fill();
+    c.restore();
+    const g = world.L.graph;
+    for (const id of plan.nodes) {
+      const nd = g.nodes[id];
+      if (nd.kind === 'rwyx') this.text('X', nd.p, { color: C.hold, size: 12, bold: true });
+    }
   }
 
   // chart-style taxiway name boxes, skipping any that would overlap

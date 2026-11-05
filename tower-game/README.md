@@ -29,6 +29,15 @@ Open the site, type an airport (ICAO code, name or city, e.g. `EGLL`, `Haneda`,
   - *runway 27, line up and wait* · *cleared for take-off* · *contact departure, good day*
 
   Numbers work as "two seven" or "twenty seven", letters as "alpha" or "a".
+- **Choose the taxi route on the map:** select an aircraft that is ready to taxi (or taxiing) and tap
+  **Choose route on map**.
+  - Tap points on the taxiways in the order it should use them. The route is drawn in yellow, and the bar
+    shows the instruction, e.g. *via J3, B, A6 to holding point runway 36*.
+  - Tap a holding point (departures) or a stand (arrivals) to change where it goes.
+  - **Clear to cross runways** adds the crossing clearance to the instruction. Untick it to clear each
+    crossing yourself later.
+  - **Undo**, **Clear**, **Cancel** or **Send**. The aircraft taxis exactly that way and the pilot reads back
+    the taxiways.
 - **Pilots** do what you say but use their eyes:
   - Arrivals without a landing clearance go around at 0.9 NM, and at 0.3 NM if the runway is still occupied.
   - Taxiing aircraft stop for traffic on their route and hold short of runways until cleared to cross.
@@ -205,6 +214,26 @@ python -m http.server 8000            # then open http://localhost:8000/
 
 Without the data build you can still play `DEMO`.
 
+## Pilot voices
+
+Pilots speak with your device's own voices. To sound less like one robot:
+- Each pilot gets one of the better voices on the device and keeps it. The game prefers "Premium",
+  "Enhanced", "Natural", "Online" and Google voices, and never uses joke or old voices (Bells, Zarvox, Fred...).
+- Each pilot has a slightly different pitch and pace.
+- Pilots answer after a short pause, like people, instead of the instant you finish.
+- **Radio sound:** a squelch burst when a pilot keys the mic, a faint static hiss while they talk, and the
+  squelch tail when they stop. Your own instructions get a transmit click. Turn it off under
+  **Settings → Radio sound**.
+
+The voices are only as good as the ones installed. For much better ones:
+- **iPad / iPhone:** Settings → Accessibility → Spoken Content → Voices → English, then download an
+  "Enhanced" or "Premium" voice (e.g. Ava, Zoe, Evan, Nathan, Serena); for ZBAD also a Chinese one.
+- **Windows:** Microsoft Edge offers the "Online (Natural)" voices.
+- **Chrome:** has Google voices built in.
+
+The browser's speech can't be run through a radio filter itself (only the sounds around it), and how natural it
+sounds on your device has not been measured.
+
 ## Voice recognition: what to expect
 
 The game uses the browser's built-in speech recognition (`webkitSpeechRecognition`):
@@ -243,7 +272,7 @@ node tools/e2e.mjs                     # headless Chromium plays the site (needs
 | `js/scene3d.js` | 3D tower and orbit views, low-poly aircraft (three.js in `js/vendor/`) |
 | `js/app.js` | the page: loading, radio log, voice, buttons |
 | `js/weather.js` | live METAR or generated wind |
-| `js/lib/` | small helpers: text/speech formatting, number words, runway choice, speech output and input |
+| `js/lib/` | small helpers: text/speech formatting, number words, runway choice, speech output and input, radio sounds |
 
 ## Limitations
 

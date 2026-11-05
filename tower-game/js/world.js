@@ -5,7 +5,7 @@
 
 import { Formatter, render } from './lib/format.js';
 import { M_PER_NM, KT, Path, add, dist, dot, headingOf, mul, norm, sub, fromHeading, angleDiff } from './geo.js';
-import { endGeometry, onRunway, route, routeCrossings, runwayForEnd, unknownVia } from './layout.js';
+import { endGeometry, onRunway, route, routeCrossings, routeNames, runwayForEnd, taxiwayNames, unknownVia } from './layout.js';
 import { zhDigits, zhReason, zhRunway, zhWind } from './zh.js';
 
 // Generic aircraft performance (approach speed and rotation speed in knots).
@@ -352,7 +352,20 @@ export class World {
     }
     if (start === null) start = ac.atNode;
     if (start === null || start === undefined) return null;
-    const nodes = route(this.L, start, to, { ...opts, traffic: this.trafficCost(ac) });
+    let nodes;
+    if (opts.waypoints?.length) {
+      // the controller's own route: through each chosen point in turn
+      nodes = [start];
+      for (const wp of [...opts.waypoints, to]) {
+        const cur = nodes[nodes.length - 1];
+        if (wp === cur) continue;
+        const leg = route(this.L, cur, wp, {});
+        if (!leg) return null;
+        nodes = nodes.concat(leg.slice(1));
+      }
+    } else {
+      nodes = route(this.L, start, to, { ...opts, traffic: this.trafficCost(ac) });
+    }
     if (!nodes) return null;
     return { nodes, points: [...lead, ...nodes.map((id) => this.L.graph.nodes[id].p)] };
   }
@@ -843,15 +856,32 @@ export class World {
     return { t: r.map((x) => x.t).join(', '), s: r.map((x) => x.s).join(', ') };
   }
 
+  // a taxi route through points the controller picked on the map, for the
+  // preview and the instruction: {nodes, points, via, cross, runway|gate}
+  planTaxi(ac, { waypoints = [], runway = null, gate = null } = {}) {
+    const dep = ac.kind === 'dep';
+    if (dep ? !['pushed', 'taxi_out', 'holding'].includes(ac.state) : !['vacated', 'taxi_in'].includes(ac.state)) return null;
+    const end = runway || ac.end;
+    const g = dep ? null : this.L.gates.find((x) => x.id === (gate || ac.gate));
+    const to = dep ? this.L.holdPoints[end]?.h : g?.node;
+    if (to === undefined || to === null) return null;
+    const r = this.routeFromHere(ac, to, { waypoints });
+    if (!r) return null;
+    const known = taxiwayNames(this.L);
+    const via = routeNames(this.L, r.nodes).filter((n) => known.has(n));
+    const cross = routeCrossings(this.L, r.nodes).map((c) => this.L.runways.find((x) => x.id === c.runway)?.identA).filter(Boolean);
+    return { ...r, via, cross: [...new Set(cross)], runway: dep ? end : null, gate: dep ? null : g.id };
+  }
+
   taxiOut(ac, cmd, runwayArg, done) {
     if (!['pushed', 'taxi_out', 'holding'].includes(ac.state)) {
       return this.unable(ac, ac.state === 'gate' ? 'we need pushback first' : 'not able to taxi now');
     }
     const end = runwayArg || ac.end;
     if (!this.L.holdPoints[end]) return this.unable(ac, `runway ${end} is not available`);
-    const unknown = unknownVia(this.L, cmd.via);
+    const unknown = cmd.waypoints ? [] : unknownVia(this.L, cmd.via);
     if (unknown.length) return this.unable(ac, `we can't find taxiway ${unknown.join(', ')}`);
-    const r = this.routeFromHere(ac, this.L.holdPoints[end].h, { via: cmd.via || [], prefer: 'A' });
+    const r = this.routeFromHere(ac, this.L.holdPoints[end].h, { via: cmd.via || [], prefer: 'A', waypoints: cmd.waypoints });
     if (!r) return this.unable(ac, 'no taxi route');
     ac.end = end;
     ac.state = 'taxi_out';
@@ -869,10 +899,10 @@ export class World {
     const user = this.gateUse.get(gate.id);
     if (user && user !== ac.id) return this.unable(ac, `stand ${gate.id} is occupied`);
     if (gate.maxSpan && gate.maxSpan < ac.type.span) return this.unable(ac, `stand ${gate.id} is too small for us`);
-    const unknown = unknownVia(this.L, cmd.via);
+    const unknown = cmd.waypoints ? [] : unknownVia(this.L, cmd.via);
     if (unknown.length) return this.unable(ac, `we can't find taxiway ${unknown.join(', ')}`);
     if (gate.id !== ac.gate) { this.gateUse.delete(ac.gate); this.gateUse.set(gate.id, ac.id); ac.gate = gate.id; }
-    const r = this.routeFromHere(ac, gate.node, { via: cmd.via || [], prefer: 'B' });
+    const r = this.routeFromHere(ac, gate.node, { via: cmd.via || [], prefer: 'B', waypoints: cmd.waypoints });
     if (!r) return this.unable(ac, 'no taxi route');
     ac.state = 'taxi_in';
     ac.hold = false;
@@ -880,6 +910,14 @@ export class World {
     this.applyCrossClearances(ac, cmd.cross);
     gate = null;
     return done('taxi_in', { via: this.viaText(cmd, ac), cross: this.crossText(cmd, ac) });
+  }
+
+  // what the controller says for a planned route (see planTaxi)
+  taxiText(ac, plan, withCross) {
+    const extra = { runway: this.rwy(ac, plan.runway || ac.end), via: this.viaText({ via: plan.via }, ac),
+      cross: withCross ? this.crossText({ cross: plan.cross }, ac) : null };
+    if (plan.gate) extra.gate = { t: plan.gate, s: this.zh(ac) ? zhDigits(plan.gate) : (/^\d+$/.test(plan.gate) ? plan.gate : this.f.spell(plan.gate)) };
+    return this.controllerText(ac, 'taxi', extra);
   }
 
   // controller text for a command button

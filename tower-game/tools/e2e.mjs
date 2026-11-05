@@ -107,6 +107,47 @@ async function main() {
     if (sel !== 'none') throw new Error(`talk button text is selectable (${sel})`);
   }
 
+  // choose the taxi route on the map for the aircraft that just pushed back
+  {
+    await page.waitForFunction((id) => window.towerGame.game.world.find(id)?.state === 'pushed', caller2.id, { timeout: 90000 });
+    await page.click('.speed button[data-speed="0"]');
+    await page.evaluate((id) => { window.towerGame.game.selected = id; }, caller2.id);
+    await page.waitForSelector('#sel-buttons button[data-type="plan"]');
+    await page.click('#sel-buttons button[data-type="plan"]');
+    await page.waitForSelector('#plan:not([hidden])');
+    const before = await page.textContent('#plan-text');
+    // a taxiway point off the default route, away from the holding points
+    const tap = await page.evaluate((id) => {
+      const { game, renderer } = window.towerGame;
+      const w = game.world; const L = w.L; const g = L.graph;
+      const plain = w.planTaxi(w.find(id), {});
+      const used = new Set(plain.nodes);
+      const holds = Object.values(L.holdPoints).map((h) => renderer.toScreen(g.nodes[h.h].p));
+      const cands = [];
+      g.nodes.forEach((n, i) => {
+        if (n.kind !== 'twy' || used.has(i)) return;
+        const s = renderer.toScreen(n.p);
+        if (s[0] < 40 || s[1] < 140 || s[0] > renderer.w - 40 || s[1] > renderer.h - 80) return;
+        if (holds.some((h) => Math.hypot(h[0] - s[0], h[1] - s[1]) < 45)) return;
+        const near = g.nodes.some((m, j) => j !== i && m.kind !== 'rwy' && Math.hypot(...[0, 1].map((k) => renderer.toScreen(m.p)[k] - s[k])) < 3);
+        if (!near && w.planTaxi(w.find(id), { waypoints: [i] })) cands.push({ i, x: s[0], y: s[1] });
+      });
+      return cands[Math.floor(cands.length / 2)];
+    }, caller2.id);
+    if (!tap) throw new Error('no taxiway point to tap');
+    await page.click('#map', { position: { x: tap.x, y: tap.y } });
+    const planned = await page.evaluate(() => ({ wp: window.towerGame.game.plan.waypoints, nodes: window.towerGame.game.plan.result.nodes }));
+    if (planned.wp[0] !== tap.i || !planned.nodes.includes(tap.i)) throw new Error(`tap did not set the route: ${JSON.stringify(planned.wp)} vs ${tap.i}`);
+    const after = await page.textContent('#plan-text');
+    await page.screenshot({ path: join(shots, 'route-plan.png') });
+    await page.click('#plan-send');
+    await page.waitForFunction((id) => window.towerGame.game.world.find(id)?.state === 'taxi_out', caller2.id);
+    const onRoute = await page.evaluate(([id, n]) => window.towerGame.game.world.find(id).routeNodes.includes(n), [caller2.id, tap.i]);
+    if (!onRoute) throw new Error('aircraft is not taxiing the chosen route');
+    console.log('route plan:', before, '->', after, '|', await page.evaluate(() => [...document.querySelectorAll('#log .msg')].slice(-2).map((m) => m.textContent)));
+    await page.click('.speed button[data-speed="4"]');
+  }
+
   // set the wind by hand
   await page.click('details.settings summary');
   await page.fill('#wind-dir', '90');
