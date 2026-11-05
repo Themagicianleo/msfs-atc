@@ -6,6 +6,7 @@
 // then hides the button and the phrase buttons and text box carry on.
 
 import { applyHints } from './hints.js';
+import { recognitionPrompt } from './asr-correct.js';
 
 // After this long without the words changing, a transcript that already is a whole instruction is sent
 // without waiting for the recogniser's own (slower) end-of-speech decision. (isComplete may return its own
@@ -24,7 +25,7 @@ export function voiceSupport() {
 }
 
 export class Listener {
-  constructor({ lang = 'en-US', onFinal, onInterim, onState, isComplete = null, getHints = null }) {
+  constructor({ lang = 'en-US', onFinal, onInterim, onState, isComplete = null, getHints = null, correct = null, ai = null }) {
     const s = voiceSupport();
     this.support = s;
     this.lang = lang;
@@ -33,6 +34,8 @@ export class Listener {
     this.onState = onState;
     this.isComplete = isComplete; // (text) => true when the words so far are a whole instruction
     this.getHints = getHints; // () => [{text, boost}] for the recogniser
+    this.correct = correct; // (text) => text fitted to the radio (AI recognition: callsigns, taxiways, commands)
+    this.ai = ai; // AiRecognizer (Whisper): used instead of the browser's recogniser while it is loaded
     this.failures = 0;
     this.disabled = !s.ok;
     this.reason = s.ok ? '' : s.reason;
@@ -44,6 +47,8 @@ export class Listener {
 
   start() {
     if (this.disabled || this.active) return;
+    this.aiMode = false;
+    if (this.ai?.usable()) { this.startAi(); return; }
     const rec = new this.support.SR();
     rec.lang = this.lang;
     rec.interimResults = true;
@@ -111,6 +116,68 @@ export class Listener {
     }, 4000);
   }
 
+  // ---- AI recognition (Whisper): record, then recognise the whole transmission
+  async startAi() {
+    this.aiMode = true;
+    this.active = true;
+    this.errored = false;
+    this.aiBusy = false;
+    this.final = '';
+    this.interim = '';
+    this.segments = [];
+    const token = (this.aiToken = (this.aiToken || 0) + 1);
+    let rec;
+    try {
+      rec = await this.ai.record((ev) => {
+        if (token !== this.aiToken) return;
+        if (ev === 'end') this.stop();
+        else if (ev === 'nothing') this.finishAi(null, 'Nothing heard.');
+      });
+    } catch (err) {
+      this.active = false;
+      if (err?.name === 'NotAllowedError' || err?.name === 'SecurityError') this.disable('Microphone permission was denied.');
+      else this.fail(`Could not open the microphone (${err?.message || err}).`);
+      return;
+    }
+    if (token !== this.aiToken || !this.active) { rec.abort(); return; }
+    this.recording = rec;
+    this.setState('listening');
+  }
+
+  async finishAi(rec, failReason = '') {
+    const r = rec || this.recording;
+    this.recording = null;
+    this.aiToken += 1;
+    if (!r) { this.active = false; this.fail(failReason || 'Nothing heard.'); return; }
+    if (failReason) { r.abort(); this.active = false; this.fail(failReason); return; }
+    this.onInterim?.('...');
+    this.aiBusy = true;
+    let audio = null;
+    try {
+      const spoke = r.heard();
+      audio = await r.stop();
+      if (!spoke || audio.length < 4000) { this.aiBusy = false; this.active = false; this.fail('Nothing heard.'); return; }
+      const zh = this.lang.toLowerCase().startsWith('zh');
+      const hints = this.getHints?.() || [];
+      const raw = await this.ai.transcribe(audio, { language: zh ? 'chinese' : 'english', prompt: recognitionPrompt(hints, { zh }) });
+      this.aiBusy = false;
+      this.active = false;
+      this.onInterim?.('');
+      const fixed = (this.correct ? this.correct(raw) : raw).trim();
+      if (!fixed) { this.fail('Nothing recognised.'); return; }
+      this.failures = 0;
+      this.setState('idle');
+      this.onFinal?.(fixed, fixed === raw.trim() ? [fixed] : [fixed, raw.trim()]);
+    } catch (err) {
+      this.aiBusy = false;
+      this.active = false;
+      this.onInterim?.('');
+      this.ai.fault = String(err?.message || err);
+      this.ai.status = 'error'; // the browser's own recogniser takes over until the page is reloaded
+      this.fail(`AI recognition failed (${this.ai.fault}); using the browser's recogniser instead.`);
+    }
+  }
+
   // Faster than waiting for the recogniser to notice the silence: once the words have stopped changing and
   // they already make a whole instruction, stop listening.
   settle() {
@@ -126,6 +193,11 @@ export class Listener {
 
   stop() {
     clearTimeout(this.settleTimer);
+    if (this.aiMode && this.active) {
+      if (this.recording && !this.aiBusy) this.finishAi(this.recording);
+      else if (!this.recording && !this.aiBusy) { this.aiToken += 1; this.active = false; this.setState('idle'); } // released before the microphone opened
+      return;
+    }
     if (!this.rec || !this.active) return;
     try { this.rec.stop(); } catch { /* ignore */ }
     // if Safari never sends onend, finish ourselves

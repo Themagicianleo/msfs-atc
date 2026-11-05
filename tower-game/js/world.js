@@ -6,7 +6,7 @@
 import { Formatter, render } from './lib/format.js';
 import { M_PER_NM, KT, Path, add, dist, dot, headingOf, mul, norm, sub, fromHeading, angleDiff } from './geo.js';
 import { endGeometry, onRunway, route, routeCrossings, routeNames, runwayForEnd, taxiwayNames, unknownVia } from './layout.js';
-import { zhDigits, zhReason, zhRunway, zhWind } from './zh.js';
+import { zhDigits, zhReason, zhRunway, zhSpell, zhWind } from './zh.js';
 import { windComponents } from './lib/runway.js';
 
 // Generic aircraft performance (approach speed and rotation speed in knots).
@@ -147,7 +147,7 @@ export class World {
   values(ac, extra = {}) {
     const end = ac.end;
     const zh = this.zh(ac);
-    const gate = ac.gate ? { t: ac.gate, s: zh ? zhDigits(ac.gate) : (/^\d+$/.test(ac.gate) ? ac.gate : this.f.spell(ac.gate)) } : null;
+    const gate = ac.gate ? { t: ac.gate, s: zh ? zhSpell(ac.gate) : (/^\d+$/.test(ac.gate) ? ac.gate : this.f.spell(ac.gate)) } : null;
     return {
       unit: zh && this.unitZh ? this.unitZh : this.unit,
       callsign: ac.cs,
@@ -942,7 +942,7 @@ export class World {
   viaText(cmd, ac) {
     if (!cmd.via?.length) return null;
     const names = cmd.via.map((v) => v.toUpperCase());
-    if (ac && this.zh(ac)) return { t: names.join('、'), s: names.map(zhDigits).join('、') };
+    if (ac && this.zh(ac)) return { t: names.join('、'), s: names.map(zhSpell).join('、') };
     return { t: names.join(' '), s: names.map((v) => this.f.spell(v)).join(', ') };
   }
 
@@ -1035,7 +1035,7 @@ export class World {
   taxiText(ac, plan, withCross) {
     const extra = { runway: this.rwy(ac, plan.runway || ac.end), via: this.viaText({ via: plan.via }, ac),
       cross: withCross ? this.crossText({ cross: plan.cross }, ac) : null };
-    if (plan.gate) extra.gate = { t: plan.gate, s: this.zh(ac) ? zhDigits(plan.gate) : (/^\d+$/.test(plan.gate) ? plan.gate : this.f.spell(plan.gate)) };
+    if (plan.gate) extra.gate = { t: plan.gate, s: this.zh(ac) ? zhSpell(plan.gate) : (/^\d+$/.test(plan.gate) ? plan.gate : this.f.spell(plan.gate)) };
     return this.controllerText(ac, 'taxi', extra);
   }
 

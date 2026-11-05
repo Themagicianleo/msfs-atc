@@ -6,6 +6,8 @@ import { unpackLayout } from './osm.js';
 import { chooseConfig, endWinds, runwayPlans } from './ops.js';
 import { taxiwayNames } from './layout.js';
 import { Speaker } from './lib/speech.js';
+import { AiRecognizer, MODEL as AI_MODEL, aiModelCached, aiSupport, deleteAiModel } from './lib/whisper.js';
+import { correctTranscript } from './lib/asr-correct.js';
 import { MODELS, NeuralVoices, cachedModels, deleteVoices, modelsFor } from './lib/neural.js';
 import { Listener, voiceSupport } from './lib/voice.js';
 import { understand, understandBest } from './commands.js';
@@ -26,7 +28,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(`tower.${k}`, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
-const settings = { effects: 'auto', voiceQuality: 'best', tts: true, radioFx: true, accents: true, builtinVoices: false, autoRunways: false, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
+const settings = { effects: 'auto', voiceQuality: 'best', tts: true, radioFx: true, accents: true, builtinVoices: false, aiVoice: false, autoRunways: false, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
 const saveSettings = () => store.set('settings', settings);
 // voices vary per aircraft; the Speaker reads these keys
 const speakerSettings = { efficient: settings.voiceQuality === 'efficient', tts: settings.tts, radioFx: settings.radioFx, accents: settings.accents, builtinVoices: settings.builtinVoices, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
@@ -732,8 +734,12 @@ $('#strips').addEventListener('click', (e) => {
 });
 
 // ---------------------------------------------------------------- voice
+const ai = new AiRecognizer();
 const listener = new Listener({
   lang: settings.lang,
+  ai,
+  // AI recognition: what it heard, fitted to the callsigns on frequency, taxiway code words and command words
+  correct: (t) => correctTranscript(t, { aircraft: game.world?.ac || [], zh: listener.lang.toLowerCase().startsWith('zh') }),
   onInterim: (t) => { $('#ptt-interim').textContent = t; },
   // the instruction goes in first, so the pilot's readback is queued before the calls that waited for the key
   onFinal: (t, alts) => { $('#ptt-interim').textContent = ''; issueText(t, alts); speaker.release(); },
@@ -853,6 +859,49 @@ $('#set-rate').value = settings.rate;
 $('#set-rate').addEventListener('change', (e) => { settings.rate = speakerSettings.rate = Number(e.target.value); saveSettings(); });
 $('#set-lang').value = settings.lang;
 $('#set-lang').addEventListener('change', (e) => { settings.lang = listener.lang = e.target.value; saveSettings(); });
+
+// ---------------------------------------------------------------- AI voice recognition (Whisper)
+async function renderAi(progress = null) {
+  const st = $('#ai-status');
+  const bar = $('#ai-progress');
+  bar.hidden = !progress;
+  if (progress) {
+    bar.max = progress.total; bar.value = progress.done;
+    st.textContent = `Downloading the AI model: ${Math.round(progress.done)} of ${Math.round(progress.total)} MB. The browser's recogniser is used until then.`;
+    return;
+  }
+  $('#ai-delete').hidden = !(await aiModelCached());
+  const sup = aiSupport();
+  if (!settings.aiVoice) st.textContent = 'Off: the browser\'s own recogniser is used.';
+  else if (!sup.ok) st.textContent = sup.reason;
+  else if (ai.status === 'ready') st.textContent = `Ready: ${AI_MODEL.label}. Used for every transmission.`;
+  else if (ai.status === 'error') st.textContent = `The AI model isn't available (${ai.error || ai.fault}). The browser's recogniser is used.`;
+  else st.textContent = 'The AI model loads in the background.';
+}
+function ensureAi() {
+  if (!settings.aiVoice || !aiSupport().ok || ai.status === 'loading' || ai.status === 'ready') { renderAi(); return; }
+  ai.load((done, total) => renderAi({ done, total }))
+    .then(() => { renderAi(); sys('AI voice recognition is ready.'); }, () => renderAi());
+}
+$('#set-ai').checked = settings.aiVoice;
+$('#set-ai').addEventListener('change', (e) => {
+  settings.aiVoice = e.target.checked;
+  saveSettings();
+  if (!e.target.checked) ai.unload();
+  ensureAi();
+  renderAi();
+});
+$('#ai-delete').addEventListener('click', async () => {
+  ai.unload();
+  await deleteAiModel();
+  settings.aiVoice = false;
+  $('#set-ai').checked = false;
+  saveSettings();
+  renderAi();
+});
+// start loading a moment after the page is up, so the first screen is not slowed down
+setTimeout(ensureAi, 1500);
+renderAi();
 
 // ---------------------------------------------------------------- main loop
 // ---------------------------------------------------------------- speed

@@ -199,6 +199,13 @@
             <p id="builtin-status" class="muted small"></p>
             <button id="builtin-delete" class="btn btn-small" type="button" hidden>Delete downloaded voices</button>
           </div>
+          <div class="field builtin">
+            <label class="check"><input type="checkbox" id="set-ai"> AI voice recognition (Whisper): far better with callsigns and taxiway names</label>
+            <p class="muted small">An open-source speech model (OpenAI Whisper) that runs on this device instead of the browser's own recogniser. It is told the callsigns on frequency, this airport's taxiways and the usual phrases, and what it hears is matched to them by sound, so callsigns that aren't English words (Shenzhen, Loong Air, Speedbird...) are found. About 80 MB, downloaded once, then it works offline. Until it is ready the browser's recogniser is used. Recognition takes a moment after you stop talking.</p>
+            <progress id="ai-progress" max="1" value="0" hidden></progress>
+            <p id="ai-status" class="muted small"></p>
+            <button id="ai-delete" class="btn btn-small" type="button" hidden>Delete downloaded model</button>
+          </div>
           <label class="field"><span class="label">Voice speed</span><input type="range" id="set-rate" min="0.8" max="1.6" step="0.05" value="1.15"></label>
           <label class="field"><span class="label">Recognition language (English airports)</span>
             <select id="set-lang" class="input"><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option><option value="en-AU">English (Australia)</option><option value="en-IN">English (India)</option></select>

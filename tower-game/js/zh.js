@@ -11,6 +11,16 @@ export function zhDigits(str) {
   return String(str).replace(/\d/g, (d) => READ[d]);
 }
 
+// The ICAO/FAA code words as said in Chinese radio. Taxiway letters are spoken as these, never as a bare letter.
+export const ZH_CODE_WORDS = { A: '阿尔法', B: '布拉沃', C: '查理', D: '德尔塔', E: '艾科', F: '福克斯特', G: '高尔夫', H: '赫特尔', I: '印度',
+  J: '朱丽叶', K: '基洛', L: '利马', M: '迈克', N: '诺维姆博', O: '奥斯卡', P: '帕帕', Q: '魁北克', R: '罗密欧', S: '塞拉', T: '探戈',
+  U: '优尼佛姆', V: '维克多', W: '威士忌', X: '艾克斯雷', Y: '洋基', Z: '祖鲁' };
+
+// "WA" -> "威士忌阿尔法", "B1" -> "布拉沃幺", "3101" -> "三幺洞幺"; a stand like "A12" is read the same way
+export function zhSpell(str) {
+  return [...String(str).toUpperCase()].map((c) => (/\d/.test(c) ? READ[c] : (ZH_CODE_WORDS[c] || c))).join('');
+}
+
 export function zhRunway(id) {
   const m = String(id).toUpperCase().match(/^(\d{1,2})([LRC]?)$/);
   if (!m) return { t: String(id), s: zhDigits(id) };
