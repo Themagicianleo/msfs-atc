@@ -3,12 +3,12 @@
 // A static site: everything it needs is in this folder.
 
 import { unpackLayout } from './osm.js';
-import { chooseConfig, runwayChoices } from './ops.js';
+import { chooseConfig, endWinds, runwayPlans } from './ops.js';
 import { taxiwayNames } from './layout.js';
 import { Speaker } from './lib/speech.js';
 import { MODELS, NeuralVoices, cachedModels, deleteVoices, modelsFor } from './lib/neural.js';
 import { Listener, voiceSupport } from './lib/voice.js';
-import { understand } from './commands.js';
+import { understandBest } from './commands.js';
 import { buildLayout, endGeometry } from './layout.js';
 import { Renderer, STATE_LABELS } from './render.js';
 import { World, taxiDestination } from './world.js';
@@ -24,7 +24,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(`tower.${k}`, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
-const settings = { tts: true, radioFx: true, accents: true, builtinVoices: false, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
+const settings = { tts: true, radioFx: true, accents: true, builtinVoices: false, autoRunways: false, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
 const saveSettings = () => store.set('settings', settings);
 // voices vary per aircraft; the Speaker reads these keys
 const speakerSettings = { tts: settings.tts, radioFx: settings.radioFx, accents: settings.accents, builtinVoices: settings.builtinVoices, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
@@ -119,17 +119,8 @@ async function loadFeatured(code) {
   return { layout: unpackLayout(packed), profile, types, airport: { ...packed.airport, icao: code } };
 }
 
-function fillRunwayMenus(layout, profile, cfg) {
-  const choices = runwayChoices(layout, profile);
-  for (const [sel, val] of [[$('#arr-rwy'), cfg.arr.join('+')], [$('#dep-rwy'), cfg.dep.join('+')]]) {
-    sel.innerHTML = '';
-    for (const c of choices) sel.append(new Option(c, c));
-    if (![...sel.options].some((o) => o.value === val)) sel.append(new Option(val, val));
-    sel.value = val;
-  }
-}
-
-async function startShift(code, traffic) {
+// Step 1 of starting a shift: load the airport, the layout and the weather
+async function prepareShift(code, traffic) {
   speaker.unlock(); // inside the tap: Safari needs this for speech
   const featured = FEATURED.includes(code);
   const [phr, phrZh, airlines, hq] = await Promise.all([loadJson('data/phraseology.json'), loadJson('data/phraseology-zh.json'), loadJson('data/airlines.json'),
@@ -142,7 +133,149 @@ async function startShift(code, traffic) {
   // a tower position from the airport's published chart, when we have one
   const tp = profile?.meta?.tower_pos;
   if (tp && layout.proj) layout.towerPos = layout.proj.toXY(tp.lat, tp.lon);
-  const cfg = chooseConfig(layout, wind, profile);
+  return { code, traffic, phr, phrZh, airlines, hq, airport, wind, layout, profile, metric: profile?.meta?.units === 'metric' };
+}
+
+// Step 2: which runways land and depart. The plan for the wind is recommended;
+// every runway end can be switched on or off for landing and for departures.
+const rwy = { ctx: null, mode: 'start', arr: new Set(), dep: new Set(), plans: [] };
+
+const speedUnit = (metric) => (metric ? 'm/s' : 'kt');
+const speedOf = (kt, metric) => (metric ? Math.round(kt * 0.514444) : kt);
+
+function showStartForm() {
+  $('#rwy-step').hidden = true;
+  $('#start-form').hidden = false;
+  $('#start').classList.remove('hidden');
+}
+
+function openRunwayStep(mode, ctx = null) {
+  const world = game.world;
+  rwy.mode = mode;
+  rwy.ctx = ctx;
+  const layout = ctx ? ctx.layout : world.L;
+  const wind = ctx ? ctx.wind : game.wind;
+  const profile = ctx ? ctx.profile : game.profile;
+  rwy.layout = layout;
+  rwy.wind = wind;
+  rwy.metric = ctx ? ctx.metric : game.metric;
+  rwy.plans = runwayPlans(layout, wind, profile);
+  const rec = rwy.plans[0];
+  const now = mode === 'game' ? { arr: world.arrEnds, dep: world.depEnds } : rec;
+  rwy.arr = new Set(now.arr);
+  rwy.dep = new Set(now.dep);
+  const where = ctx ? `${ctx.airport.icao} ${ctx.airport.name}` : $('#title').textContent;
+  $('#rwy-title').textContent = mode === 'game' ? 'Runways in use' : `${where}: runways in use`;
+  const src = wind?.source === 'generated' ? 'generated for this hour, no live METAR' : (wind?.source || 'no wind');
+  $('#rwy-wind').textContent = `${windText(wind, rwy.metric)} (${src}). The recommended plan is for this wind.`;
+  $('#rwy-begin').textContent = mode === 'game' ? 'Apply' : 'Begin shift';
+  $('#rwy-back').textContent = mode === 'game' ? 'Cancel' : 'Back';
+  $('#rwy-auto-row').hidden = mode === 'game';
+  $('#rwy-auto').checked = !!settings.autoRunways;
+  $('#rwy-error').textContent = '';
+  renderRunwayStep();
+  $('#start-form').hidden = true;
+  $('#rwy-step').hidden = false;
+  $('#start').classList.remove('hidden');
+}
+
+const sameSet = (set, list) => set.size === list.length && list.every((x) => set.has(x));
+
+function renderRunwayStep() {
+  // best headwind first, so the runways to use are at the front
+  const winds = endWinds(rwy.layout, rwy.wind).map((e, i) => ({ ...e, i }))
+    .sort((a, b) => (b.headwind ?? -99) - (a.headwind ?? -99) || a.i - b.i);
+  const unit = speedUnit(rwy.metric);
+  $('#rwy-rec-label').textContent = rwy.wind?.wind_kt ? `(for ${windText(rwy.wind, rwy.metric).replace(/^Wind /, '')})` : '';
+  const plans = $('#rwy-plans');
+  plans.innerHTML = '';
+  rwy.plans.forEach((p, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'plan';
+    b.dataset.plan = String(i);
+    b.setAttribute('aria-pressed', String(sameSet(rwy.arr, p.arr) && sameSet(rwy.dep, p.dep)));
+    const hw = p.headwind == null ? '' : (p.headwind >= 0 ? `, headwind ${speedOf(p.headwind, rwy.metric)} ${unit}` : `, TAILWIND ${speedOf(-p.headwind, rwy.metric)} ${unit}`);
+    b.innerHTML = `${i === 0 ? '<span class="rec">Recommended</span>' : ''}<b></b><small></small>`;
+    b.querySelector('b').textContent = p.name;
+    b.querySelector('small').textContent = `Landing ${p.arr.join(' + ')} · departing ${p.dep.join(' + ')} · ${p.reason}${hw}`;
+    plans.append(b);
+  });
+  for (const [box, set, key] of [[$('#rwy-arr'), rwy.arr, 'arr'], [$('#rwy-dep'), rwy.dep, 'dep']]) {
+    box.innerHTML = '';
+    for (const e of winds) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `chip${e.headwind != null && e.headwind < -2 ? ' tail' : ''}`;
+      b.dataset.role = key;
+      b.dataset.end = e.ident;
+      b.setAttribute('aria-pressed', String(set.has(e.ident)));
+      const w = e.headwind == null ? `${(e.length_m / 1000).toFixed(1)} km`
+        : `${e.headwind >= 0 ? 'head' : 'tail'} ${speedOf(Math.abs(e.headwind), rwy.metric)} · cross ${speedOf(e.crosswind, rwy.metric)}`;
+      b.innerHTML = '<b></b><small></small>';
+      b.querySelector('b').textContent = e.ident;
+      b.querySelector('small').textContent = w;
+      box.append(b);
+    }
+  }
+  const tail = winds.filter((e) => (rwy.arr.has(e.ident) || rwy.dep.has(e.ident)) && e.headwind != null && e.headwind < -5);
+  $('#rwy-note').textContent = tail.length
+    ? `Tailwind of more than 5 ${unit} on ${tail.map((e) => e.ident).join(', ')}: real controllers would avoid it.`
+    : 'Landing and departing on the same runway works but is busier. New arrivals and departures use the runways in turn; aircraft already on final or at their stand keep theirs until told otherwise.';
+}
+
+$('#rwy-plans').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-plan]');
+  if (!b) return;
+  const p = rwy.plans[Number(b.dataset.plan)];
+  rwy.arr = new Set(p.arr);
+  rwy.dep = new Set(p.dep);
+  $('#rwy-error').textContent = '';
+  renderRunwayStep();
+});
+$('#rwy-step').addEventListener('click', (e) => {
+  const b = e.target.closest('button.chip');
+  if (!b) return;
+  const set = b.dataset.role === 'arr' ? rwy.arr : rwy.dep;
+  if (set.has(b.dataset.end)) set.delete(b.dataset.end); else set.add(b.dataset.end);
+  $('#rwy-error').textContent = '';
+  renderRunwayStep();
+});
+$('#rwy-back').addEventListener('click', () => {
+  if (rwy.mode === 'game') $('#start').classList.add('hidden'); else showStartForm();
+  $('#rwy-step').hidden = true;
+  if (rwy.mode !== 'game') $('#start-form').hidden = false;
+});
+$('#rwy-step').addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (!rwy.arr.size || !rwy.dep.size) { $('#rwy-error').textContent = 'Choose at least one runway for landing and one for departures.'; return; }
+  const order = (set) => rwy.layout.runways.flatMap((r) => [r.identA, r.identB]).filter((id) => set.has(id));
+  const arr = order(rwy.arr);
+  const dep = order(rwy.dep);
+  const plan = rwy.plans.find((p) => sameSet(rwy.arr, p.arr) && sameSet(rwy.dep, p.dep));
+  const cfg = plan || { name: 'Your choice', arr, dep, reason: 'chosen by you' };
+  if (rwy.mode === 'game') {
+    game.world.setRunways(arr, dep);
+    showRunways(arr, dep);
+    sys(`Runways changed: landing ${arr.join(' and ')}, departing ${dep.join(' and ')}. New arrivals and departures use them; aircraft already on final or waiting at a stand keep theirs.`);
+    $('#start').classList.add('hidden');
+    $('#rwy-step').hidden = true;
+    return;
+  }
+  settings.autoRunways = $('#rwy-auto').checked;
+  $('#set-askrwy').checked = !settings.autoRunways;
+  saveSettings();
+  beginShift(rwy.ctx, { ...cfg, arr, dep });
+});
+$('#rwy-open').addEventListener('click', () => { if (game.world) openRunwayStep('game'); });
+
+function showRunways(arr, dep) {
+  $('#rwy-open').textContent = `Arr ${arr.join('+')} · Dep ${dep.join('+')}`;
+}
+
+// Step 3: start with the chosen runways
+function beginShift(ctx, cfg) {
+  const { traffic, phr, phrZh, airlines, hq, airport, wind, layout, profile } = ctx;
   game.phr = phr;
   game.airlines = airlines;
   game.wind = wind;
@@ -162,15 +295,17 @@ async function startShift(code, traffic) {
   saveSettings();
   $('#title').textContent = [game.phrZh && profile?.meta?.tower_zh, profile?.meta?.tower || `${airport.icao} Tower`].filter(Boolean).join(' · ');
   $('#traffic').value = traffic;
-  fillRunwayMenus(layout, profile, cfg);
+  showRunways(cfg.arr, cfg.dep);
   showWind();
   $('#log').innerHTML = '';
   const how = hq ? `Real layout from OpenStreetMap (© OpenStreetMap contributors, ODbL): ${game.known.size} named taxiways, ${layout.gates.length} stands.`
     : 'Taxiways and stands are generated.';
-  sys(`${airport.icao} ${airport.name}: runways ${layout.runways.map((r) => r.id).join(', ')}. ${windText(wind)} (${wind.source}). `
+  sys(`${airport.icao} ${airport.name}: runways ${layout.runways.map((r) => r.id).join(', ')}. ${windText(wind, game.metric)} (${wind.source}). `
     + `${cfg.name}: landing ${cfg.arr.join(' and ')}, departing ${cfg.dep.join(' and ')} (${cfg.reason}). ${how}`);
   renderer.resize();
   renderer.fit(layout);
+  $('#rwy-step').hidden = true;
+  $('#start-form').hidden = false;
   $('#start').classList.add('hidden');
   game.last = performance.now();
   ensureVoices();
@@ -179,10 +314,19 @@ async function startShift(code, traffic) {
 $('#start-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   $('#start-error').textContent = '';
+  const go = e.submitter || $('#start-form button[type=submit]');
+  const label = go.textContent;
+  go.disabled = true;
+  go.textContent = 'Loading airport and weather...';
   try {
-    await startShift($('#start-icao').value.trim().toUpperCase(), $('#start-traffic').value);
+    const ctx = await prepareShift($('#start-icao').value.trim().toUpperCase(), $('#start-traffic').value);
+    if (settings.autoRunways) beginShift(ctx, chooseConfig(ctx.layout, ctx.wind, ctx.profile));
+    else openRunwayStep('start', ctx);
   } catch (err) {
     $('#start-error').textContent = err.message;
+  } finally {
+    go.disabled = false;
+    go.textContent = label;
   }
 });
 
@@ -197,10 +341,10 @@ $('#wind-form').addEventListener('submit', (e) => {
   game.world.wind = game.wind;
   showWind();
   const cfg = chooseConfig(game.world.L, game.wind, game.profile);
-  sys(`${windText(game.wind)}. Suggested: ${cfg.name}, landing ${cfg.arr.join(' and ')}, departing ${cfg.dep.join(' and ')} (change with Arr/Dep).`);
+  sys(`${windText(game.wind, game.metric)}. Recommended for this wind: ${cfg.name}, landing ${cfg.arr.join(' and ')}, departing ${cfg.dep.join(' and ')} (change with the Runways button).`);
 });
 
-$('#new-shift').addEventListener('click', () => $('#start').classList.remove('hidden'));
+$('#new-shift').addEventListener('click', showStartForm);
 $('#fit').addEventListener('click', () => {
   if (!game.world) return;
   if (game.view === 'map') renderer.fit(game.world.L); else game.scene3d?.reset();
@@ -250,8 +394,6 @@ $('#follow').addEventListener('click', () => {
   if (game.scene3d.follow) game.scene3d.orbit.d = Math.min(game.scene3d.orbit.d, 400);
   $('#follow').classList.toggle('on', game.scene3d.follow);
 });
-$('#arr-rwy').addEventListener('change', (e) => { game.world?.setRunways(e.target.value.split('+'), game.world.depEnds); sys(`New arrivals will land runway ${e.target.value.replace('+', ' and ')}.`); });
-$('#dep-rwy').addEventListener('change', (e) => { game.world?.setRunways(game.world.arrEnds, e.target.value.split('+')); sys(`New departures will use runway ${e.target.value.replace('+', ' and ')}.`); });
 $('#chart').addEventListener('click', () => {
   renderer.chart = !renderer.chart;
   $('#chart').classList.toggle('on', renderer.chart);
@@ -314,15 +456,18 @@ function handleEvents(events) {
 }
 
 // ---------------------------------------------------------------- giving instructions
-function issueText(text) {
+// alternatives: the recogniser's other guesses (voice only); the first that is a full instruction is used
+function issueText(text, alternatives = []) {
   const w = game.world;
   if (!w || !text.trim()) return;
-  addMsg('you', 'You', text.trim());
+  const u = understandBest([text, ...alternatives.filter((a) => a !== text)], w.ac, game.phr.commands, game.selected, game.known, game.phrZh?.commands || null);
+  addMsg('you', 'You', u.text.trim());
   speaker.fx.click();
-  const u = understand(text, w.ac, game.phr.commands, game.selected, game.known, game.phrZh?.commands || null);
   if (u.error) {
     if (u.ac) w.readback(u.ac, 'say_again');
-    sys(u.error, 'bad');
+    // for Chinese, show how the game read it, so a misheard digit or letter is easy to spot
+    const read = u.heard && u.heard !== u.text.trim() ? ` 听成：「${u.heard}」` : '';
+    sys(`${u.error}${read}`, 'bad');
     handleEvents(w.drain());
     return;
   }
@@ -331,13 +476,13 @@ function issueText(text) {
   handleEvents(w.drain());
 }
 
-function issueButton(type) {
+function issueButton(type, runway = null) {
   const w = game.world;
   const ac = w?.find(game.selected);
   if (!ac) return;
-  addMsg('you', 'You', w.controllerText(ac, type));
+  addMsg('you', 'You', w.controllerText(ac, type, runway ? { runway: w.rwy(ac, runway) } : {}));
   speaker.fx.click();
-  w.command(ac.id, { type });
+  w.command(ac.id, runway ? { type, runway } : { type });
   handleEvents(w.drain());
 }
 
@@ -509,7 +654,7 @@ function renderPanel() {
   if (!w) return;
   const ac = w.find(game.selected);
   if (!ac && game.selected != null) game.selected = null;
-  const selKey = JSON.stringify([game.selected, ac?.state, ac?.gate, ac?.end, ac?.req?.type, ac?.hold, ac?.crossings?.map((c) => c.cleared), ac?.cleared]);
+  const selKey = JSON.stringify([game.selected, ac?.state, ac?.gate, ac?.end, w.depEnds.join('+'), ac?.req?.type, ac?.hold, ac?.crossings?.map((c) => c.cleared), ac?.cleared]);
   if (selKey !== lastSel) {
     lastSel = selKey;
     $('#sel-cs').textContent = ac ? `${ac.cs.t}  (${ac.callsign} ${ac.type.code})` : 'No aircraft selected';
@@ -529,13 +674,19 @@ function renderPanel() {
         box.append(b);
       }
       for (const type of w.available(ac)) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.dataset.type = type;
-        b.textContent = w.phrOf(ac).buttons[type] || game.phr.buttons[type] || type;
-        b.title = w.controllerText(ac, type);
-        if (isAnswer(ac.req, type)) b.className = 'primary';
-        box.append(b);
+        // pushback: the runway to expect. With several departure runways, one button for each.
+        const runways = type === 'push' ? w.pushRunways(ac) : [];
+        for (const run of runways.length > 1 ? runways : [null]) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.dataset.type = type;
+          const label = w.phrOf(ac).buttons[type] || game.phr.buttons[type] || type;
+          b.textContent = run ? `${label} · RWY ${run}` : label;
+          b.title = w.controllerText(ac, type, run ? { runway: w.rwy(ac, run) } : {});
+          if (run) b.dataset.runway = run;
+          if (isAnswer(ac.req, type) && (!run || run === ac.end)) b.className = 'primary';
+          box.append(b);
+        }
       }
     }
   }
@@ -571,7 +722,7 @@ function renderPanel() {
 $('#sel-buttons').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-type]');
   if (b?.dataset.type === 'plan') startPlan();
-  else if (b) issueButton(b.dataset.type);
+  else if (b) issueButton(b.dataset.type, b.dataset.runway || null);
 });
 $('#strips').addEventListener('click', (e) => {
   const d = e.target.closest('.strip');
@@ -582,7 +733,7 @@ $('#strips').addEventListener('click', (e) => {
 const listener = new Listener({
   lang: settings.lang,
   onInterim: (t) => { $('#ptt-interim').textContent = t; },
-  onFinal: (t) => { $('#ptt-interim').textContent = ''; issueText(t); },
+  onFinal: (t, alts) => { $('#ptt-interim').textContent = ''; issueText(t, alts); },
   onState: (state, detail) => {
     $('#ptt').classList.toggle('live', state === 'listening');
     setTalkLabel(state === 'listening');
@@ -635,6 +786,8 @@ document.addEventListener('keyup', (e) => { if (e.code === 'Space') stopTalk(); 
 
 $('#set-tts').checked = settings.tts;
 $('#set-radio').checked = settings.radioFx;
+$('#set-askrwy').checked = !settings.autoRunways;
+$('#set-askrwy').addEventListener('change', (e) => { settings.autoRunways = !e.target.checked; saveSettings(); });
 $('#set-accents').checked = settings.accents;
 $('#set-builtin').checked = settings.builtinVoices;
 $('#set-builtin').addEventListener('change', (e) => {

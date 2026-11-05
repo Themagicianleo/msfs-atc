@@ -21,7 +21,7 @@
     "land": ["跑道{runway}，可以落地，{callsign}。", "可以落地，跑道{runway}，{callsign}。"],
     "continue": "继续进近，{callsign}。",
     "go_around": "复飞，{callsign}。",
-    "push": ["可以推出，{callsign}。", "推出，{callsign}。"],
+    "push": ["可以推出，预计跑道{runway}，{callsign}。", "推出，跑道{runway}，{callsign}。"],
     "taxi_out": "[经{via}]滑到跑道{runway}外等待点[，穿越跑道{cross}]，{callsign}。",
     "taxi_in": "[经{via}]滑到停机位{gate}[，穿越跑道{cross}]，{callsign}。",
     "hold_position": "原地等待，{callsign}。",
@@ -39,7 +39,7 @@
     "land": "{callsign}，[地面风{wind}，]跑道{runway}，可以落地。",
     "continue": "{callsign}，继续进近。",
     "go_around": "{callsign}，复飞。",
-    "push": "{callsign}，可以推出。",
+    "push": "{callsign}，可以推出，预计跑道{runway}起飞。",
     "taxi_out": "{callsign}，[经{via}]滑到跑道{runway}外等待点[，穿越跑道{cross}]。",
     "taxi_in": "{callsign}，[经{via}]滑到停机位{gate}[，穿越跑道{cross}]。",
     "hold_position": "{callsign}，原地等待。",
@@ -83,16 +83,16 @@
 
   "commands": [
     { "cmd": "go_around", "patterns": ["复飞"] },
-    { "cmd": "land", "patterns": ["可以落地", "允许落地", "落地"] },
-    { "cmd": "takeoff", "patterns": ["可以起飞", "允许起飞", "起飞"] },
+    { "cmd": "land", "patterns": ["可以落地", "允许落地", "准许落地", "落地", "着陆"] },
+    { "cmd": "push", "patterns": ["推出"] },
+    { "cmd": "takeoff", "patterns": ["可以起飞", "允许起飞", "准许起飞", "起飞"] },
     { "cmd": "lineup", "patterns": ["进跑道", "跑道等待"] },
     { "cmd": "cross", "patterns": ["^(?!.*滑).*穿越"] },
     { "cmd": "hold_short", "patterns": ["^(?!.*滑).*外等待"] },
-    { "cmd": "hold_position", "patterns": ["原地等待", "停止", "停住"] },
+    { "cmd": "hold_position", "patterns": ["原地等待", "保持原地", "停止", "停住", "暂停"] },
     { "cmd": "continue_taxi", "patterns": ["继续滑行"] },
     { "cmd": "continue", "patterns": ["继续进近"] },
-    { "cmd": "push", "patterns": ["推出"] },
-    { "cmd": "taxi", "patterns": ["滑行", "滑到", "滑回"] },
+    { "cmd": "taxi", "patterns": ["滑行", "滑到", "滑回", "滑往", "滑向"] },
     { "cmd": "contact", "patterns": ["联系", "再见", "转换频率"] }
   ]
 }

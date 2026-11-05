@@ -92,6 +92,18 @@ export class World {
     this.depEnds = [].concat(depEnd).filter(Boolean);
     this.arrEnd = this.arrEnds[0];
     this.depEnd = this.depEnds[0];
+    // aircraft still at their stand, not yet told which runway to expect, follow the new plan
+    if (this.ac && this.depEnds.length) {
+      for (const a of this.ac) {
+        if (a.kind === 'dep' && a.state === 'gate' && !this.depEnds.includes(a.end)) a.end = this.depEnds[(this.depIdx = (this.depIdx || 0) + 1) % this.depEnds.length];
+      }
+    }
+  }
+
+  // the runways a departure can be told to expect: the ones in use for departures
+  pushRunways(ac) {
+    const ends = this.depEnds.length ? this.depEnds : [this.depEnd];
+    return [...new Set([ac.end, ...ends])].filter(Boolean);
   }
 
   setTraffic(level) {
@@ -413,6 +425,8 @@ export class World {
     for (const o of this.ac) {
       if (o === ac || !GROUND.has(o.state) || o.state === 'gate' || o.state === 'parked') continue;
       if (o.state === 'takeoff' || o.state === 'rollout') continue; // on the runway: crossings handle those
+      // lining up from the hold point: an aircraft holding there is behind us (it waits for the runway), not ahead
+      if (ac.state === 'lineup' && o.state === 'holding') continue;
       if (dist(o.p, ac.p) > look + 40) continue;
       // a pushback swings its tail across the lane: keep more room
       const room = o.state === 'pushback' || ac.state === 'pushback' ? 55 : 32;
@@ -781,6 +795,11 @@ export class World {
         return { ok: true };
       case 'push':
         if (s !== 'gate') return this.unable(ac, 'we are not at the stand');
+        // the tower says which runway to expect; the pilot reads it back
+        if (runwayArg && runwayArg !== ac.end) {
+          if (!this.L.holdPoints[runwayArg]) return this.unable(ac, `runway ${runwayArg} is not available`);
+          ac.end = runwayArg;
+        }
         ac.state = 'pushback';
         {
           const g = this.L.gates.find((x) => x.id === ac.gate);

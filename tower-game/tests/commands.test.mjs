@@ -98,3 +98,73 @@ test('Chinese instructions (ZBAD): callsigns, numbers, runways, via, stands', as
   // English still works at the same airport (Aeroflot)
   assert.equal(understand('Aeroflot 206 cleared to land runway 35R', ac, R, null, null, ZH).ac.id, 13);
 });
+
+// ---- Chinese speech recognition: what the browser really writes down
+test('Chinese: misheard digits, command words and callsign names are understood', async () => {
+  const { understand, understandBest } = await import('../js/commands.js');
+  const ZH = JSON.parse(readFileSync(new URL('../data/phraseology-zh.json', import.meta.url))).commands;
+  const ac = [
+    { id: 21, code: 'CSC', tel: 'Sichuan', telZh: '四川', num: '8975', callsign: 'CSC8975' },
+    { id: 22, code: 'CDG', tel: 'Shandong', telZh: '山东', num: '3101', callsign: 'CDG3101' },
+    { id: 23, code: 'CES', tel: 'China Eastern', telZh: '东方', num: '5147', callsign: 'CES5147' },
+  ];
+  const run = (t) => understand(t, ac, [], null, null, ZH);
+  // the real transcripts from the iPad: 五 heard as 舞, 九 as 角, 推出 as 退出
+  for (const t of ['四川八九拐舞可以退出', '四川八角拐舞可以退出', '死川八九拐五，可以推出']) {
+    const u = run(t);
+    assert.equal(u.ac?.callsign, 'CSC8975', t);
+    assert.equal(u.cmd.type, 'push', t);
+  }
+  // airline names made of digit-sounding words are not read as numbers; 东方 is China Eastern, not "0方"
+  assert.equal(run('山东三幺洞幺，跑道幺七右，可以落地').ac.callsign, 'CDG3101');
+  assert.equal(run('东方五幺四拐，可以起非').ac.callsign, 'CES5147');
+  assert.equal(run('东方五幺四拐，可以起非').cmd.type, 'takeoff');
+  // a clear call by airline and last three digits
+  assert.equal(run('山东幺洞幺可以推出').ac.callsign, 'CDG3101');
+  // runway sides said wrongly, numbers with a comma, 跑到
+  let u = run('山东 3,101 跑到三五又 进近跑道 可以落地');
+  assert.equal(u.ac.callsign, 'CDG3101');
+  assert.deepEqual([u.cmd.type, u.cmd.runway], ['land', '35R']);
+  // the stand number is not a flight number
+  u = run('东方5147，滑到停机位三幺洞');
+  assert.deepEqual([u.ac.callsign, u.cmd.type, u.cmd.gate], ['CES5147', 'taxi', '310']);
+  // nothing recognised: say so, and show how it was read
+  u = run('四川八九拐舞');
+  assert.equal(u.ac.callsign, 'CSC8975');
+  assert.ok(u.error && u.heard === '四川8975');
+  // the recogniser's other guesses: the first complete one wins
+  const best = understandBest(['四川八九拐舞可以吃出', '四川八九拐舞可以推出', '四川八九拐舞'], ac, [], null, null, ZH);
+  assert.equal(best.cmd.type, 'push');
+  assert.equal(best.text, '四川八九拐舞可以推出');
+});
+
+test('Chinese taxiway letters: said as Chinese letter names, code words or Latin letters', async () => {
+  const { parseInstructionZh } = await import('../js/commands.js');
+  const { zhTaxiwayTokens } = await import('../js/zh.js');
+  const ZH = JSON.parse(readFileSync(new URL('../data/phraseology-zh.json', import.meta.url))).commands;
+  const known = new Set(['A', 'B', 'B2', 'C', 'C1', 'E', 'M', 'T6', 'WA', 'W', 'X', 'Z0', 'Z3', 'Y5']);
+  const via = (t) => parseInstructionZh(t, ZH, known).via;
+  assert.deepEqual(via('经A、B2滑到跑道17右外等待点'), ['A', 'B2']);
+  assert.deepEqual(via('经诶 比二 滑到跑道17右外等待点'), ['A', 'B2']);
+  assert.deepEqual(via('经阿尔法 布拉沃二 查理幺滑到跑道17右外等待点'), ['A', 'B2', 'C1']);
+  assert.deepEqual(via('经滑行道艾克斯，西，伊，滑到跑道17右外等待点'), ['X', 'C', 'E']);
+  assert.deepEqual(via('经a b2 c1滑到跑道17右外等待点'), ['A', 'B2', 'C1']);
+  assert.deepEqual(via('经AB2滑到跑道17右外等待点'), ['A', 'B2'], 'letters run together are split into real taxiway names');
+  assert.deepEqual(via('京贼洞 贼三 滑到跑道17右外等待点'), ['Z0', 'Z3'], '京 for 经, 贼 for Z');
+  assert.deepEqual(via('经威士忌 阿尔法 滑到跑道17右外等待点'), ['WA'], 'W then A is the taxiway WA');
+  assert.deepEqual(zhTaxiwayTokens('艾克斯 达布留 歪5'), ['X', 'W', 'Y5']);
+  // via is read even when the pilot is told to taxi to a stand
+  assert.deepEqual(parseInstructionZh('经T6，滑到停机位133', ZH, known).via, ['T6']);
+});
+
+test('Chinese voice: all guesses of the recogniser are kept, in order', async () => {
+  const { Listener } = await import('../js/lib/voice.js');
+  const l = Object.create(Listener.prototype);
+  l.final = '四川八九拐舞可以退出';
+  l.interim = '';
+  l.segments = [['四川八九拐舞可以退出', '四川八九拐五可以推出', '四川八九拐舞可以退出']];
+  assert.deepEqual(l.alternatives(), ['四川八九拐舞可以退出', '四川八九拐五可以推出']);
+  l.segments = [['四川', '死川'], ['八九拐五', '八九拐舞']]; // two parts: the k-th guess of each is joined
+  l.final = '四川八九拐五';
+  assert.deepEqual(l.alternatives(), ['四川八九拐五', '死川八九拐舞']);
+});

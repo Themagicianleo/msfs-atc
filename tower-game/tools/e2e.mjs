@@ -29,6 +29,14 @@ buildSite(SITE);
 const server = spawn(PY, ['-m', 'http.server', String(port), '--bind', '127.0.0.1', '--directory', SITE], { stdio: 'ignore' });
 let page = null;
 
+// the start sheet: airport and traffic, then the runway step with the recommended plan
+async function beginShift() {
+  await page.click('#start-form button[type=submit]');
+  await page.waitForSelector('#rwy-step:not([hidden])');
+  await page.click('#rwy-begin');
+  await page.waitForSelector('#start', { state: 'hidden' });
+}
+
 async function main() {
   await sleep(800);
   const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
@@ -58,7 +66,8 @@ async function main() {
       start() { setTimeout(() => this.onstart?.(), 20); }
       stop() {
         setTimeout(() => {
-          this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: window.__heard }], { isFinal: true })] });
+          const guesses = [window.__heard, ...(window.__heardAlts || [])].map((transcript) => ({ transcript }));
+          this.onresult?.({ resultIndex: 0, results: [Object.assign(guesses, { isFinal: true })] });
           this.onend?.();
         }, 20);
       }
@@ -82,13 +91,34 @@ async function main() {
   // a real-data airport (sample) and then the demo
   await page.fill('#start-icao', 'TSTA');
   await page.click('#start-form button[type=submit]');
+  // the runway step: wind, a recommended plan, every runway end with its wind, several runways at once
+  await page.waitForSelector('#rwy-step:not([hidden])');
+  const step = await page.evaluate(() => ({
+    wind: document.querySelector('#rwy-wind').textContent,
+    plans: [...document.querySelectorAll('#rwy-plans .plan')].map((b) => b.textContent),
+    rec: document.querySelector('#rwy-plans .plan[aria-pressed="true"]')?.textContent,
+    arr: [...document.querySelectorAll('#rwy-arr .chip')].map((b) => `${b.dataset.end}${b.getAttribute('aria-pressed') === 'true' ? '*' : ''}`),
+    dep: [...document.querySelectorAll('#rwy-dep .chip[aria-pressed="true"]')].map((b) => b.dataset.end),
+  }));
+  console.log('runway step:', JSON.stringify(step));
+  if (!/^Recommended/.test(step.plans[0]) || !step.rec?.startsWith('Recommended')) throw new Error('the recommended plan should be first and selected');
+  if (!/Wind \d{3}\/\d+/.test(step.wind)) throw new Error(`runway step should show the wind: ${step.wind}`);
+  // starting with no departure runway is refused
+  for (const b of await page.$$('#rwy-dep .chip[aria-pressed="true"]')) await b.click();
+  await page.click('#rwy-begin');
+  if (!/at least one runway/.test(await page.textContent('#rwy-error'))) throw new Error('should refuse a shift without a departure runway');
+  // a plan using several runways at once
+  await page.click('#rwy-plans .plan:nth-child(2)');
+  await page.click('#rwy-begin');
   await page.waitForSelector('#start', { state: 'hidden' });
+  const both = await page.evaluate(() => ({ arr: window.towerGame.game.world.arrEnds, dep: window.towerGame.game.world.depEnds }));
+  console.log('TSTA runways:', JSON.stringify(both), await page.textContent('#rwy-open'));
+  if (both.arr.length + both.dep.length < 3) throw new Error(`expected a plan with more than one runway: ${JSON.stringify(both)}`);
   console.log('TSTA:', (await page.textContent('#log')).slice(0, 200));
   await page.click('#new-shift');
   await page.fill('#start-icao', 'DEMO');
   await page.selectOption('#start-traffic', 'busy');
-  await page.click('#start-form button[type=submit]');
-  await page.waitForSelector('#start', { state: 'hidden' });
+  await beginShift();
   console.log('DEMO:', await page.textContent('#log'));
   await page.click('.speed button[data-speed="4"]');
 
@@ -129,14 +159,26 @@ async function main() {
     await page.waitForFunction(() => document.querySelector('#ptt-label').textContent === 'Stop and send');
     await page.click('#ptt');
     await page.waitForFunction((id) => !window.towerGame.game.world.find(id)?.req, caller2.id, { timeout: 5000 });
-    console.log('voice (simulated):', await page.evaluate(() => [...document.querySelectorAll('#log .msg')].slice(-2).map((m) => m.textContent)));
+    const said = await page.evaluate(() => [...document.querySelectorAll('#log .msg')].slice(-2).map((m) => m.textContent));
+    console.log('voice (simulated):', said);
+    if (!/runway \d/i.test(said[1])) throw new Error(`the pushback readback should name the runway to expect: ${said[1]}`);
     const sel = await page.evaluate(() => getComputedStyle(document.querySelector('#ptt')).webkitUserSelect || getComputedStyle(document.querySelector('#ptt')).userSelect);
     if (sel !== 'none') throw new Error(`talk button text is selectable (${sel})`);
   }
 
   // choose the taxi route on the map for the aircraft that just pushed back
   {
-    await page.waitForFunction((id) => window.towerGame.game.world.find(id)?.state === 'pushed', caller2.id, { timeout: 90000 });
+    // aircraft waiting for a taxi clearance would block the lane: send them on their way while this one pushes back
+    for (let i = 0; i < 200; i += 1) {
+      const state = await page.evaluate((id) => {
+        const w = window.towerGame.game.world;
+        for (const o of w.ac) if (o.id !== id && o.state === 'pushed' && o.req?.type === 'taxi') w.command(o.id, { type: 'taxi' });
+        return w.find(id)?.state;
+      }, caller2.id);
+      if (state === 'pushed') break;
+      if (i === 199) throw new Error(`the pushback never finished (${state})`);
+      await sleep(500);
+    }
     await page.click('.speed button[data-speed="0"]');
     await page.evaluate((id) => { window.towerGame.game.selected = id; }, caller2.id);
     await page.waitForSelector('#sel-buttons button[data-type="plan"]');
@@ -202,8 +244,7 @@ async function main() {
     await page.click('#new-shift');
     await page.click('.featured button[data-code="ZBAD"]');
     await page.selectOption('#start-traffic', 'busy');
-    await page.click('#start-form button[type=submit]');
-    await page.waitForSelector('#start', { state: 'hidden' });
+    await beginShift();
     await page.click('.speed button[data-speed="4"]');
     await page.waitForFunction(() => [...document.querySelectorAll('#log .msg')].some((m) => /大兴塔台/.test(m.textContent)), null, { timeout: 60000 });
     const zh = await page.evaluate(() => [...document.querySelectorAll('#log .msg')].map((m) => m.textContent).filter((t) => /塔台/.test(t))[0]);
@@ -219,6 +260,28 @@ async function main() {
         console.log('ZBAD typed:', await page.evaluate(() => [...document.querySelectorAll('#log .msg')].slice(-1)[0].textContent));
       }
     }
+    // Chinese by voice, as the iPad hears it: 五 as 舞, 九 as 角, 推出 as 退出
+    await page.waitForFunction(() => window.towerGame.game.world.ac.some((a) => a.lang === 'zh' && a.req?.type === 'push'), null, { timeout: 120000 });
+    const zp = await page.evaluate(() => { const a = window.towerGame.game.world.ac.find((x) => x.lang === 'zh' && x.req?.type === 'push'); return { id: a.id, telZh: a.telZh, num: a.num, end: a.end }; });
+    const READ = { 0: '洞', 1: '幺', 2: '两', 3: '三', 4: '四', 5: '舞', 6: '六', 7: '拐', 8: '八', 9: '角' };
+    const spoken = `${zp.telZh}${[...zp.num].map((d) => READ[d]).join('')}`;
+    await page.evaluate((t) => { window.__heard = t; window.__heardAlts = []; }, `${spoken}可以退出`);
+    await page.click('#ptt');
+    await page.waitForFunction(() => document.querySelector('#ptt-label').textContent === 'Stop and send');
+    await page.click('#ptt');
+    await page.waitForFunction((id) => !window.towerGame.game.world.find(id)?.req, zp.id, { timeout: 5000 });
+    const zv = await page.evaluate(() => [...document.querySelectorAll('#log .msg')].slice(-2).map((m) => m.textContent));
+    console.log('ZBAD voice (misheard):', zv);
+    if (!/跑道/.test(zv[1])) throw new Error(`Chinese pushback readback should name the runway: ${zv[1]}`);
+    // the recogniser's first guess is nonsense, the second is right
+    await page.waitForFunction(() => window.towerGame.game.world.ac.some((a) => a.lang === 'zh' && a.req?.type === 'push'), null, { timeout: 120000 });
+    const z2 = await page.evaluate(() => { const a = window.towerGame.game.world.ac.find((x) => x.lang === 'zh' && x.req?.type === 'push'); return { id: a.id, telZh: a.telZh, num: a.num }; });
+    await page.evaluate(([c, n]) => { window.__heard = '嗯嗯'; window.__heardAlts = [`${c}${n}可以推出`]; }, [z2.telZh, z2.num]);
+    await page.click('#ptt');
+    await page.waitForFunction(() => document.querySelector('#ptt-label').textContent === 'Stop and send');
+    await page.click('#ptt');
+    await page.waitForFunction((id) => !window.towerGame.game.world.find(id)?.req, z2.id, { timeout: 5000 });
+    await page.evaluate(() => { window.__heard = 'say again'; window.__heardAlts = []; });
     await page.click('#chart');
     await sleep(300);
     await page.screenshot({ path: join(shots, 'zbad-chart.png') });

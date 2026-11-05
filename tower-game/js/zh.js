@@ -28,14 +28,166 @@ export function zhWind(w) {
     : { t: `${dir}度${mps}米每秒`, s: `${zhDigits(dir)}度${zhDigits(mps)}米每秒` };
 }
 
-// spoken or typed Chinese -> digits and plain letters, for matching:
-// "南方三幺洞幺，跑道三五右可以落地" -> "南方3101跑道35R可以落地"
+// ---------------------------------------------------------------- understanding speech
+// The browser's recogniser writes what it thinks it heard, and for radio
+// Chinese it is often wrong in predictable ways: 五 becomes 舞, 九 becomes 角,
+// 推出 becomes 退出, and letters come out as 诶 比 西 or as 阿尔法 布拉沃.
+// So the text is cleaned up before it is matched:
+//   1. airline names are found (even if misheard) and protected;
+//   2. digits are read, including words that sound like a digit when they
+//      stand next to one (舞 next to 拐 is 5);
+//   3. command words are compared by sound (退出 = 推出);
+//   4. taxiway letters are read from their Chinese sounds or code words.
+
 const NUM = { 洞: 0, 零: 0, 〇: 0, 幺: 1, 一: 1, 两: 2, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 拐: 7, 七: 7, 八: 8, 九: 9 };
-export function zhNormalize(text) {
-  return String(text || '').toUpperCase()
-    .replace(/[洞零〇幺一两二三四五六拐七八九]/g, (c) => String(NUM[c]))
-    .replace(/(\d)\s*左/g, '$1L').replace(/(\d)\s*右/g, '$1R').replace(/(\d)\s*中/g, '$1C')
-    .replace(/[，。、,.\s]+/g, ' ').trim();
+
+// words that sound like a digit; only read as one next to a digit
+const WEAK_DIGITS = {
+  0: '动冻栋董懂咚东侗',
+  1: '腰邀妖么要夭吆衣医依伊椅',
+  2: '俩量亮辆耳尔而',
+  3: '山散叁伞',
+  4: '死寺肆似思',
+  5: '舞午伍武无吴乌悟物误雾勿',
+  6: '陆路绿留流溜刘',
+  7: '怪乖挂卦柺妻期气柒齐漆戚欺',
+  8: '吧巴爸扒捌把芭',
+  9: '酒久玖旧就角救',
+};
+const WEAK = {};
+for (const [d, chars] of Object.entries(WEAK_DIGITS)) for (const c of chars) WEAK[c] = Number(d);
+
+// groups of characters that sound alike (ignoring tone); the first is the
+// one used for comparing. Covers the radio words and the airline names.
+const SOUND_GROUPS = [
+  '推腿退颓蜕', '出初除楚处触储', '起企气启器弃汽齐奇旗', '飞非菲肥废费匪', '复付服富负副父福附', '落洛络骆罗', '地底帝弟迪第递',
+  '可克刻客课', '以已意义易艺议', '允运云晕', '许续序绪蓄叙需徐虚', '继记际己级及急集机基鸡积几既技计吉', '位为味喂围伟未',
+  '滑华花化画话', '行星兴形型醒姓', '到道倒盗导岛', '跑泡炮抛袍', '回会汇惠悔', '进近仅紧禁尽今金', '经京精惊景境静',
+  '联连脸练恋', '系西息细希习席', '再在载', '见建件剑间键渐', '转专砖', '换环还欢', '频品拼贫', '停亭庭挺听厅', '止只之知支职直',
+  '住主注助驻柱', '等灯登邓', '待带代戴袋贷', '外歪', '原圆远员院愿', '穿川传串', '越约月跃阅悦岳', '请情清轻青',
+  '左做坐座佐作', '右又有友油诱游', '中钟终忠种众', '离里理力立利', '场厂常长尝', '点电店典', '继续',
+  // airline names at Daxing
+  '南男难楠', '方房芳防仿访', '东冬董懂动栋冻', '白百柏', '鹭路露陆鹿', '航杭', '首手守寿', '都督读毒独', '山杉珊', '四死寺思', '祥想向象相香',
+];
+const CANON = {};
+for (const g of SOUND_GROUPS) for (const c of [...g]) if (!(c in CANON)) CANON[c] = [...g][0];
+// same length, same positions: a text and its sound form line up character by character
+export function zhCanon(s) {
+  return [...String(s)].map((c) => CANON[c] || c).join('');
+}
+
+// taxiway letters: how they are said in Chinese, and as code words
+const CODE_WORDS = [
+  ['A', 'ALPHA|ALFA|阿尔法|阿尔发|阿法'], ['B', 'BRAVO|布拉沃|布拉伏'], ['C', 'CHARLIE|查理|恰理'], ['D', 'DELTA|德尔塔|戴尔塔|德而塔'],
+  ['E', 'ECHO|艾科|艾可|埃科|回声'], ['F', 'FOXTROT|福克斯特罗特|福克斯特|福克斯'], ['G', 'GOLF|高尔夫'], ['H', 'HOTEL|赫特尔|荷特尔|酒店'],
+  ['I', 'INDIA|因的亚|印度'], ['J', 'JULIET|JULIETT|朱丽叶|茱莉叶'], ['K', 'KILO|基洛|凯罗|公斤'], ['L', 'LIMA|利马|里马'], ['M', 'MIKE|迈克'],
+  ['N', 'NOVEMBER|诺维姆博|十一月'], ['O', 'OSCAR|奥斯卡'], ['P', 'PAPA|帕帕|爸爸'], ['Q', 'QUEBEC|魁北克|奎贝克'], ['R', 'ROMEO|罗密欧|罗米欧'],
+  ['S', 'SIERRA|塞拉|谢拉|赛拉'], ['T', 'TANGO|探戈'], ['U', 'UNIFORM|优尼佛姆|尤尼福姆|制服'], ['V', 'VICTOR|维克多'], ['W', 'WHISKEY|WHISKY|威士忌'],
+  ['X', 'XRAY|X-RAY|艾克斯雷'], ['Y', 'YANKEE|洋基|扬基'], ['Z', 'ZULU|祖鲁|祖路'],
+];
+const CODE_RE = CODE_WORDS.map(([l, words]) => [l, new RegExp(words, 'g')]);
+
+// each letter: single characters that sound like it, then (after a space) whole words
+const LETTER_SOUNDS = {
+  A: '诶欸哎啊阿埃', B: '比逼必毕笔币碧', C: '西希斯', D: '迪帝地第弟', E: '伊衣依以', F: ' 艾弗 爱抚 艾夫 艾佛', G: '吉鸡机集',
+  H: ' 艾尺 爱吃 艾奇 艾驰', I: '艾爱哀', J: '杰节洁街', K: '开凯', L: ' 艾勒 艾乐 爱乐 艾尔', M: ' 艾姆 爱慕 艾木', N: '恩嗯安',
+  O: '欧哦噢偶', P: '屁皮披', Q: '秋丘球 吉吾', R: ' 阿儿 阿尔 艾儿 啊儿 爱儿', S: ' 艾斯 爱死 艾丝', T: '提梯踢', U: '优幽油',
+  V: '维威微', W: ' 达布留 大不留 达不留 双U', X: ' 艾克斯 爱克斯', Y: '歪外', Z: '贼泽 贼德 泽德',
+};
+const SOUND_TO_LETTER = new Map();
+for (const [letter, spec] of Object.entries(LETTER_SOUNDS)) {
+  const [chars, ...words] = spec.split(' ');
+  for (const c of chars) SOUND_TO_LETTER.set(c, letter);
+  for (const w of words.filter(Boolean)) SOUND_TO_LETTER.set(w, letter);
+}
+const SOUND_LIST = [...SOUND_TO_LETTER.keys()].sort((a, b) => b.length - a.length);
+
+// "A 艾克斯 比 二" -> ['A', 'X', 'B2']: letters and digits of a taxiway route
+export function zhTaxiwayTokens(segment) {
+  let s = String(segment || '').toUpperCase();
+  for (const [letter, re] of CODE_RE) s = s.replace(re, letter);
+  const items = [];
+  for (let i = 0; i < s.length;) {
+    const sound = SOUND_LIST.find((w) => s.startsWith(w, i));
+    if (sound) { items.push({ l: SOUND_TO_LETTER.get(sound) }); i += sound.length; continue; }
+    const c = s[i];
+    if (/[A-Z]/.test(c)) items.push({ l: c });
+    else if (/\d/.test(c)) {
+      let j = i;
+      while (j < s.length && /\d/.test(s[j])) j += 1;
+      items.push({ d: s.slice(i, j) });
+      i = j;
+      continue;
+    }
+    i += 1;
+  }
+  const out = [];
+  let cur = null;
+  for (const it of items) {
+    if (it.l) { if (cur) out.push(cur); cur = it.l; } else if (cur && !/\d/.test(cur)) { out.push(cur + it.d); cur = null; } else { if (cur) out.push(cur); out.push(it.d); cur = null; }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+// airline names are found by sound, so a misheard 死川 still counts as 四川
+function splitNames(s, names) {
+  const cs = zhCanon(s);
+  const owner = new Array(s.length).fill(-1);
+  const list = [...new Set(names.filter(Boolean))].sort((a, b) => b.length - a.length);
+  list.forEach((name, k) => {
+    const cn = zhCanon(name);
+    for (let at = cs.indexOf(cn); at >= 0; at = cs.indexOf(cn, at + cn.length)) {
+      if (owner.slice(at, at + cn.length).every((o) => o < 0)) owner.fill(k, at, at + cn.length);
+    }
+  });
+  const parts = [];
+  for (let i = 0; i < s.length;) {
+    if (owner[i] >= 0) {
+      const k = owner[i];
+      let j = i;
+      while (j < s.length && owner[j] === k) j += 1;
+      parts.push({ name: list[k] });
+      i = j;
+    } else {
+      let j = i;
+      while (j < s.length && owner[j] < 0) j += 1;
+      parts.push({ text: s.slice(i, j) });
+      i = j;
+    }
+  }
+  return parts;
+}
+
+// digit words, and sound-alikes that stand next to a digit
+function foldDigits(s) {
+  const a = [...s];
+  const kind = a.map((c) => (c in NUM || /\d/.test(c) ? 2 : (c in WEAK ? 1 : 0)));
+  for (let changed = true; changed;) {
+    changed = false;
+    for (let i = 0; i < a.length; i += 1) {
+      if (kind[i] !== 1) continue;
+      let l = i - 1; while (l >= 0 && a[l] === ' ') l -= 1;
+      let r = i + 1; while (r < a.length && a[r] === ' ') r += 1;
+      if ((l >= 0 && kind[l] === 2) || (r < a.length && kind[r] === 2)) { kind[i] = 2; changed = true; }
+    }
+  }
+  return a.map((c, i) => (kind[i] === 2 ? String(NUM[c] ?? WEAK[c] ?? c) : c)).join('');
+}
+
+// names: the airline names (Chinese) of the aircraft on frequency, protected from digit reading
+// "南方三幺洞幺，跑道三五右可以落地" -> "南方3101 跑道35R可以落地"
+export function zhNormalize(text, names = []) {
+  const s = String(text || '').normalize('NFKC').toUpperCase();
+  const out = splitNames(s, names).map((p) => {
+    if (p.name) return p.name;
+    let t = p.text;
+    for (const [letter, re] of CODE_RE) t = t.replace(re, letter);
+    t = foldDigits(t);
+    t = t.replace(/(\d+)[,，](\d{3})(?!\d)/g, (m, a, b) => (a.length <= 3 ? a + b : m)); // 3,101
+    return t.replace(/(\d)\s*(左|做|坐|座|佐)/g, '$1L').replace(/(\d)\s*(右|又|有|友|油|诱)/g, '$1R').replace(/(\d)\s*(中|钟|终|忠)/g, '$1C');
+  }).join('');
+  return out.replace(/[，。、,.\s]+/g, ' ').trim();
 }
 
 // readbacks may explain why a pilot can't comply; translate the common reasons

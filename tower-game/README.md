@@ -16,6 +16,27 @@ Open the site, type an airport (ICAO code, name or city, e.g. `EGLL`, `Haneda`,
 `Shanghai`, or `DEMO` for the fictional demo field), choose the traffic, and press
 **Start shift**. Use headphones, so the microphone doesn't pick up the pilots.
 
+**Then choose the runways.** Busy airports land and depart on several runways at once, so the next step
+lets you pick them:
+- The game loads the airport's live METAR (or generates a wind if it can't) and **recommends a plan for that
+  wind**, marked *Recommended* at the top of the list.
+- Every runway end shows its headwind (or tailwind, in red) and crosswind. The best ones are first.
+- Tap a plan to use it, or tap runway ends under **Landing** and **Departures** to build your own: any number of
+  runways for each, and the same runway for both.
+- Plans:
+  - The airport's own plans: San Francisco's West and Southeast Plans, Changi's North and South. The one
+    for the wind is recommended. If the wind suits none of them (a tailwind of 3 kt or more on landing),
+    a plan straight into the wind is recommended instead, marked *not a published plan*, and the published
+    plans stay on the list with their tailwind in red.
+  - *Mixed* versions where the runways are parallel (Changi: both parallels land and depart). This is harder:
+    arrivals and departures share runways, so you have to fit departures between arrivals.
+  - Airports without published plans (Daxing and the generated ones): the runway into the wind with its
+    parallels, split (some land, some depart) or mixed.
+  - Anything else you like, runway by runway. Mixed plans and crossing runways are the hardest; at San
+    Francisco, landing and departing on 28L/28R together needs careful crossing clearances.
+- The **Runways** button over the map reopens the choice during the shift. **Next time, start straight away
+  with the recommended runways** skips this step; turn it back on under **Settings → Ask which runways to use**.
+
 - **Select** an aircraft by tapping it on the map or its strip. A yellow ring and a
   highlighted strip mean it is calling you; the blue button is the usual answer.
 - **Where it's going:** aircraft on the ground show their destination on the strip, the map label and
@@ -26,7 +47,7 @@ Open the site, type an airport (ICAO code, name or city, e.g. `EGLL`, `Haneda`,
   aircraft selected you can skip the callsign.
 - **Instructions understood:**
   - *Speedbird 123, runway 27, cleared to land* · *continue approach* · *go around*
-  - *pushback approved*
+  - *pushback approved [, expect runway 27R for departure]*
   - *taxi to holding point runway 27 [via alpha] [cross runway 15]* · *taxi to stand 12 [via bravo]*
   - *hold position* · *continue taxi* · *cross runway 15* · *hold short runway 27*
   - *runway 27, line up and wait* · *cleared for take-off* · *contact departure, good day*
@@ -52,7 +73,12 @@ Open the site, type an airport (ICAO code, name or city, e.g. `EGLL`, `Haneda`,
   - Penalties: −100 go-around without landing clearance, −150 go-around with the runway
     occupied, −250 runway conflict, −200 ground conflict, −10 per repeated call, −30 gridlock.
 - **Controls:** pause/1x/2x/4x speed; traffic None, Calm, Normal or Busy. Change the
-  landing and departure runways with **Arr/Dep**, and the wind under **Settings and help**.
+  landing and departure runways with **Runways**, and the wind under **Settings and help**.
+- **Pushback and the departure runway:** when you clear an aircraft for pushback, the tower tells it which
+  runway to expect, and the pilot reads it back: *"Pushback approved, expect runway 27R for departure"*. By
+  default that is the runway it was given (departures take the runways in use in turn; its strip shows
+  *→ RWY 27R*). With several departure runways there is a pushback button for each, or say the runway
+  yourself; the pilot then expects that one. Aircraft still at their stand follow a runway change.
 - **Views:** the switch over the map has three settings:
   - **Map:** the 2D map (and **Chart**).
   - **Tower:** the view from the tower cab. Drag to look around; pinch or scroll to zoom like binoculars.
@@ -112,7 +138,7 @@ scale and use their own approach and rotation speeds and ICAO wake category.
   Plan (land 19L/19R, depart 10L/10R), depending on the wind.
 - Changi lands on 02L/20R and departs 02C/20C.
 - Daxing lands on the runway most into the wind and departs from a parallel one.
-- Change any of them with the Arr/Dep menus (e.g. `28L+28R`).
+- Choose your own, with any number of runways landing and departing, in the runway step or with **Runways**.
 
 The traffic mix is representative, not a real schedule, and the runway plans are
 simplified. OSM is volunteer-mapped and can be incomplete or out of date. Never use
@@ -138,7 +164,7 @@ At **ZBAD**, Chinese airlines work the tower in **Chinese**, as domestic flights
   United), 首都 (Capital), 山东 (Shandong), 四川 (Sichuan), 吉祥 (Juneyao).
 - **Numbers** are spoken the aviation way: 幺 1, 两 2, 拐 7, 洞 0.
 - **Typical calls:** 「大兴塔台，南方3101，盲降跑道35右，18公里」, 「跑道35右，可以落地，南方3101」,
-  「经A、B2滑到跑道35左外等待点」, 「进跑道等待」, 「可以起飞」, 「联系离场，再见」.
+  「可以推出，预计跑道35右起飞」, 「经A、B2滑到跑道35左外等待点」, 「进跑道等待」, 「可以起飞」, 「联系离场，再见」.
 - **Foreign airlines** (Aeroflot) use English.
 - **Units:** wind in m/s, distances on final in km, speeds in km/h and heights in metres.
 
@@ -146,6 +172,26 @@ You can answer in Chinese by voice or typing, e.g. 「南方三幺洞幺，跑�
 next to the talk button sets the microphone language. It is Chinese by default at ZBAD, and English for Aeroflot.
 Spoken Chinese needs a Chinese system voice (on iPad: Settings → Accessibility → Spoken Content → Voices →
 Chinese). The Chinese wording is in `data/phraseology-zh.json`.
+
+**Speech recognition for Chinese radio.** Browsers' Chinese recognisers don't know the radio digits and letters,
+so they write things like 四川八九拐**舞** for 四川八九拐五 or **退**出 for 推出. The game cleans that up before
+matching:
+- **Digits:** 幺 洞 拐 两 and the ordinary ones, plus words that sound like a digit when they stand next to one
+  (舞 午 伍 for 5, 角 酒 久 for 9, 怪 for 7, 动 冻 for 0, 腰 要 for 1, ...). Written numbers (3101, 3,101) work too.
+- **Airline names** are found by sound (死川 is still 四川) and are never read as numbers (东方 isn't "0方").
+  A clear call by airline and the last three digits (「山东幺洞幺」) is accepted.
+- **Command words** are compared by sound, so 退出/推出, 起非/起飞, 跑到/跑道 and 又/右 all work.
+- **Taxiway letters** can be said as Latin letters (A B2), as the Chinese letter sounds (诶 比 西 迪 伊 ... 贼),
+  as code words (阿尔法 布拉沃 查理 ... 祖鲁, or English alpha bravo), or run together (AB2 is split into the
+  airport's real taxiway names). 「经诶、比二、西幺滑到跑道17右外等待点」 is *via A, B2, C1*.
+- **Several guesses:** the recogniser gives up to five guesses for what you said; the game tries them in order
+  and uses the first that is a whole instruction (an aircraft and a command). This also helps in English.
+- **When it still fails**, the radio log shows how the game read your words (「听成：四川8975 …」), so you can
+  see which digit or letter was misheard.
+
+The recogniser is the browser's, and accents or noise still cause errors that can't be fixed in the game. Tapping
+the aircraft first means you only have to say the instruction. These tables are from general knowledge of
+common misrecognitions; I have not tested them against real iPad or Chrome transcripts beyond the examples above.
 
 **Checked against the CAAC chart:** every Daxing stand number in the game appears on the CAAC aircraft parking
 chart (2025-03-15), except OpenStreetMap's "E6", which the chart doesn't have (E6 is a taxiway), so it is no longer

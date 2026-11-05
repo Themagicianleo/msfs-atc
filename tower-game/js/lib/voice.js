@@ -39,9 +39,10 @@ export class Listener {
     rec.lang = this.lang;
     rec.interimResults = true;
     rec.continuous = false; // continuous mode has hung on iPad in the past
-    rec.maxAlternatives = 1;
+    rec.maxAlternatives = 5; // the game tries each guess and takes the first it understands
     this.final = '';
     this.interim = '';
+    this.segments = []; // each final result's list of guesses
     this.started = false;
     this.errored = false;
     this.active = true;
@@ -50,8 +51,10 @@ export class Listener {
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i += 1) {
         const r = e.results[i];
-        if (r.isFinal) this.final += r[0].transcript;
-        else interim += r[0].transcript;
+        if (r.isFinal) {
+          this.final += r[0].transcript;
+          this.segments.push(Array.from({ length: r.length }, (_, k) => r[k].transcript));
+        } else interim += r[0].transcript;
       }
       this.interim = interim;
       this.onInterim?.(this.final + interim);
@@ -73,7 +76,7 @@ export class Listener {
       if (text) {
         this.failures = 0;
         this.setState('idle');
-        this.onFinal?.(text);
+        this.onFinal?.(text, this.alternatives());
       } else if (!this.errored && !this.disabled) {
         this.fail('Nothing recognised.');
       }
@@ -106,9 +109,22 @@ export class Listener {
         this.active = false;
         try { this.rec.abort(); } catch { /* ignore */ }
         const text = (this.final || this.interim).trim();
-        if (text) this.onFinal?.(text); else this.fail('Recognition did not finish.');
+        if (text) this.onFinal?.(text, this.alternatives()); else this.fail('Recognition did not finish.');
       }
     }, 3000);
+  }
+
+  // whole-utterance guesses, best first: the k-th guess of every part joined
+  alternatives() {
+    const text = (this.final || this.interim).trim();
+    const out = [text];
+    const parts = this.segments.length ? this.segments : [];
+    const most = Math.max(0, ...parts.map((p) => p.length));
+    for (let k = 1; k < most; k += 1) {
+      const alt = parts.map((p) => p[k] ?? p[0]).join('').trim();
+      if (alt && !out.includes(alt)) out.push(alt);
+    }
+    return out;
   }
 
   fail(reason) {
