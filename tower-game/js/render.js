@@ -7,25 +7,25 @@ import { destinationPoint, taxiDestination } from './world.js';
 // radar-style (dark) and airport-diagram style ("chart") colours
 const DARK = {
   bg: '#0b0b0d', runway: '#30343b', runwayEdge: '#5b616b', centre: '#e9edf2', building: '#252b33',
-  twy: '#272c33', lane: '#222730', twyLine: '#c9a227', apron: '#1a2026', terminal: '#3c4756', hold: '#e5484d',
-  arr: '#0a84ff', dep: '#ff9f0a', sel: '#ffffff', req: '#ffd60a', text: '#ffffff', muted: 'rgba(235,235,245,.6)',
+  twy: '#272c33', lane: '#222730', twyLine: '#7f8794', apron: '#1a2026', terminal: '#3c4756', hold: '#e5484d',
+  arr: '#33c2ff', dep: '#ff4fa8', sel: '#ffffff', req: '#ffd60a', text: '#ffffff', muted: 'rgba(235,235,245,.6)', halo: '#000000', tagBg: 'rgba(8,10,14,0.82)',
   final: 'rgba(10,132,255,0.45)', route: 'rgba(255,255,255,0.55)', conflict: '#ff4d4f',
-  labelBg: 'rgba(13,23,18,0.75)', labelText: '#e9c46a', labelEdge: 'rgba(233,196,106,0.5)',
+  labelBg: 'rgba(13,23,18,0.75)', labelText: '#d9dde4', labelEdge: 'rgba(217,221,228,0.4)',
 };
 const CHART = {
   bg: '#f4f1e8', runway: '#1d1d1f', runwayEdge: '#000000', centre: '#ffffff', building: '#a9a39a',
   twy: '#c9c4b8', lane: '#d8d3c7', twyLine: '#8a7a3a', apron: '#e2ddd0', terminal: '#8f8a80', hold: '#d00000',
-  arr: '#0067c0', dep: '#c25b00', sel: '#000000', req: '#b8860b', text: '#1d1d1f', muted: '#5a5a5a',
+  arr: '#0067c0', dep: '#d6007a', sel: '#000000', req: '#b8860b', text: '#1d1d1f', muted: '#5a5a5a', halo: '#ffffff', tagBg: 'rgba(255,255,255,0.92)',
   final: 'rgba(0,103,192,0.45)', route: 'rgba(0,0,0,0.6)', conflict: '#d00000',
   labelBg: '#ffd400', labelText: '#000000', labelEdge: '#000000',
 };
 // EFB light appearance (Apple system colours)
 const LIGHT = {
   bg: '#e5e5ea', runway: '#3a3a3c', runwayEdge: '#1c1c1e', centre: '#ffffff', building: '#c7c7cc',
-  twy: '#c7c7cc', lane: '#d1d1d6', twyLine: '#b25000', apron: '#d8d8de', terminal: '#aeaeb2', hold: '#d70015',
-  arr: '#007aff', dep: '#c77c02', sel: '#000000', req: '#ff9500', text: '#1c1c1e', muted: 'rgba(60,60,67,.6)',
+  twy: '#c7c7cc', lane: '#d1d1d6', twyLine: '#767a85', apron: '#d8d8de', terminal: '#aeaeb2', hold: '#d70015',
+  arr: '#0a6cff', dep: '#e0007a', sel: '#000000', req: '#ff9500', text: '#1c1c1e', muted: 'rgba(60,60,67,.6)', halo: '#ffffff', tagBg: 'rgba(255,255,255,0.9)',
   final: 'rgba(0,122,255,0.45)', route: 'rgba(0,0,0,0.55)', conflict: '#d70015',
-  labelBg: 'rgba(255,255,255,0.85)', labelText: '#b25000', labelEdge: 'rgba(178,80,0,0.45)',
+  labelBg: 'rgba(255,255,255,0.85)', labelText: '#5c5f69', labelEdge: 'rgba(60,64,75,0.35)',
 };
 let C = DARK;
 
@@ -510,7 +510,7 @@ export class Renderer {
     const c = this.ctx;
     const s = this.view.s;
     const color = ac.kind === 'arr' ? C.arr : C.dep;
-    const size = Math.max(9, (ac.type.span || 36) * 1.1 * s); // to scale, at least 9 px
+    const size = Math.max(20, (ac.type.span || 36) * 1.5 * s); // bigger than life, at least 20 px: aircraft are what you look for
     const p = this.toScreen(ac.p);
     const f = fromHeading(ac.hdg);
     const dir = [f[0], -f[1]]; // screen y points down
@@ -520,19 +520,31 @@ export class Renderer {
     const shape = [pt(0.5, 0), pt(0.05, 0.08), pt(0, 0.5), pt(-0.1, 0.5), pt(-0.12, 0.08), pt(-0.38, 0.06),
       pt(-0.45, 0.2), pt(-0.5, 0.2), pt(-0.48, 0), pt(-0.5, -0.2), pt(-0.45, -0.2), pt(-0.38, -0.06),
       pt(-0.12, -0.08), pt(-0.1, -0.5), pt(0, -0.5), pt(0.05, -0.08)];
+    const alpha = ac.state === 'parked' ? 0.6 : 1;
+    c.globalAlpha = alpha;
+    // a soft disc in its colour, so it is found at a glance
+    c.beginPath();
+    c.arc(p[0], p[1], size * 0.62, 0, Math.PI * 2);
+    c.fillStyle = color;
+    c.globalAlpha = alpha * 0.22;
+    c.fill();
+    c.globalAlpha = alpha;
     c.beginPath();
     shape.forEach((q, i) => (i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1])));
     c.closePath();
+    c.lineJoin = 'round';
+    c.strokeStyle = C.halo; // a rim in the opposite shade keeps it apart from whatever it is on
+    c.lineWidth = 5;
+    c.stroke();
     c.fillStyle = color;
-    c.globalAlpha = ac.state === 'parked' ? 0.5 : 1;
     c.fill();
+    if (selected) { c.strokeStyle = C.sel; c.lineWidth = 2.5; c.stroke(); }
     c.globalAlpha = 1;
-    if (selected) { c.strokeStyle = C.sel; c.lineWidth = 2; c.stroke(); }
     if (ac.req && Math.floor(now / 500) % 2 === 0) {
       c.beginPath();
       c.arc(p[0], p[1], size * 0.75 + 4, 0, Math.PI * 2);
       c.strokeStyle = C.req;
-      c.lineWidth = 2;
+      c.lineWidth = 3;
       c.stroke();
     }
     // data tag
@@ -547,19 +559,34 @@ export class Renderer {
     const dest = taxiDestination(ac);
     if (dest) info += ` → ${dest.short}`;
     if (ac.blockedBy) info += ' WAIT';
-    const lx = p[0] + size * 0.6 + 6;
-    const ly = p[1] - size * 0.6 - 6;
-    c.strokeStyle = 'rgba(230,233,237,0.35)';
-    c.lineWidth = 1;
-    c.beginPath(); c.moveTo(p[0], p[1]); c.lineTo(lx - 2, ly + 4); c.stroke();
-    c.font = '600 13px -apple-system, system-ui, sans-serif';
+    const lx = p[0] + size * 0.62 + 8;
+    const ly = p[1] - size * 0.62 - 6;
+    c.strokeStyle = color;
+    c.globalAlpha = 0.6;
+    c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(p[0], p[1]); c.lineTo(lx - 2, ly + 6); c.stroke();
+    c.globalAlpha = 1;
+    // the tag sits on its own plate, with a bar in the aircraft's colour
+    const line2 = `${ac.type.code} ${info}`;
     c.textAlign = 'left';
     c.textBaseline = 'alphabetic';
-    c.fillStyle = selected ? C.sel : color;
-    c.fillText(ac.callsign, lx, ly);
-    c.font = '11px -apple-system, system-ui, sans-serif';
+    c.font = '700 14px -apple-system, system-ui, sans-serif';
+    const w1 = c.measureText(ac.callsign).width;
+    c.font = '12px -apple-system, system-ui, sans-serif';
+    const w = Math.max(w1, c.measureText(line2).width) + 14;
+    c.fillStyle = C.tagBg;
+    c.fillRect(lx - 4, ly - 14, w, 34);
+    c.fillStyle = color;
+    c.fillRect(lx - 4, ly - 14, 4, 34);
+    if (selected) { c.strokeStyle = C.sel; c.lineWidth = 1.5; c.strokeRect(lx - 4, ly - 14, w, 34); }
+    c.font = '700 14px -apple-system, system-ui, sans-serif';
     c.fillStyle = C.text;
-    c.fillText(`${ac.type.code} ${info}`, lx, ly + 14);
+    c.fillText(ac.callsign, lx + 4, ly);
+    c.font = '12px -apple-system, system-ui, sans-serif';
+    c.fillStyle = C.text;
+    c.globalAlpha = 0.85;
+    c.fillText(line2, lx + 4, ly + 15);
+    c.globalAlpha = 1;
   }
 }
 

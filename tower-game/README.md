@@ -91,11 +91,10 @@ lets you pick them:
   - Taxiing aircraft stop for traffic on their route and hold short of runways until cleared to cross.
   - A departure won't roll while someone is ahead on the runway.
   - Unanswered calls are repeated.
-- **Score:**
-  - Points: +50 per arrival parked, +50 per departure handed to departure (+15 if you
-    forgot the frequency change).
-  - Penalties: −100 go-around without landing clearance, −150 go-around with the runway
-    occupied, −250 runway conflict, −200 ground conflict, −10 per repeated call, −30 gridlock.
+- **No score.** Mistakes (a go-around you caused, a conflict, an aircraft that had to call again) appear in the radio log
+  as plain warnings.
+- **Colours:** arrivals are blue and departures magenta everywhere (map, 3D, tags, lists), drawn large with a rim and a
+  soft halo; taxiways and runways stay grey, so aircraft are what the eye finds first.
 - **Controls:** pause/1x/2x/4x speed; traffic None, Calm, Normal or Busy. Change the
   landing and departure runways with **Runways**, and the wind under **Settings and help**.
 - **Pushback and the departure runway:** when you clear an aircraft for pushback, the tower tells it which

@@ -448,7 +448,7 @@ function handleEvents(events) {
       addMsg('', ev.callsign, ev.text, () => speaker.speak(ev.speech, `ac${ev.voice}`, ev.lang, radio));
       speaker.speak(ev.speech, `ac${ev.voice}`, ev.lang, { reply: !!(ev.readback || ev.unable), ...radio });
     } else if (ev.kind === 'score') {
-      sys(`${ev.delta > 0 ? '+' : ''}${ev.delta}  ${ev.reason}`, ev.delta > 0 ? 'good' : 'bad');
+      if (ev.delta < 0) sys(ev.reason, 'bad'); // what went wrong, as a plain warning (there is no score)
     } else if (ev.kind === 'alert') {
       const a = $('#alert');
       a.textContent = ev.text;
@@ -733,6 +733,14 @@ $('#strips').addEventListener('click', (e) => {
   if (d) game.selected = Number(d.dataset.id);
 });
 
+// Traffic / Radio tabs (narrow screens show one list at a time, so each gets the room)
+$('#side-tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-tab]');
+  if (!b) return;
+  document.querySelector('.side-lists').dataset.tab = b.dataset.tab;
+  $$('#side-tabs button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+});
+
 // ---------------------------------------------------------------- voice
 const ai = new AiRecognizer();
 const listener = new Listener({
@@ -1002,10 +1010,8 @@ function frame(now) {
     if (now - lastPanel >= PANEL_MS) {
       lastPanel = now;
       renderPanel();
-      $('#score').textContent = w.score;
       const t = Math.floor(w.t);
       $('#clock').textContent = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
-      $('#score').title = `Arrived ${w.stats.arrived}, departed ${w.stats.departed}, go-arounds ${w.stats.goArounds}, conflicts ${w.stats.conflicts}`;
     }
   }
   game.last = now;
