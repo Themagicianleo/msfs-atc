@@ -9,6 +9,8 @@
   "tower": "Daxing Tower",
   "tower_zh": "大兴塔台",
   "units": "metric",
+  "tower_pos": { "lat": 39.50303, "lon": 116.40604, "source": "TWR(W) on the CAAC aircraft parking chart ZBAD 2P-1 (2025-03-15), placed relative to stands 418 and 422; approximate" },
+  "not_stands": ["E6"],
   "lang_note": "Chinese airlines (lang zh) use Chinese radiotelephony with their Chinese callsigns; others use English."
  },
  "about": "Representative traffic for the game: airlines that serve this airport, their ICAO code and radio callsign, a typical fleet mix there and destinations. Not a real schedule; weights are rough shares of movements. Edit freely: types must exist in data/aircraft.json.",

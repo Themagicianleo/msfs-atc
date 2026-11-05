@@ -59,9 +59,11 @@ when you first open a 3D view, so the 2D map stays as fast as before.
   marks, numbers and edge lights; taxiways with yellow centrelines; aprons; red holding points.
 - **Buildings** are the terminal and hangar outlines, raised to a fixed height (22 m terminals, 16 m others).
   Real heights are not in the data.
-- **Tower** is placed by the game, not taken from the data: OpenStreetMap has no usable tower position for
-  these airports. It goes in the open space nearest the middle of the terminals, with the cab at about 72 m,
-  so the view is close to the real one but not the same.
+- **Tower:** at Daxing it stands where the CAAC aircraft parking chart (ZBAD 2P-1, 2025-03-15) shows the west
+  tower, TWR(W), in the courtyard south-west of the terminal; the position was read off the chart against
+  nearby stands, so it is approximate. OpenStreetMap has no usable tower position for Changi and San Francisco,
+  so there the game puts it in the open space nearest the middle of the terminals. The cab is at about 72 m.
+  Set `meta.tower_pos` in `data/traffic/<ICAO>.json` to move it.
 - **Appearance:** light and dark follow the game's appearance; dark looks like dusk, with runway lights.
 
 ### The detailed airports: WSSS, ZBAD, KSFO
@@ -126,6 +128,12 @@ You can answer in Chinese by voice or typing, e.g. 「南方三幺洞幺，跑�
 next to the talk button sets the microphone language. It is Chinese by default at ZBAD, and English for Aeroflot.
 Spoken Chinese needs a Chinese system voice (on iPad: Settings → Accessibility → Spoken Content → Voices →
 Chinese). The Chinese wording is in `data/phraseology-zh.json`.
+
+**Checked against the CAAC chart:** every Daxing stand number in the game appears on the CAAC aircraft parking
+chart (2025-03-15), except OpenStreetMap's "E6", which the chart doesn't have (E6 is a taxiway), so it is no longer
+used (`meta.not_stands`). OpenStreetMap still lacks many of the chart's stands: the south remote stands 301–373,
+most of 421–483, the cargo stands 501–526, 701–706, the de-icing stands and the business apron. Traffic only uses
+the 101 numbered stands it has.
 
 The Chinese callsigns and the simplified CAAC-style wording are from general knowledge; check them against
 the CAAC radiotelephony rules if accuracy matters to you.

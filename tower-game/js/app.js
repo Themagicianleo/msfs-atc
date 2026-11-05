@@ -137,6 +137,9 @@ async function startShift(code, traffic) {
   if (!wind) wind = generatedWind(airport.icao);
   const layout = hq ? hq.layout : buildLayout(airport);
   const profile = hq?.profile || null;
+  // a tower position from the airport's published chart, when we have one
+  const tp = profile?.meta?.tower_pos;
+  if (tp && layout.proj) layout.towerPos = layout.proj.toXY(tp.lat, tp.lon);
   const cfg = chooseConfig(layout, wind, profile);
   game.phr = phr;
   game.airlines = airlines;

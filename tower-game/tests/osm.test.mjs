@@ -76,6 +76,12 @@ test('runways, idents, taxiways and stands come from OSM', () => {
   assert.ok(L.taxiLabels.some((l) => l.name === 'A'));
 });
 
+test('stand numbers the published chart does not have are not used', () => {
+  const L = layoutFromOsm(osmFixture(), { ...META, not_stands: ['11'] });
+  assert.deepEqual(L.gates.map((g) => g.id), ['10', '12', '13']);
+  assert.ok(L.otherStands.length >= 1);
+});
+
 test('exits, departure entries and holding points', () => {
   const L = layoutFromOsm(osmFixture(), META);
   assert.equal(L.holdPoints['09'].name, 'A1');

@@ -236,7 +236,7 @@ export function layoutFromOsm(osm, meta) {
     ? mul(L.aprons.flat().reduce((s, p) => add(s, p), [0, 0]), 1 / L.aprons.flat().length) : [0, 0];
 
   addExitsAndHolds(L, apronCentre);
-  addStands(L, els, proj);
+  addStands(L, els, proj, meta);
   pruneToNetwork(L);
   L.taxiLabels = taxiLabels(L);
   return L;
@@ -388,7 +388,7 @@ function addExitsAndHolds(L, apronCentre) {
 // network is used as drawn; the parking spot is its free end. Boarding gates
 // (aeroway=gate, e.g. "B21/B22") are terminal gates, not stands, so they are
 // not used. Stands without a number are drawn but get no traffic.
-function addStands(L, els, proj) {
+function addStands(L, els, proj, meta = {}) {
   const g = L.graph;
   const taxi = (id) => id !== undefined && ['twy', 'lane', 'hold', 'x'].includes(g.nodes[id].kind);
   const taxiEdges = g.edges.filter((e) => e.kind === 'lane' || e.kind === 'twy');
@@ -404,11 +404,15 @@ function addStands(L, els, proj) {
   };
   const stands = [];
   L.otherStands = [];
+  // numbers OSM gives a stand that the airport's published chart does not have
+  // (data/traffic/<ICAO>.json meta.not_stands): drawn, but not used for traffic
+  const notStands = new Set((meta.not_stands || []).map((x) => String(x).toUpperCase()));
   for (const e of els) {
     const t = tagsOf(e);
     if (t.aeroway !== 'parking_position') continue;
     // "D64/D65" (a stand that can be used as two) -> "D64"
-    const ref = (firstRef(t) || '').split('/')[0].trim();
+    let ref = (firstRef(t) || '').split('/')[0].trim();
+    if (notStands.has(ref)) ref = '';
     if (e.type === 'node') {
       const p = proj.toXY(e.lat, e.lon);
       if (ref) stands.push({ ref, stop: p, pts: [p], attach: null, dir: null });
