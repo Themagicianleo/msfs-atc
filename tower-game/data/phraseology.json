@@ -70,14 +70,14 @@
     { "cmd": "go_around", "patterns": ["go ?a?round", "missed approach"] },
     { "cmd": "land", "patterns": ["clear\\w* to land", "clear\\w* land", "cleared for (the )?landing", "clear\\w* (to )?touch ?down"] },
     { "cmd": "takeoff", "patterns": ["clear\\w* for (immediate )?take ?off", "clear\\w* take ?off", "clear\\w* for departure", "clear\\w* (to )?(depart|go)\\b"] },
-    { "cmd": "lineup", "patterns": ["line ?up", "\\benter (the )?runway"] },
-    { "cmd": "cross", "patterns": ["^(?!.*taxi).*cross"] },
+    { "cmd": "lineup", "patterns": ["line ?up", "\\benter (the )?runway", "position (and|&|n) hold", "into position", "position and wait"] },
+    { "cmd": "cross", "patterns": ["^(?!.*(taxi|hold (your )?pos|traffic (is )?cross)).*cross"] },
     { "cmd": "hold_short", "patterns": ["^(?!.*taxi).*hold(ing)? ?short"] },
     { "cmd": "hold_position", "patterns": ["hold (your )?pos(ition)?", "holdposition", "^(?!.*taxi).*\\bstop\\b", "^(?!.*(taxi|short)).*\\bhold\\b"] },
     { "cmd": "continue_taxi", "patterns": ["continue (taxi|taxiing)", "resume taxi"] },
     { "cmd": "continue", "patterns": ["continue approach", "^(?!.*taxi).*\\bcontinue\\b"] },
     { "cmd": "push", "patterns": ["push ?back", "\\bpush(ed)?\\b"] },
     { "cmd": "taxi", "patterns": ["\\btax[iy](ing)?\\b"] },
-    { "cmd": "contact", "patterns": ["contact (departure|radar|approach|center|centre|control)", "frequency change approved", "good ?day", "monitor"] }
+    { "cmd": "contact", "patterns": ["contact (departure|radar|approach|center|centre|control|tower|ground|apron|clearance)", "frequency change approved", "good ?day", "monitor"] }
   ]
 }

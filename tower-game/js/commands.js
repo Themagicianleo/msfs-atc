@@ -104,8 +104,11 @@ export function matchCallsign(text, aircraft) {
     const hasNum = new RegExp(`(^|[^0-9])${num}([^0-9]|$)`).test(n);
     const hasTel = squashed.includes(tel);
     const hasCode = squashed.includes(`${code}${num}`);
+    // after first contact controllers shorten it: "Delta 234" for Delta 1234 (airline name and the last three digits)
+    const abbreviated = hasTel && num.length > 3 && new RegExp(`(^|[^0-9])${num.slice(-3)}([^0-9]|$)`).test(n);
     let score = 0;
     if (hasCode || (hasNum && hasTel)) score = 10;
+    else if (abbreviated) score = 9;
     else if (hasNum) score = 4;
     else if (hasTel) score = 1;
     return { ac, score };
@@ -142,6 +145,7 @@ const ROUTE_START = new Set(['via', 'along', 'taxiway', 'taxiways', 'onto', 'usi
 const ROUTE_SKIP = new Set(['and', 'then', 'the', 'turn', 'left', 'right', 'next', 'follow', 'continue', 'on']);
 const ROUTE_TALK = new Set(['to', 'for', 'at', 'in', 'of', 'is', 'it', 'up', 'off', 'out', 'you', 'can', 'now', 'not', 'all', 'but', 'her', 'his']);
 function englishRoute(n, known) {
+  n = n.replace(/\bturn (?:left|right)(?: (?:on|onto|at|into))? /g, 'via '); // "turn left on bravo" starts a route
   const tokens = [];
   let inRoute = false;
   for (const w of n.split(' ')) {
