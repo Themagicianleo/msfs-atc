@@ -20,6 +20,7 @@ function newWorld(airport = XDEP, arrEnd = '27', depEnd = '27') {
     traffic: 'off', wind: { available: true, wind_dir: 260, wind_kt: 10 } });
   w.nextArr = Infinity;
   w.nextDep = Infinity;
+  w.variety = false; // the first wording of each phrase, so the texts can be checked
   return w;
 }
 
@@ -157,7 +158,7 @@ test('runway crossings: the aircraft holds short until cleared to cross', () => 
   const L = buildLayout(ap);
   // find a departure runway end that needs a crossing from the apron
   const w = new World({ layout: L, phr: PHR, airlines: AIRLINES, rng: seeded(3), arrEnd: '27R', depEnd: '27R', traffic: 'off' });
-  w.nextArr = Infinity; w.nextDep = Infinity;
+  w.nextArr = Infinity; w.nextDep = Infinity; w.variety = false;
   const ac = w.spawnDeparture();
   w.command(ac.id, { type: 'push' });
   runUntil(w, () => ac.state === 'pushed');
@@ -184,7 +185,7 @@ test('runway crossings: the aircraft holds short until cleared to cross', () => 
 test('taxi with "cross runway" in the clearance does not stop at that crossing', () => {
   const L = buildLayout(bigAirport());
   const w = new World({ layout: L, phr: PHR, airlines: AIRLINES, rng: seeded(3), arrEnd: '27R', depEnd: '27R', traffic: 'off' });
-  w.nextArr = Infinity; w.nextDep = Infinity;
+  w.nextArr = Infinity; w.nextDep = Infinity; w.variety = false;
   const ac = w.spawnDeparture();
   w.command(ac.id, { type: 'push' });
   runUntil(w, () => ac.state === 'pushed');
@@ -239,7 +240,7 @@ test('ZBAD: Chinese airlines talk Chinese with metric units; others English in k
   const make = (code) => {
     const w = new World({ layout: buildLayout(XDEP), phr: PHR, phrZh, airlines: AIRLINES, rng: seeded(5), arrEnd: '27', depEnd: '27',
       traffic: 'off', wind: { available: true, wind_dir: 260, wind_kt: 10 }, profile: only(code), types, unit: 'Daxing Tower' });
-    w.nextArr = Infinity; w.nextDep = Infinity;
+    w.nextArr = Infinity; w.nextDep = Infinity; w.variety = false;
     return w;
   };
   const w = make('CSN');
@@ -258,4 +259,19 @@ test('ZBAD: Chinese airlines talk Chinese with metric units; others English in k
   ev = e.drain().filter((x) => x.kind === 'pilot');
   assert.match(ev[0].text, new RegExp(`^Daxing Tower, Aeroflot ${ru.num}, ILS runway 27, 11 kilometres\\.$`));
   assert.match(e.controllerText(ru, 'land'), /wind 260\/5MPS, runway 27, cleared to land/);
+});
+
+test('pilots word their calls in different ways, all with the callsign and the facts', () => {
+  const seen = new Set();
+  for (let i = 0; i < 30; i += 1) {
+    const w = newWorld();
+    w.variety = true;
+    const ac = w.spawnDeparture();
+    ac.callAt = 0;
+    w.step(0.5);
+    const t = texts(w.drain())[0];
+    assert.ok(t.includes(ac.cs.t) && t.includes(`stand ${ac.gate}`), t);
+    seen.add(t.replace(ac.cs.t, 'CS').replace(`stand ${ac.gate}`, 'stand N'));
+  }
+  assert.ok(seen.size >= 3, [...seen].join(' | '));
 });

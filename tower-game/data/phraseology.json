@@ -4,34 +4,34 @@
   "about": "Phraseology for the tower game: what pilots say ('pilot'), how they read back ('readback'), what the command buttons say for you ('controller') and the patterns that recognise your spoken or typed commands ('commands', regular expressions tried top to bottom on lower-case text with numbers as digits). {placeholders} are filled in; [parts] disappear when a placeholder inside is empty. Copy to userdata/phraseology/tower.json to keep your changes.",
 
   "pilot": {
-    "arr_checkin": "{unit}, {callsign}, {approach} runway {runway}, {distance}.",
-    "arr_short_final": "{unit}, {callsign}, short final runway {runway}.",
-    "go_around": "{callsign}, going around.",
-    "vacated": "{unit}, {callsign}, runway {runway} vacated, request taxi to stand {gate}.",
-    "push": "{unit}, {callsign}, stand {gate}, request pushback.",
-    "taxi": "{unit}, {callsign}, ready to taxi.",
-    "ready": "{unit}, {callsign}, holding point runway {runway}, ready for departure.",
-    "hold_short": "{unit}, {callsign}, holding short runway {runway}.",
-    "handoff": "{unit}, {callsign}, request frequency change.",
-    "blocked": "{unit}, {callsign}, we're blocked by traffic, request instructions."
+    "arr_checkin": ["{unit}, {callsign}, {approach} runway {runway}, {distance}.", "{unit}, good day, {callsign}, established {approach} runway {runway}, {distance}.", "{unit}, {callsign}, with you on the {approach} runway {runway}, {distance} out.", "{unit}, hello, {callsign}, {approach} runway {runway}, {distance}."],
+    "arr_short_final": ["{unit}, {callsign}, short final runway {runway}.", "{callsign}, short final runway {runway}.", "{unit}, {callsign}, on short final {runway}."],
+    "go_around": ["{callsign}, going around.", "Going around, {callsign}.", "{callsign}, go-around."],
+    "vacated": ["{unit}, {callsign}, runway {runway} vacated, request taxi to stand {gate}.", "{unit}, {callsign}, vacated runway {runway}, for stand {gate}.", "{unit}, {callsign}, clear of runway {runway}, request taxi stand {gate}."],
+    "push": ["{unit}, {callsign}, stand {gate}, request pushback.", "{unit}, {callsign}, stand {gate}, ready for pushback.", "{unit}, good day, {callsign} on stand {gate}, request push and start.", "{unit}, {callsign}, stand {gate}, request pushback and start up."],
+    "taxi": ["{unit}, {callsign}, ready to taxi.", "{unit}, {callsign}, request taxi.", "{unit}, {callsign}, pushback complete, ready to taxi."],
+    "ready": ["{unit}, {callsign}, holding point runway {runway}, ready for departure.", "{unit}, {callsign}, ready for departure runway {runway}.", "{unit}, {callsign}, holding point runway {runway}, fully ready."],
+    "hold_short": ["{unit}, {callsign}, holding short runway {runway}.", "{unit}, {callsign}, holding short of runway {runway}."],
+    "handoff": ["{unit}, {callsign}, request frequency change.", "{callsign}, request to change to departure."],
+    "blocked": ["{unit}, {callsign}, we're blocked by traffic, request instructions.", "{unit}, {callsign}, we are stuck behind traffic, request instructions."]
   },
 
   "readback": {
-    "land": "Cleared to land runway {runway}, {callsign}.",
-    "continue": "Continue approach, {callsign}.",
-    "go_around": "Going around, {callsign}.",
-    "push": "Pushback approved, {callsign}.",
+    "land": ["Cleared to land runway {runway}, {callsign}.", "Runway {runway}, cleared to land, {callsign}.", "Cleared to land {runway}, {callsign}."],
+    "continue": ["Continue approach, {callsign}.", "Continuing, {callsign}."],
+    "go_around": ["Going around, {callsign}.", "Going around, {callsign}, wilco."],
+    "push": ["Pushback approved, {callsign}.", "Pushing back, {callsign}.", "Push approved, {callsign}."],
     "taxi_out": "Taxi to holding point runway {runway}[ via {via}][, cross runway {cross}], {callsign}.",
     "taxi_in": "Taxi to stand {gate}[ via {via}][, cross runway {cross}], {callsign}.",
-    "hold_position": "Holding position, {callsign}.",
-    "continue_taxi": "Continue taxi, {callsign}.",
+    "hold_position": ["Holding position, {callsign}.", "Holding, {callsign}.", "Holding position, wilco, {callsign}."],
+    "continue_taxi": ["Continue taxi, {callsign}.", "Continuing taxi, {callsign}."],
     "hold_short": "Hold short runway {runway}, {callsign}.",
     "cross": "Cross runway {runway}, {callsign}.",
-    "lineup": "Line up and wait runway {runway}, {callsign}.",
-    "takeoff": "Cleared for take-off runway {runway}, {callsign}.",
-    "contact": "Contact departure, good day, {callsign}.",
+    "lineup": ["Line up and wait runway {runway}, {callsign}.", "Lining up runway {runway}, {callsign}.", "Line up and wait {runway}, {callsign}."],
+    "takeoff": ["Cleared for take-off runway {runway}, {callsign}.", "Cleared for take-off {runway}, {callsign}.", "Runway {runway}, cleared for take-off, {callsign}."],
+    "contact": ["Contact departure, good day, {callsign}.", "Over to departure, good day, {callsign}.", "Departure, {callsign}, thanks for your help.", "Contact departure, {callsign}, bye bye."],
     "unable": "Unable, {reason}, {callsign}.",
-    "say_again": "Say again for {callsign}?"
+    "say_again": ["Say again for {callsign}?", "{callsign}, say again?", "Sorry, say again for {callsign}?"]
   },
 
   "controller": {

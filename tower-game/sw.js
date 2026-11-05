@@ -1,6 +1,6 @@
 // Network first, cache as fallback: works offline after one visit, and
 // updates show up on the next load. Airport files are cached as you open them.
-const CACHE = 'tower-v5';
+const CACHE = 'tower-v6';
 const SHELL = ['./', 'index.html', 'efb-glass.css', 'tower.css', 'manifest.webmanifest', 'icons/icon-180.png',
   'js/app.js', 'js/commands.js', 'js/geo.js', 'js/layout.js', 'js/render.js', 'js/world.js', 'js/weather.js', 'js/osm.js', 'js/ops.js', 'js/zh.js', 'js/scene3d.js', 'js/vendor/three.module.min.js',
   'js/lib/format.js', 'js/lib/frequency.js', 'js/lib/parser.js', 'js/lib/runway.js', 'js/lib/speech.js', 'js/lib/radio.js', 'js/lib/voice.js',

@@ -3,6 +3,22 @@
 // they let go. The browser's speech itself can't be filtered (speechSynthesis
 // doesn't go through Web Audio), so this is what makes it sound like a radio.
 
+function hash(key) {
+  let h = 2166136261;
+  for (const c of String(key)) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
+  return h;
+}
+
+// one aircraft's radio: its squelch click and tail, the colour of its hiss,
+// and (one in eight) a faint whistle
+export function radioCharacter(key) {
+  const f = (name, lo, hi) => lo + ((hash(`${name}|${key}|${name}`) % 1000) / 1000) * (hi - lo);
+  return {
+    click: f('click', 0.04, 0.11), tail: f('tail', 0.09, 0.24), squelch: f('squelch', 1700, 3200), band: f('band', 1100, 2400),
+    q: f('q', 0, 0.6), whistle: f('whistle?', 0, 1) < 0.125 ? f('whistle', 700, 1600) : 0,
+  };
+}
+
 export class RadioFx {
   constructor() {
     this.enabled = true;
@@ -58,18 +74,36 @@ export class RadioFx {
     src.stop(t + seconds + 0.05);
   }
 
-  // the pilot presses the transmit button
-  keyUp(level = 1) {
+  // the pilot presses the transmit button. Each aircraft's radio sounds a bit
+  // different (key), and a far one (range, metres) is weaker and noisier.
+  keyUp({ key = '', range = 3000 } = {}) {
     this.keyDown(true);
     const ctx = this.context();
     if (!ctx || !this.enabled || ctx.state !== 'running') return;
-    this.burst(0.07, 0.18 * level);
-    const { src, gain } = this.source(1600, 0.6);
+    const ch = radioCharacter(key);
+    const far = Math.min(1, range / 20000);
+    this.tail = ch.tail;
+    this.burst(ch.click, 0.16 + 0.08 * far, ch.squelch);
+    const { src, gain } = this.source(ch.band, 0.5 + ch.q);
     const t = ctx.currentTime;
     gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(0.03 * level, t + 0.05);
+    gain.gain.linearRampToValueAtTime(0.014 + 0.05 * far, t + 0.05);
     src.start(t, Math.random());
-    this.bed = { src, gain };
+    const bed = { src, gain, extra: [] };
+    // an old radio's whistle, now and then
+    if (ch.whistle) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.frequency.value = ch.whistle;
+      g.gain.value = 0.004 + 0.006 * far;
+      o.connect(g).connect(ctx.destination);
+      o.start(t);
+      bed.extra.push(o);
+    }
+    this.bed = bed;
+    // crackle on a weak signal
+    clearInterval(this.crackle);
+    if (far > 0.3) this.crackle = setInterval(() => { if (Math.random() < far * 0.6) this.burst(0.02 + Math.random() * 0.03, 0.05 + 0.1 * far, 1800 + Math.random() * 1500); }, 260);
     clearTimeout(this.bedTimer);
     this.bedTimer = setTimeout(() => this.keyDown(true), 20000); // never hiss forever
   }
@@ -77,6 +111,7 @@ export class RadioFx {
   // ...and lets go: the squelch tail
   keyDown(quiet = false) {
     clearTimeout(this.bedTimer);
+    clearInterval(this.crackle);
     const b = this.bed;
     this.bed = null;
     if (!b || !this.ctx) return;
@@ -85,7 +120,8 @@ export class RadioFx {
     b.gain.gain.setValueAtTime(b.gain.gain.value, t);
     b.gain.gain.linearRampToValueAtTime(0, t + 0.04);
     b.src.stop(t + 0.06);
-    if (!quiet) this.burst(0.14, 0.22, 2600);
+    for (const o of b.extra) o.stop(t + 0.05);
+    if (!quiet) this.burst(this.tail || 0.14, 0.22, 2600);
   }
 
   // the controller's own transmit click

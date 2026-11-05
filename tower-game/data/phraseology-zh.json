@@ -5,23 +5,23 @@
   "lang": "zh-CN",
 
   "pilot": {
-    "arr_checkin": "{unit}，{callsign}，盲降跑道{runway}，{distance}。",
+    "arr_checkin": ["{unit}，{callsign}，盲降跑道{runway}，{distance}。", "{unit}，你好，{callsign}，盲降跑道{runway}，{distance}。", "{unit}，{callsign}，建立盲降跑道{runway}，{distance}。"],
     "arr_short_final": "{unit}，{callsign}，跑道{runway}短五边。",
     "go_around": "{callsign}，复飞。",
     "vacated": "{unit}，{callsign}，已脱离跑道{runway}，请求滑回停机位{gate}。",
-    "push": "{unit}，{callsign}，停机位{gate}，请求推出。",
-    "taxi": "{unit}，{callsign}，准备好滑行。",
-    "ready": "{unit}，{callsign}，跑道{runway}外等待点，准备好起飞。",
+    "push": ["{unit}，{callsign}，停机位{gate}，请求推出。", "{unit}，{callsign}，停机位{gate}，推出开车。", "{unit}，你好，{callsign}，停机位{gate}，请求推出。"],
+    "taxi": ["{unit}，{callsign}，准备好滑行。", "{unit}，{callsign}，推出完毕，请求滑行。"],
+    "ready": ["{unit}，{callsign}，跑道{runway}外等待点，准备好起飞。", "{unit}，{callsign}，跑道{runway}，准备好了。"],
     "hold_short": "{unit}，{callsign}，跑道{runway}外等待。",
     "handoff": "{unit}，{callsign}，请求转换频率。",
     "blocked": "{unit}，{callsign}，前方有飞机挡住，请指示。"
   },
 
   "readback": {
-    "land": "跑道{runway}，可以落地，{callsign}。",
+    "land": ["跑道{runway}，可以落地，{callsign}。", "可以落地，跑道{runway}，{callsign}。"],
     "continue": "继续进近，{callsign}。",
     "go_around": "复飞，{callsign}。",
-    "push": "可以推出，{callsign}。",
+    "push": ["可以推出，{callsign}。", "推出，{callsign}。"],
     "taxi_out": "[经{via}]滑到跑道{runway}外等待点[，穿越跑道{cross}]，{callsign}。",
     "taxi_in": "[经{via}]滑到停机位{gate}[，穿越跑道{cross}]，{callsign}。",
     "hold_position": "原地等待，{callsign}。",
@@ -29,8 +29,8 @@
     "hold_short": "跑道{runway}外等待，{callsign}。",
     "cross": "穿越跑道{runway}，{callsign}。",
     "lineup": "跑道{runway}，进跑道等待，{callsign}。",
-    "takeoff": "跑道{runway}，可以起飞，{callsign}。",
-    "contact": "联系离场，再见，{callsign}。",
+    "takeoff": ["跑道{runway}，可以起飞，{callsign}。", "可以起飞，跑道{runway}，{callsign}。"],
+    "contact": ["联系离场，再见，{callsign}。", "联系离场，{callsign}，再见。"],
     "unable": "无法执行，{reason}，{callsign}。",
     "say_again": "{callsign}，请重复。"
   },

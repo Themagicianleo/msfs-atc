@@ -23,10 +23,10 @@ const store = {
   set(k, v) { try { localStorage.setItem(`tower.${k}`, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
-const settings = { tts: true, radioFx: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
+const settings = { tts: true, radioFx: true, accents: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
 const saveSettings = () => store.set('settings', settings);
 // voices vary per aircraft; the Speaker reads these keys
-const speakerSettings = { tts: settings.tts, radioFx: settings.radioFx, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
+const speakerSettings = { tts: settings.tts, radioFx: settings.radioFx, accents: settings.accents, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
 const speaker = new Speaker(speakerSettings);
 
 const game = { world: null, phr: null, airlines: {}, speed: 1, selected: null, wind: null, last: 0, index: null };
@@ -295,8 +295,9 @@ const sys = (text, cls = 'sys') => addMsg(cls, '', text);
 function handleEvents(events) {
   for (const ev of events) {
     if (ev.kind === 'pilot') {
-      addMsg('', ev.callsign, ev.text, () => speaker.speak(ev.speech, `ac${ev.voice}`, ev.lang));
-      speaker.speak(ev.speech, `ac${ev.voice}`, ev.lang, { reply: !!(ev.readback || ev.unable) });
+      const radio = { airline: ev.airline, range: ev.range };
+      addMsg('', ev.callsign, ev.text, () => speaker.speak(ev.speech, `ac${ev.voice}`, ev.lang, radio));
+      speaker.speak(ev.speech, `ac${ev.voice}`, ev.lang, { reply: !!(ev.readback || ev.unable), ...radio });
     } else if (ev.kind === 'score') {
       sys(`${ev.delta > 0 ? '+' : ''}${ev.delta}  ${ev.reason}`, ev.delta > 0 ? 'good' : 'bad');
     } else if (ev.kind === 'alert') {
@@ -580,6 +581,8 @@ document.addEventListener('keyup', (e) => { if (e.code === 'Space') stopTalk(); 
 
 $('#set-tts').checked = settings.tts;
 $('#set-radio').checked = settings.radioFx;
+$('#set-accents').checked = settings.accents;
+$('#set-accents').addEventListener('change', (e) => { settings.accents = speakerSettings.accents = e.target.checked; saveSettings(); });
 $('#set-radio').addEventListener('change', (e) => { settings.radioFx = speakerSettings.radioFx = e.target.checked; saveSettings(); });
 $('#set-tts').addEventListener('change', (e) => { settings.tts = speakerSettings.tts = e.target.checked; saveSettings(); if (!e.target.checked) speaker.stop(); });
 $('#set-rate').value = settings.rate;

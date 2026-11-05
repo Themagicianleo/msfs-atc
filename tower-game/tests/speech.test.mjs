@@ -21,7 +21,31 @@ test('each pilot keeps a slightly different, stable pitch and pace', () => {
   assert.deepEqual(pilotVoiceShape('ac1'), a);
   const shapes = Array.from({ length: 40 }, (_, i) => pilotVoiceShape(`ac${i}`));
   for (const s of shapes) {
-    assert.ok(s.pitch >= 0.9 && s.pitch <= 1.12 && s.rate >= 0.95 && s.rate <= 1.09);
+    assert.ok(s.pitch >= 0.86 && s.pitch <= 1.16 && s.rate >= 0.92 && s.rate <= 1.12);
   }
   assert.ok(new Set(shapes.map((s) => s.pitch.toFixed(2))).size > 10);
+});
+
+test('pilots from abroad get a voice from home when the device has one', async () => {
+  const { Speaker, accentFor } = await import('../js/lib/speech.js');
+  const s = Object.create(Speaker.prototype);
+  s.settings = { varyVoices: true, accents: true };
+  s.voices = [v('Samantha'), v('Daniel', 'en-GB'), v('Karen', 'en-AU'), v('Anna', 'de-DE'), v('Kyoko', 'ja-JP'), v('Bells')];
+  assert.equal(s.voiceFor('ac1', 'BAW').name, 'Daniel');
+  assert.equal(s.voiceFor('ac2', 'QFA').name, 'Karen');
+  assert.equal(s.voiceFor('ac3', 'DLH').name, 'Anna');
+  assert.equal(s.voiceFor('ac4', 'JAL').name, 'Kyoko');
+  assert.notEqual(s.voiceFor('ac5', 'KAL').name, 'Bells'); // no Korean voice: an English one
+  s.settings.accents = false;
+  assert.ok(!['Anna', 'Kyoko'].includes(s.voiceFor('ac3', 'DLH').name));
+  assert.deepEqual(accentFor('XXX'), []);
+});
+
+test('each aircraft radio sounds different', async () => {
+  const { radioCharacter } = await import('../js/lib/radio.js');
+  const all = Array.from({ length: 64 }, (_, i) => radioCharacter(`ac${i}`));
+  assert.deepEqual(radioCharacter('ac1'), radioCharacter('ac1'));
+  assert.ok(new Set(all.map((c) => Math.round(c.band / 50))).size > 10);
+  const whistles = all.filter((c) => c.whistle).length;
+  assert.ok(whistles > 0 && whistles < 20, `${whistles} whistles`);
 });

@@ -219,11 +219,25 @@ Without the data build you can still play `DEMO`.
 Pilots speak with your device's own voices. To sound less like one robot:
 - Each pilot gets one of the better voices on the device and keeps it. The game prefers "Premium",
   "Enhanced", "Natural", "Online" and Google voices, and never uses joke or old voices (Bells, Zarvox, Fred...).
-- Each pilot has a slightly different pitch and pace.
+- Each pilot has a different pitch and pace.
+- **Accents:** pilots sound like they're from the airline's country, if your device has that voice.
+  - British Airways pilots get a British voice, Qantas an Australian one, Air India an Indian one,
+    Singapore Airlines a Singaporean or Indian one.
+  - Lufthansa, Air France, KLM, JAL/ANA, Korean Air, Aeroflot and Chinese airlines speaking English get a
+    German, French, Dutch, Japanese, Korean, Russian or Chinese voice reading the English call. That sounds
+    like a pilot from there.
+  - Turn it off under **Settings → Pilot accents**.
+- **Different wordings:** pilots don't all say the same thing. A pushback request can be *"request pushback"*,
+  *"ready for pushback"* or *"request push and start"*. A readback can be *"Cleared to land runway 27"* or
+  *"Runway 27, cleared to land"*. There's a farewell on the frequency change, and so on. All are standard
+  phrases. The wordings are lists in `data/phraseology.json` (and `-zh` for Chinese), so you can add your own.
 - Pilots answer after a short pause, like people, instead of the instant you finish.
-- **Radio sound:** a squelch burst when a pilot keys the mic, a faint static hiss while they talk, and the
-  squelch tail when they stop. Your own instructions get a transmit click. Turn it off under
-  **Settings → Radio sound**.
+- **Radio sound:**
+  - A squelch burst when a pilot keys the mic, static while they talk, and the squelch tail when they stop.
+  - Each aircraft's radio sounds a bit different (click, tail, hiss colour); now and then one has a faint whistle.
+  - Aircraft far out on final are weaker: more static, some crackle and a slightly quieter voice.
+  - Your own instructions get a transmit click.
+  - Turn it off under **Settings → Radio sound**.
 
 The voices are only as good as the ones installed. For much better ones:
 - **iPad / iPhone:** Settings → Accessibility → Spoken Content → Voices → English, then download an

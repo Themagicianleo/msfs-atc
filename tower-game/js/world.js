@@ -54,6 +54,8 @@ export class World {
   constructor({ layout, phr, airlines = {}, rng = Math.random, arrEnd, depEnd, traffic = 'normal', wind = null, unit,
     profile = null, types = null, phrZh = null }) {
     this.L = layout;
+    // where the tower is, for how strong a pilot sounds on the radio
+    { const t = layout.terminals?.length ? layout.terminals.flat() : (layout.terminal || []); this.towerAt = layout.towerPos || (t.length ? [t.reduce((s, p) => s + p[0], 0) / t.length, t.reduce((s, p) => s + p[1], 0) / t.length] : [0, 0]); }
     this.phr = phr;
     this.rng = rng;
     this.f = new Formatter({ units: { freqStyle: 'icao' } });
@@ -140,21 +142,34 @@ export class World {
 
   emit(ev) { this.out.push({ t: this.t, ...ev }); }
 
+  // a phrase can have several wordings (an array): pilots don't all say it the same way
+  pickWording(tpl) {
+    if (!Array.isArray(tpl)) return tpl;
+    return this.variety === false ? tpl[0] : tpl[Math.floor(Math.random() * tpl.length)];
+  }
+
+  // what the sound needs: who is talking (airline accent) and how far away (radio static)
+  radioInfo(ac) {
+    const range = ac.state === 'final' || ac.state === 'go_around' || ac.state === 'climb' ? (ac.dist || 0) + (ac.alt || 0) * 0.3
+      : dist(ac.p, this.towerAt || [0, 0]);
+    return { voice: ac.voice, airline: ac.code, range: Math.round(range) };
+  }
+
   say(ac, key, extra) {
-    const { text, speech } = render(this.phrOf(ac).pilot[key], this.values(ac, extra));
-    this.emit({ kind: 'pilot', ac: ac.id, callsign: ac.callsign, text, speech, voice: ac.voice, lang: ac.lang || 'en' });
+    const { text, speech } = render(this.pickWording(this.phrOf(ac).pilot[key]), this.values(ac, extra));
+    this.emit({ kind: 'pilot', ac: ac.id, callsign: ac.callsign, text, speech, ...this.radioInfo(ac), lang: ac.lang || 'en' });
   }
 
   readback(ac, key, extra) {
-    const { text, speech } = render(this.phrOf(ac).readback[key], this.values(ac, extra));
-    this.emit({ kind: 'pilot', ac: ac.id, callsign: ac.callsign, text, speech, voice: ac.voice, readback: true, lang: ac.lang || 'en' });
+    const { text, speech } = render(this.pickWording(this.phrOf(ac).readback[key]), this.values(ac, extra));
+    this.emit({ kind: 'pilot', ac: ac.id, callsign: ac.callsign, text, speech, ...this.radioInfo(ac), readback: true, lang: ac.lang || 'en' });
     return { ok: true, text };
   }
 
   unable(ac, reason) {
     const said = this.zh(ac) ? zhReason(reason, this.phrZh.reasons) : reason;
-    const { text, speech } = render(this.phrOf(ac).readback.unable, this.values(ac, { reason: said }));
-    this.emit({ kind: 'pilot', ac: ac.id, callsign: ac.callsign, text, speech, voice: ac.voice, unable: true, lang: ac.lang || 'en' });
+    const { text, speech } = render(this.pickWording(this.phrOf(ac).readback.unable), this.values(ac, { reason: said }));
+    this.emit({ kind: 'pilot', ac: ac.id, callsign: ac.callsign, text, speech, ...this.radioInfo(ac), unable: true, lang: ac.lang || 'en' });
     return { ok: false, text, reason };
   }
 
