@@ -892,9 +892,14 @@ export class World {
 
   // a taxi route through points the controller picked on the map, for the
   // preview and the instruction: {nodes, points, via, cross, runway|gate}
+  // can this aircraft be given a taxi route now? (no route search: the panel asks often)
+  canPlanTaxi(ac) {
+    return ac.kind === 'dep' ? ['pushed', 'taxi_out', 'holding'].includes(ac.state) : ['vacated', 'taxi_in'].includes(ac.state);
+  }
+
   planTaxi(ac, { waypoints = [], runway = null, gate = null } = {}) {
     const dep = ac.kind === 'dep';
-    if (dep ? !['pushed', 'taxi_out', 'holding'].includes(ac.state) : !['vacated', 'taxi_in'].includes(ac.state)) return null;
+    if (!this.canPlanTaxi(ac)) return null;
     const end = runway || ac.end;
     const g = dep ? null : this.L.gates.find((x) => x.id === (gate || ac.gate));
     const to = dep ? this.L.holdPoints[end]?.h : g?.node;

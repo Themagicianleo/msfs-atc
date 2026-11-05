@@ -24,7 +24,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(`tower.${k}`, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
-const settings = { tts: true, radioFx: true, accents: true, builtinVoices: false, autoRunways: false, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
+const settings = { effects: 'auto', tts: true, radioFx: true, accents: true, builtinVoices: false, autoRunways: false, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
 const saveSettings = () => store.set('settings', settings);
 // voices vary per aircraft; the Speaker reads these keys
 const speakerSettings = { tts: settings.tts, radioFx: settings.radioFx, accents: settings.accents, builtinVoices: settings.builtinVoices, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
@@ -665,7 +665,7 @@ function renderPanel() {
     const box = $('#sel-buttons');
     box.innerHTML = '';
     if (ac) {
-      if (w.planTaxi(ac, {})) {
+      if (w.canPlanTaxi(ac)) {
         const b = document.createElement('button');
         b.type = 'button';
         b.dataset.type = 'plan';
@@ -815,16 +815,74 @@ $('#set-lang').value = settings.lang;
 $('#set-lang').addEventListener('change', (e) => { settings.lang = listener.lang = e.target.value; saveSettings(); });
 
 // ---------------------------------------------------------------- main loop
-// A phone that redraws 60 times a second gets hot, and aircraft move slowly: the
-// simulation runs on real time, but the picture is drawn 30 times a second
-// (10 while paused) and the panel text a few times a second.
-const DRAW_MS = 1000 / 30;
-const PAUSED_DRAW_MS = 100;
+// ---------------------------------------------------------------- speed
+// A phone that redraws 60 times a second gets hot, and aircraft move slowly. The
+// simulation runs on real time; the picture is drawn 30 times a second on a
+// touch device (as often as the screen on a laptop), only when something
+// changes while paused, and every frame while you pan or zoom (that is cheap).
+// If the device still can't keep up the game lowers its own detail, step by step.
+const COARSE = !!window.matchMedia?.('(pointer: coarse)').matches;
+const perf = { drawMs: COARSE ? 1000 / 30 : 0, level: 0 };
 const PANEL_MS = 150;
 let lastDraw = 0;
 let lastPanel = 0;
+let lastSig = '';
+
+// Visual effects: Fast (flat controls, no blur) or Full (glass). Automatic is Fast on touch devices.
+function applyEffects() {
+  const pick = settings.effects || 'auto';
+  const fast = pick === 'fast' || (pick === 'auto' && (COARSE || perf.level >= 1));
+  document.documentElement.classList.toggle('solid', fast);
+  $$('#effects button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.fx === pick)));
+  $('#fx-note').textContent = pick === 'auto' ? `Automatic: ${fast ? 'Fast' : 'Full'} on this device${perf.level ? ' (the game lowered its detail because the device was struggling)' : ''}.`
+    : (pick === 'fast' ? 'Flat controls, no blur: coolest and fastest.' : 'Glass effects: look best, use more power.');
+}
+$('#effects').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-fx]');
+  if (!b) return;
+  settings.effects = b.dataset.fx;
+  perf.level = 0;
+  saveSettings();
+  applyEffects();
+});
+applyEffects();
+
+// the screen's frame rate over the last second or two; if it is low while playing, do less
+const deltas = [];
+let slowWindows = 0;
+function watchFrameRate(delta) {
+  if (document.hidden || !game.world || game.speed === 0) { deltas.length = 0; slowWindows = 0; return; }
+  if (delta < 250) deltas.push(delta); // a stall (e.g. a map redraw) is not the frame rate
+  if (deltas.length < 90) return;
+  const sorted = [...deltas].sort((a, b) => a - b);
+  const median = sorted[sorted.length >> 1];
+  deltas.length = 0;
+  slowWindows = median > 40 ? slowWindows + 1 : 0; // (iOS Low Power Mode runs the screen at 30 fps: not struggling)
+  if (slowWindows < 2) return;
+  slowWindows = 0;
+  perf.level += 1;
+  if (perf.level === 1 && (settings.effects || 'auto') === 'auto' && !document.documentElement.classList.contains('solid')) {
+    applyEffects(); // 1: flat controls
+    sys('The device is struggling, so the game switched to Fast visual effects.');
+  } else if (renderer.maxDpr !== 1.25 && (renderer.maxDpr || 2) > 1.25) {
+    renderer.maxDpr = (renderer.maxDpr || 2) > 1.5 ? 1.5 : 1.25; // 2: fewer pixels
+    renderer.resize();
+    if (game.scene3d) game.scene3d.maxDpr = renderer.maxDpr;
+    game.scene3d?.resize();
+    applyEffects();
+    sys('The device is still struggling, so the game lowered the picture resolution.');
+  } else if (perf.drawMs < 1000 / 20) {
+    perf.drawMs = 1000 / 20; // 3: fewer pictures
+    sys('The device is still struggling, so the game draws 20 pictures a second.');
+  }
+}
+
+// what is on screen, so a paused game redraws only when it changed
+const signature = (w) => `${game.selected}|${game.view}|${game.plan?.result?.nodes?.length ?? ''}|${w.ac.length}|${renderer.theme}|${renderer.chart}|${game.scene3d?.mode}`;
+
 function frame(now) {
   const w = game.world;
+  watchFrameRate(now - game.last);
   if (w) {
     let dt = Math.min(0.25, (now - game.last) / 1000) * game.speed;
     while (dt > 0) {
@@ -833,8 +891,12 @@ function frame(now) {
       dt -= step;
     }
     handleEvents(w.drain());
-    if (now - lastDraw >= (game.speed === 0 ? PAUSED_DRAW_MS : DRAW_MS) - 3) {
+    const interacting = now - (renderer.viewChangedAt || 0) < 250 || (game.scene3d?.pointers?.size > 0);
+    const sig = signature(w);
+    const due = interacting || sig !== lastSig || now - lastDraw >= (game.speed === 0 ? 500 : perf.drawMs) - 3;
+    if (due) {
       lastDraw = now;
+      lastSig = sig;
       if (game.plan && now - (game.plan.at || 0) > 1000) updatePlan();
       if (game.view === 'map') renderer.draw(w, { selectedId: game.selected, now, plan: game.plan?.result });
       else game.scene3d.draw(w, { selectedId: game.selected, now, theme: renderer.theme });

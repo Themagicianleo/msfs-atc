@@ -315,53 +315,65 @@ export function buildLayout(airport, { maxRunways = 3, minLengthM = 1200 } = {})
 // ------------------------------------------------------------------ routing
 
 // small binary min-heap of [priority, value]
+// a binary heap in two plain arrays (no object per entry: the route search is
+// the busiest code in the game)
 class Heap {
-  constructor() { this.a = []; }
-  get size() { return this.a.length; }
+  constructor() { this.keys = []; this.vals = []; this.top = 0; }
+  get size() { return this.keys.length; }
   push(k, v) {
-    const a = this.a;
-    a.push([k, v]);
-    let i = a.length - 1;
+    const keys = this.keys; const vals = this.vals;
+    let i = keys.length;
+    keys.push(k); vals.push(v);
     while (i > 0) {
       const p = (i - 1) >> 1;
-      if (a[p][0] <= a[i][0]) break;
-      [a[p], a[i]] = [a[i], a[p]];
+      if (keys[p] <= k) break;
+      keys[i] = keys[p]; vals[i] = vals[p];
       i = p;
     }
+    keys[i] = k; vals[i] = v;
   }
+  // removes the smallest; its key is in .topKey, and it is returned
   pop() {
-    const a = this.a;
-    const top = a[0];
-    const last = a.pop();
-    if (a.length) {
-      a[0] = last;
+    const keys = this.keys; const vals = this.vals;
+    const topVal = vals[0];
+    this.topKey = keys[0];
+    const k = keys.pop(); const v = vals.pop();
+    const n = keys.length;
+    if (n) {
       let i = 0;
       for (;;) {
         const l = 2 * i + 1;
+        if (l >= n) break;
         const r = l + 1;
-        let m = i;
-        if (l < a.length && a[l][0] < a[m][0]) m = l;
-        if (r < a.length && a[r][0] < a[m][0]) m = r;
-        if (m === i) break;
-        [a[m], a[i]] = [a[i], a[m]];
+        const m = r < n && keys[r] < keys[l] ? r : l;
+        if (keys[m] >= k) break;
+        keys[i] = keys[m]; vals[i] = vals[m];
         i = m;
       }
+      keys[i] = k; vals[i] = v;
     }
-    return top;
+    return topVal;
   }
 }
 
 // shortest path from `from` to the first node accepted by isTarget
-function search(g, from, isTarget, weight, passable) {
+// Shortest path. With a heuristic (the straight-line distance to the one
+// target, which never overestimates because every weight is at least the
+// segment's length) it is A*: it looks mostly toward the target and examines a
+// fraction of the layout (Daxing has 15,000 nodes).
+function search(g, from, isTarget, weight, passable, heuristic = null) {
   const n = g.nodes.length;
   const best = new Float64Array(n).fill(Infinity);
   const prev = new Int32Array(n).fill(-1);
   const heap = new Heap();
+  const h = heuristic || (() => 0);
   best[from] = 0;
-  heap.push(0, from);
+  heap.push(h(from), from);
   while (heap.size) {
-    const [d, u] = heap.pop();
-    if (d > best[u]) continue;
+    const u = heap.pop();
+    const f = heap.topKey;
+    if (f > best[u] + h(u) + 1e-9) continue; // an outdated entry
+    const d = best[u];
     if (u !== from && isTarget(u)) {
       const nodes = [];
       for (let v = u; v >= 0; v = prev[v]) nodes.unshift(v);
@@ -375,7 +387,7 @@ function search(g, from, isTarget, weight, passable) {
       const v = e.a === u ? e.b : e.a;
       if (!passable(v)) continue;
       const w = weight(e, u, v);
-      if (d + w < best[v]) { best[v] = d + w; prev[v] = u; heap.push(d + w, v); }
+      if (d + w < best[v]) { best[v] = d + w; prev[v] = u; heap.push(d + w + h(v), v); }
     }
   }
   return null;
@@ -409,12 +421,18 @@ export function route(layout, from, to, { via = [], prefer = null, traffic = nul
   const names = via.map((v) => v.toUpperCase()).filter((v) => taxiwayNames(layout).has(v));
   const preferW = (e) => (prefer && e.kind === 'twy' && (e.name === 'A' || e.name === 'B') && e.name !== prefer ? 1.6 : 1);
   const tf = traffic || (() => 1);
-  if (!names.length) return search(g, from, (v) => v === to, (e, u, v) => e.len * preferW(e) * tf(u, v), passable);
+  const tp = g.nodes[to].p;
+  const toward = (v) => { const p = g.nodes[v].p; const dx = p[0] - tp[0]; const dy = p[1] - tp[1]; return Math.sqrt(dx * dx + dy * dy); }; // (Math.hypot is slow)
+  if (!names.length) return search(g, from, (v) => v === to, (e, u, v) => e.len * preferW(e) * tf(u, v), passable, toward);
   // follow each named taxiway in turn: get onto it, then use it towards the next
   const touching = (name) => {
-    const set = new Set();
-    for (const e of g.edges) if (e.name === name) { set.add(e.a); set.add(e.b); }
-    return set;
+    const cache = layout._touching || (layout._touching = new Map());
+    if (!cache.has(name)) {
+      const set = new Set();
+      for (const e of g.edges) if (e.name === name) { set.add(e.a); set.add(e.b); }
+      cache.set(name, set);
+    }
+    return cache.get(name);
   };
   let path = [from];
   let cur = from;
@@ -428,7 +446,7 @@ export function route(layout, from, to, { via = [], prefer = null, traffic = nul
     cur = leg[leg.length - 1];
   }
   const lastName = names[names.length - 1];
-  const leg = search(g, cur, (v) => v === to, (e) => e.len * (e.name === lastName || e.kind === 'stand' ? 1 : 3), passable);
+  const leg = search(g, cur, (v) => v === to, (e) => e.len * (e.name === lastName || e.kind === 'stand' ? 1 : 3), passable, toward);
   if (!leg) return null;
   return path.concat(leg.slice(1));
 }

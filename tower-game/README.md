@@ -396,17 +396,42 @@ TOWER_TEST_VOICES=<folder> node tools/e2e.mjs   # also tests built-in voices wit
 
 ## Speed and heat
 
-A phone that redraws a big map 60 times a second gets hot. Daxing's map has about 15,000 taxiway segments, and
-redrawing it each frame cost about 80 ms in a test, so the game was busy all the time. Now:
-- The map under the aircraft (runways, taxiways, labels, stands) is drawn once into a hidden picture and copied
-  each frame; it is redrawn only when you zoom, pan, change the theme or chart style, or change the runways.
-  That frame went from about 80 ms to under 1 ms in the test. The cached picture is checked to be identical to a
-  full redraw (`node tools/perf-check.mjs`; `node tools/perf.mjs ZBAD` measures a frame).
-- The picture is drawn 30 times a second (10 while paused); the simulation still runs on real time. The side
-  panel updates a few times a second.
-- The 3D views draw at most 1.5 pixels per screen point, not 2.
-- **Built-in voices** (Settings) use much more battery and heat than the device's own voices, because the
-  speech is generated on the device. If the device still gets warm, turn them off.
+The game is meant to run smoothly on a phone, an iPad and a laptop. To find out where the time went I played a busy
+Daxing shift in headless Chromium with the CPU slowed to about a recent phone (`node tools/profile.mjs ZBAD 4`).
+Before this work the map ran at **2.4 frames a second** (the main thread was 97% busy) and the 3D view at 1.5. Now the
+map runs at **56 and the 3D view at about 19** in the same test. These numbers are from a computer with software
+graphics, not from an iPhone or iPad, so they show what changed, not what your device will do.
+
+What was slow, and what changed:
+- **Blurred glass controls were the biggest cost.** Blurring what is behind a control is redone whenever that
+  changes, and the map changes every frame. Removing it alone took the test from 20 to 56 frames a second.
+  - Nothing blurs the map any more, and the slowly moving background is still.
+  - **Settings → Visual effects:** *Fast* (flat controls, nearly the same look), *Full* (glass) or *Automatic*
+    (Fast on touch devices, Full on a laptop).
+- **The map was redrawn from scratch every frame**: Daxing has 15,000 taxiway segments. The still map is now drawn
+  once into a hidden picture and copied each frame, and redrawn only when you zoom, pan, change theme or chart style, or
+  change the runways. Segments are merged into long paths and points closer than a pixel are skipped. A full redraw
+  went from about 55 ms to about 20 ms, and a normal frame from about 80 ms to under 1 ms. Panning and zooming move and
+  scale the old picture and sharpen it when you stop. The cached picture is checked to be the same as a full redraw
+  (`node tools/perf-check.mjs`).
+- **The 3D view** was 209,000 triangles (a square and a disc for every taxiway segment) and used a logarithmic depth
+  buffer and 4x anti-aliasing. Taxiways are now merged and simplified (53,000 triangles), the depth buffer is the plain
+  one, anti-aliasing is only on laptop screens, and phones get a lower pixel density and the efficient GPU.
+- **Route search** (taxi routes, the route preview) uses A* with a plain Dijkstra as a check in the tests: a route at
+  Daxing takes 2 to 8 ms instead of 9 to 14. Taxi routes are no longer searched just to decide whether to show a button.
+- **Drawing rate:** 30 pictures a second on touch devices, the screen's rate on a laptop, every frame while you pan or
+  zoom, and only when something changed while paused. The simulation always runs on real time. Side-panel text
+  updates a few times a second.
+- **The game tunes itself.** If the screen's frame rate stays under 25 a second while you play, it switches to Fast
+  effects, then lowers the picture resolution, then draws 20 pictures a second, and says so in the radio log. (The
+  30 fps of iOS Low Power Mode does not count as struggling.)
+- The 3D engine (700 KB) is downloaded when you first open a 3D view, not with the page.
+- **Built-in voices** (Settings) use much more battery and heat than the device's own voices, because the speech
+  is generated on the device. If the device is still warm, turn them off.
+
+Tools: `node tools/profile.mjs [ICAO] [cpu slowdown] [seconds] [map|orbit|tower]` (add `DESKTOP=1` for a laptop-style
+browser) prints the frame rate, how busy the main thread was, the slowest operations and the 3D triangle count;
+`node tools/perf.mjs [ICAO]` times one map frame; `node tools/perf-check.mjs` checks the cached map.
 
 ## Limitations
 

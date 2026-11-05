@@ -29,6 +29,42 @@ const LIGHT = {
 };
 let C = DARK;
 
+// Chains of segments that meet end to end (nothing else joins them) become one
+// polyline, so thousands of short segments are drawn as a few hundred paths.
+function chainEdges(g, edges) {
+  const at = new Map();
+  edges.forEach((e, i) => {
+    for (const n of [e.a, e.b]) { if (!at.has(n)) at.set(n, []); at.get(n).push(i); }
+  });
+  const used = new Uint8Array(edges.length);
+  const chains = [];
+  for (let i = 0; i < edges.length; i += 1) {
+    if (used[i]) continue;
+    used[i] = 1;
+    const nodes = [edges[i].a, edges[i].b];
+    for (const tail of [true, false]) {
+      let last = i;
+      for (;;) {
+        const end = tail ? nodes[nodes.length - 1] : nodes[0];
+        const here = at.get(end);
+        if (here.length !== 2) break; // a junction or a dead end
+        const j = here[0] === last ? here[1] : here[0];
+        if (used[j]) break;
+        used[j] = 1;
+        const e = edges[j];
+        const next = e.a === end ? e.b : e.a;
+        if (tail) nodes.push(next); else nodes.unshift(next);
+        last = j;
+      }
+    }
+    let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
+    const pts = nodes.map((id) => g.nodes[id].p);
+    for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    chains.push({ pts, box: [x0, y0, x1, y1] });
+  }
+  return chains;
+}
+
 // the layout's segments sorted by how they are drawn (done once per layout)
 function edgeGroups(L) {
   if (!L._edgeGroups) {
@@ -40,6 +76,8 @@ function edgeGroups(L) {
       groups.line.push(e);
       if (e.dir) groups.oneWay.push(e);
     }
+    const g = L.graph;
+    for (const k of ['twy', 'lane', 'stand', 'line', 'standLine']) groups[`${k}Chains`] = chainEdges(g, groups[k]);
     L._edgeGroups = groups;
   }
   return L._edgeGroups;
@@ -61,8 +99,9 @@ export class Renderer {
     this.bindInput();
   }
 
+  // maxDpr: how many pixels per screen point at most (2 is sharp; less is faster)
   resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr || 2);
     const r = this.cv.getBoundingClientRect();
     this.w = r.width;
     this.h = r.height;
@@ -74,6 +113,7 @@ export class Renderer {
 
   // fit the whole airport (and a bit of the final approach) on screen
   fit(layout) {
+    this.viewChangedAt = performance.now();
     const pts = layout.runways.flatMap((r) => [r.a, r.b]).concat(layout.terminal || [], ...(layout.aprons || []));
     const xs = pts.map((p) => p[0]);
     const ys = pts.map((p) => p[1]);
@@ -94,6 +134,7 @@ export class Renderer {
 
   zoomAt(q, factor) {
     const before = this.toWorld(q);
+    this.viewChangedAt = performance.now();
     this.view.s = Math.max(0.005, Math.min(4, this.view.s * factor));
     const after = this.toWorld(q);
     this.view.cx += before[0] - after[0];
@@ -114,6 +155,7 @@ export class Renderer {
       const p = this.pointers.get(e.pointerId);
       if (!p) return;
       if (this.pointers.size === 1) {
+        this.viewChangedAt = performance.now();
         this.view.cx -= (e.offsetX - p.x) / this.view.s;
         this.view.cy += (e.offsetY - p.y) / this.view.s;
       } else if (this.pointers.size === 2) {
@@ -188,7 +230,7 @@ export class Renderer {
     const L = world.L;
     const s = this.view.s;
     c.fillStyle = C.bg;
-    c.fillRect(0, 0, this.w, this.h);
+    c.fillRect(0, 0, this.w + 2, this.h + 2); // a little over: the last pixel row is only partly inside the area
 
     // final approach course of the arrival runway, with mile marks
     const fin = endGeometry(L, world.arrEnd);
@@ -210,11 +252,11 @@ export class Renderer {
     // taxiways under runways: one stroke per kind (the layout has thousands of segments)
     const g = L.graph;
     const groups = edgeGroups(L);
-    this.strokeEdges(g, groups.twy, Math.max(2, 23 * s), C.twy);
-    this.strokeEdges(g, groups.lane, Math.max(2, 15 * s), C.lane);
-    this.strokeEdges(g, groups.stand, Math.max(2, 8 * s), C.twy);
-    this.strokeEdges(g, groups.line, 1, C.twyLine);
-    if (s >= 0.3) this.strokeEdges(g, groups.standLine, 1, C.twyLine);
+    this.strokeChains(groups.twyChains, Math.max(2, 23 * s), C.twy);
+    this.strokeChains(groups.laneChains, Math.max(2, 15 * s), C.lane);
+    this.strokeChains(groups.standChains, Math.max(2, 8 * s), C.twy);
+    this.strokeChains(groups.lineChains, 1, C.twyLine);
+    if (s >= 0.3) this.strokeChains(groups.standLineChains, 1, C.twyLine);
     if (groups.oneWay.length && s >= 0.25) this.drawFlowArrows(g, groups.oneWay);
 
     for (const r of L.runways) {
@@ -282,14 +324,21 @@ export class Renderer {
     const k = sameWorld ? v.s / cache.s : 0;
     const exact = sameWorld && cache.vk === vk;
     if (!exact && (!sameWorld || now - this.viewChangedAt > 120 || k < 0.6 || k > 1.7)) {
+      // the hidden canvas is made once: resizing one reallocates its memory (a 250 ms stall in a test)
       if (!this.off) this.off = document.createElement('canvas');
-      this.off.width = this.cv.width;
-      this.off.height = this.cv.height;
+      if (this.off.width !== this.cv.width || this.off.height !== this.cv.height) {
+        this.off.width = this.cv.width;
+        this.off.height = this.cv.height;
+      }
       const octx = this.off.getContext('2d');
       const dpr = this.cv.width / this.w;
+      octx.setTransform(1, 0, 0, 1, 0, 0);
+      octx.clearRect(0, 0, this.off.width, this.off.height);
       octx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.ctx = octx;
+      octx.save(); // the hidden canvas is reused: nothing one redraw sets may leak into the next
       this.drawBase(world);
+      octx.restore();
       this.ctx = c;
       cache = this.cache = { L: world.L, key, vk, cx: v.cx, cy: v.cy, s: v.s };
     } else if (!exact) {
@@ -301,7 +350,11 @@ export class Renderer {
       c.drawImage(this.off, 0, 0, this.off.width, this.off.height, x0, y0, this.w * k, this.h * k);
       return;
     }
-    c.drawImage(this.off, 0, 0, this.off.width, this.off.height, 0, 0, this.w, this.h);
+    // the hidden canvas has the same number of pixels as this one: copy them one to one (no scaling)
+    c.save();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.drawImage(this.off, 0, 0);
+    c.restore();
   }
 
   // small arrows on one-way lanes (the apron bays at Daxing): in on the straight lane, out on the loop
@@ -331,22 +384,39 @@ export class Renderer {
     c.fill();
   }
 
-  // one path for many segments, skipping those off screen
-  strokeEdges(g, edges, width, color) {
+  // one path for many polylines: those off screen are skipped, and points
+  // closer than a pixel to the last one are left out
+  strokeChains(chains, width, color) {
     const c = this.ctx;
+    const v = this.view;
     const m = width + 4;
+    // the visible part of the world
+    const wx0 = v.cx - (this.w / 2 + m) / v.s; const wx1 = v.cx + (this.w / 2 + m) / v.s;
+    const wy0 = v.cy - (this.h / 2 + m) / v.s; const wy1 = v.cy + (this.h / 2 + m) / v.s;
+    const minStep = 1.2 / v.s;
+    c.save();
     c.beginPath();
-    for (const e of edges) {
-      const p = this.toScreen(g.nodes[e.a].p);
-      const q = this.toScreen(g.nodes[e.b].p);
-      if ((p[0] < -m && q[0] < -m) || (p[0] > this.w + m && q[0] > this.w + m) || (p[1] < -m && q[1] < -m) || (p[1] > this.h + m && q[1] > this.h + m)) continue;
-      c.moveTo(p[0], p[1]);
-      c.lineTo(q[0], q[1]);
+    for (const ch of chains) {
+      const b = ch.box;
+      if (b[2] < wx0 || b[0] > wx1 || b[3] < wy0 || b[1] > wy1) continue;
+      const pts = ch.pts;
+      let last = pts[0];
+      let q = this.toScreen(last);
+      c.moveTo(q[0], q[1]);
+      for (let i = 1; i < pts.length; i += 1) {
+        const p = pts[i];
+        if (i < pts.length - 1 && Math.abs(p[0] - last[0]) < minStep && Math.abs(p[1] - last[1]) < minStep) continue;
+        q = this.toScreen(p);
+        c.lineTo(q[0], q[1]);
+        last = p;
+      }
     }
     c.lineWidth = width;
     c.strokeStyle = color;
     c.lineJoin = 'round';
+    c.lineCap = 'round';
     c.stroke();
+    c.restore();
   }
 
   draw(world, { selectedId = null, now = 0, plan = null } = {}) {
@@ -493,4 +563,4 @@ export class Renderer {
   }
 }
 
-export { SHORT as STATE_LABELS, dist, norm };
+export { SHORT as STATE_LABELS, dist, norm, edgeGroups };

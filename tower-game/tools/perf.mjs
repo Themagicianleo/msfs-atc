@@ -31,8 +31,22 @@ const r = await page.evaluate(async () => {
   const time = (fn, n = 30) => { const t0 = performance.now(); for (let i = 0; i < n; i += 1) fn(); return +((performance.now() - t0) / n).toFixed(2); };
   const now = performance.now();
   out.drawFit = time(() => renderer.draw(w, { selectedId: null, now }));
+  // a full redraw of the map, including turning it into pixels (the first copy forces that)
+  const ctx = renderer.cv.getContext('2d');
+  const full = () => { renderer.cache = null; renderer.draw(w, { selectedId: null, now }); ctx.getImageData(0, 0, 1, 1); };
+  out.redrawMapFit = time(full, 8);
+  // which parts of the redraw cost the most (recording only; pixels are made at the end)
+  const parts = {};
+  for (const name of ['poly', 'strokeChains', 'drawTaxiLabels', 'text', 'line', 'drawFlowArrows']) {
+    const orig = renderer[name].bind(renderer);
+    renderer[name] = (...a) => { const t = performance.now(); const r = orig(...a); parts[name] = (parts[name] || 0) + performance.now() - t; return r; };
+  }
+  full();
+  out.partsMs = Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, +v.toFixed(1)]));
+  for (const name of Object.keys(parts)) delete renderer[name];
   renderer.view.s *= 3;
   out.drawZoomed = time(() => renderer.draw(w, { selectedId: null, now }));
+  out.redrawMapZoomed = time(full, 8);
   renderer.view.s /= 3;
   out.stepMs = time(() => w.step(0.2));
   // real frame rate and busy time over 3 seconds

@@ -4,7 +4,7 @@
 // three.js that is x → x, north → −z, altitude → y.
 
 import * as THREE from './vendor/three.module.min.js';
-import { STATE_LABELS } from './render.js';
+import { STATE_LABELS, edgeGroups } from './render.js';
 import { taxiDestination } from './world.js';
 import { M_PER_NM } from './geo.js';
 
@@ -18,6 +18,27 @@ const THEMES = {
   dark: { sky: 0x101826, fog: 0x141c2a, grass: 0x1d2a1f, apron: 0x2c2f35, twy: 0x23262c, lane: 0x292c33, runway: 0x18191c,
     mark: 0xd9dde3, yellow: 0xc9a227, hold: 0xe5484d, terminal: 0x4a5566, building: 0x343a44, hemi: [0x9fb4d8, 0x1a2018, 0.9], sun: 0.6 },
 };
+
+// Douglas-Peucker: a polyline with the points that matter (tol metres off a straight line)
+export function simplify(pts, tol) {
+  if (pts.length < 3) return pts;
+  const keep = new Uint8Array(pts.length);
+  keep[0] = 1; keep[pts.length - 1] = 1;
+  const stack = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [i, j] = stack.pop();
+    const [ax, ay] = pts[i]; const [bx, by] = pts[j];
+    const dx = bx - ax; const dy = by - ay;
+    const len = Math.hypot(dx, dy) || 1;
+    let max = 0; let at = -1;
+    for (let k = i + 1; k < j; k += 1) {
+      const d = Math.abs((pts[k][0] - ax) * dy - (pts[k][1] - ay) * dx) / len;
+      if (d > max) { max = d; at = k; }
+    }
+    if (max > tol) { keep[at] = 1; stack.push([i, at], [at, j]); }
+  }
+  return pts.filter((_, i) => keep[i]);
+}
 
 // a soft, stable colour per airline for the tail (not a livery)
 export function tailColour(code = '') {
@@ -236,7 +257,12 @@ export class Scene3D {
     this.labels = document.createElement('div');
     this.labels.className = 'labels3d';
     wrap.append(this.labels);
-    this.gl = new THREE.WebGLRenderer({ canvas: this.cv, antialias: true, logarithmicDepthBuffer: true });
+    // Light on the GPU: no logarithmic depth buffer (it switches off early depth rejection on
+    // every fragment) and anti-aliasing only on a pointer-driven (laptop) screen, where it is cheap.
+    // 'low-power' asks a phone for its efficient GPU path.
+    const touch = !!window.matchMedia?.('(pointer: coarse)').matches;
+    this.gl = new THREE.WebGLRenderer({ canvas: this.cv, antialias: !touch, powerPreference: 'low-power' });
+    this.maxDpr = touch ? 1.25 : 1.5;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, 1, 1, 60000);
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x445533, 1.4);
@@ -273,7 +299,7 @@ export class Scene3D {
   resize() {
     const r = this.wrap.getBoundingClientRect();
     this.w = r.width; this.h = r.height;
-    this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); // sharp enough, and a third less to draw than 2x
+    this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.maxDpr || 1.5)); // sharp enough, and a third less to draw than 2x
     this.gl.setSize(r.width, r.height, false);
     this.camera.aspect = r.width / Math.max(1, r.height);
     this.camera.updateProjectionMatrix();
@@ -324,18 +350,29 @@ export class Scene3D {
 
     const g = L.graph;
     const twy = new Flat(); const lane = new Flat(); const yel = new Flat(); const red = new Flat();
-    const widthOf = new Map();
-    for (const e of g.edges) {
-      if (e.kind === 'runway') continue;
-      const a = g.nodes[e.a].p; const b = g.nodes[e.b].p;
-      if (e.kind !== 'stand') {
-        const w = e.kind === 'lane' ? 15 : 23;
-        (e.kind === 'lane' ? lane : twy).quad(a, b, w, 0);
-        for (const n of [e.a, e.b]) widthOf.set(n, Math.max(widthOf.get(n) || 0, w));
+    // Taxiways are drawn from merged, simplified polylines: a quad for each stretch, and a round
+    // patch only at the ends and at real corners (a quad and a disc for each of Daxing's 15,000
+    // segments was 209,000 triangles; a phone can't draw that smoothly)
+    const groups = edgeGroups(L);
+    const ribbon = (flat, chains, width, tol, joints) => {
+      for (const ch of chains) {
+        const pts = simplify(ch.pts, tol);
+        for (let i = 1; i < pts.length; i += 1) flat.quad(pts[i - 1], pts[i], width, 0);
+        if (!joints) continue;
+        flat.disc(pts[0], width / 2, 0, 6);
+        flat.disc(pts[pts.length - 1], width / 2, 0, 6);
+        for (let i = 1; i < pts.length - 1; i += 1) {
+          const ux = pts[i][0] - pts[i - 1][0]; const uy = pts[i][1] - pts[i - 1][1];
+          const vx = pts[i + 1][0] - pts[i][0]; const vy = pts[i + 1][1] - pts[i][1];
+          const turn = Math.abs(Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy));
+          if (turn > 0.25) flat.disc(pts[i], width / 2, 0, 6); // more than about 14 degrees
+        }
       }
-      yel.quad(a, b, 0.6, 0);
-    }
-    for (const [n, w] of widthOf) twy.disc(g.nodes[n].p, w / 2, 0);
+    };
+    ribbon(twy, groups.twyChains, 23, 3, true);
+    ribbon(lane, groups.laneChains, 15, 2.5, true);
+    ribbon(yel, groups.lineChains, 0.6, 1.5, false);
+    ribbon(yel, groups.standLineChains, 0.6, 1.5, false);
     grp.add(lane.mesh(T.lane, 2), twy.mesh(T.twy, 2));
 
     const rw = new Flat(); const mark = new Flat();
