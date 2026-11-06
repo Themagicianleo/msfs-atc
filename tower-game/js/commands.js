@@ -104,8 +104,11 @@ export function matchCallsign(text, aircraft) {
     const hasNum = new RegExp(`(^|[^0-9])${num}([^0-9]|$)`).test(n);
     const hasTel = squashed.includes(tel);
     const hasCode = squashed.includes(`${code}${num}`);
+    // after first contact controllers shorten it: "Delta 234" for Delta 1234 (airline name and the last three digits)
+    const abbreviated = hasTel && num.length > 3 && new RegExp(`(^|[^0-9])${num.slice(-3)}([^0-9]|$)`).test(n);
     let score = 0;
     if (hasCode || (hasNum && hasTel)) score = 10;
+    else if (abbreviated) score = 9;
     else if (hasNum) score = 4;
     else if (hasTel) score = 1;
     return { ac, score };
@@ -132,6 +135,19 @@ function viaNames(tokens, known) {
     out.push(taken.name);
     i = taken.j;
   }
+  return fixGluedDigits(out, known);
+}
+
+// A recogniser that glues letters and a digit ("T G 6") puts the digit on the wrong letter. A name that does not exist
+// followed by one that does ("T", "G6") is read the other way when that gives names that all exist ("T6", "G").
+function fixGluedDigits(names, known) {
+  const out = [...names];
+  for (let i = 0; i + 1 < out.length; i += 1) {
+    const a = out[i];
+    const m = out[i + 1].match(/^([A-Z]+)(\d+)$/);
+    if (known.has(a) || !m || !/^[A-Z]+$/.test(a)) continue;
+    if (known.has(a + m[2]) && known.has(m[1])) { out[i] = a + m[2]; out[i + 1] = m[1]; i += 1; }
+  }
   return out;
 }
 
@@ -142,6 +158,7 @@ const ROUTE_START = new Set(['via', 'along', 'taxiway', 'taxiways', 'onto', 'usi
 const ROUTE_SKIP = new Set(['and', 'then', 'the', 'turn', 'left', 'right', 'next', 'follow', 'continue', 'on']);
 const ROUTE_TALK = new Set(['to', 'for', 'at', 'in', 'of', 'is', 'it', 'up', 'off', 'out', 'you', 'can', 'now', 'not', 'all', 'but', 'her', 'his']);
 function englishRoute(n, known) {
+  n = n.replace(/\bturn (?:left|right)(?: (?:on|onto|at|into))? /g, 'via '); // "turn left on bravo" starts a route
   const tokens = [];
   let inRoute = false;
   for (const w of n.split(' ')) {

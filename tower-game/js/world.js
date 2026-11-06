@@ -6,7 +6,7 @@
 import { Formatter, render } from './lib/format.js';
 import { M_PER_NM, KT, Path, add, dist, dot, headingOf, mul, norm, sub, fromHeading, angleDiff } from './geo.js';
 import { endGeometry, onRunway, route, routeCrossings, routeNames, runwayForEnd, taxiwayNames, unknownVia } from './layout.js';
-import { zhDigits, zhReason, zhRunway, zhWind } from './zh.js';
+import { zhDigits, zhReason, zhRunway, zhSpell, zhWind } from './zh.js';
 import { windComponents } from './lib/runway.js';
 
 // Generic aircraft performance (approach speed and rotation speed in knots).
@@ -147,7 +147,7 @@ export class World {
   values(ac, extra = {}) {
     const end = ac.end;
     const zh = this.zh(ac);
-    const gate = ac.gate ? { t: ac.gate, s: zh ? zhDigits(ac.gate) : (/^\d+$/.test(ac.gate) ? ac.gate : this.f.spell(ac.gate)) } : null;
+    const gate = ac.gate ? { t: ac.gate, s: zh ? zhSpell(ac.gate) : (/^\d+$/.test(ac.gate) ? ac.gate : this.f.spell(ac.gate)) } : null;
     return {
       unit: zh && this.unitZh ? this.unitZh : this.unit,
       callsign: ac.cs,
@@ -186,8 +186,28 @@ export class World {
     return { ok: true, text };
   }
 
+  // The reason a pilot gives, written and spoken. Spoken, taxiway letters are code words (alpha, 阿尔法), and runway,
+  // stand and wind numbers are read digit by digit, as in every other call.
+  reasonText(ac, reason) {
+    const f = this.f;
+    if (this.zh(ac)) {
+      const t = zhReason(reason, this.phrZh.reasons);
+      const s = t.replace(/滑行道([A-Z0-9、, ]+)/g, (_, names) => `滑行道${names.split(/[、, ]+/).filter(Boolean).map(zhSpell).join('、')}`)
+        .replace(/跑道(\d{1,2}[LRC]?)/g, (_, id) => `跑道${zhRunway(id).s}`)
+        .replace(/停机位([A-Z]?\d+[A-Z]?)/g, (_, id) => `停机位${zhSpell(id)}`)
+        .replace(/(顺风|侧风)(\d+)/g, (_, w, n) => `${w}${zhDigits(n)}`);
+      return { t, s };
+    }
+    const s = String(reason)
+      .replace(/taxiway ([A-Z0-9, ]+)$/, (_, names) => `taxiway ${names.split(/[, ]+/).filter(Boolean).map((n) => f.spell(n)).join(', ')}`)
+      .replace(/runway (\d{1,2}[LRC]?)\b/g, (_, id) => `runway ${f.runway(id).s}`)
+      .replace(/stand (\S+)/g, (m, id) => `stand ${/^\d+$/.test(id) ? id : f.spell(id)}`)
+      .replace(/(\d+) knots/g, (_, n) => `${f.spell(n)} knots`);
+    return { t: reason, s };
+  }
+
   unable(ac, reason) {
-    const said = this.zh(ac) ? zhReason(reason, this.phrZh.reasons) : reason;
+    const said = this.reasonText(ac, reason);
     const { text, speech } = render(this.pickWording(this.phrOf(ac).readback.unable), this.values(ac, { reason: said }));
     this.emit({ kind: 'pilot', ac: ac.id, callsign: ac.callsign, text, speech, ...this.radioInfo(ac), unable: true, lang: ac.lang || 'en' });
     return { ok: false, text, reason };
@@ -942,7 +962,7 @@ export class World {
   viaText(cmd, ac) {
     if (!cmd.via?.length) return null;
     const names = cmd.via.map((v) => v.toUpperCase());
-    if (ac && this.zh(ac)) return { t: names.join('、'), s: names.map(zhDigits).join('、') };
+    if (ac && this.zh(ac)) return { t: names.join('、'), s: names.map(zhSpell).join('、') };
     return { t: names.join(' '), s: names.map((v) => this.f.spell(v)).join(', ') };
   }
 
@@ -1035,7 +1055,7 @@ export class World {
   taxiText(ac, plan, withCross) {
     const extra = { runway: this.rwy(ac, plan.runway || ac.end), via: this.viaText({ via: plan.via }, ac),
       cross: withCross ? this.crossText({ cross: plan.cross }, ac) : null };
-    if (plan.gate) extra.gate = { t: plan.gate, s: this.zh(ac) ? zhDigits(plan.gate) : (/^\d+$/.test(plan.gate) ? plan.gate : this.f.spell(plan.gate)) };
+    if (plan.gate) extra.gate = { t: plan.gate, s: this.zh(ac) ? zhSpell(plan.gate) : (/^\d+$/.test(plan.gate) ? plan.gate : this.f.spell(plan.gate)) };
     return this.controllerText(ac, 'taxi', extra);
   }
 

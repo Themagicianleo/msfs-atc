@@ -3,13 +3,13 @@
 // airport's own taxiway names and the controller's usual phrases. (Chrome takes them as "contextual
 // biasing" phrases; recognisers that don't support it ignore them.)
 
+import { ZH_CODE_WORDS } from '../zh.js';
+
 const WORDS = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet', 'kilo', 'lima', 'mike',
   'november', 'oscar', 'papa', 'quebec', 'romeo', 'sierra', 'tango', 'uniform', 'victor', 'whiskey', 'x-ray', 'yankee', 'zulu'];
 const LETTERS = Object.fromEntries(WORDS.map((w) => [w[0], w]));
 const DIGITS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'niner'];
-const ZH_WORDS = { A: '阿尔法', B: '布拉沃', C: '查理', D: '德尔塔', E: '艾科', F: '福克斯特', G: '高尔夫', H: '赫特尔', I: '印度', J: '朱丽叶', K: '基洛',
-  L: '利马', M: '迈克', N: '诺维姆博', O: '奥斯卡', P: '帕帕', Q: '魁北克', R: '罗密欧', S: '塞拉', T: '探戈', U: '优尼佛姆', V: '维克多', W: '威士忌',
-  X: '艾克斯雷', Y: '洋基', Z: '祖鲁' };
+const ZH_WORDS = ZH_CODE_WORDS;
 const ZH_DIGITS = '洞幺两三四五六拐八九';
 
 const EN_COMMANDS = ['cleared to land', 'cleared for take-off', 'line up and wait', 'hold position', 'hold short of runway', 'cross runway',
@@ -44,7 +44,7 @@ export function recognitionHints({ aircraft = [], taxiways = [], zh = false, max
   }
   for (const t of (zh ? ZH_COMMANDS : EN_COMMANDS)) add(t, 5);
   for (const w of WORDS) add(w, 7);
-  if (zh) for (const w of Object.values(ZH_WORDS)) add(w, 6);
+  if (zh) { for (const w of WORDS) add(w, 7); for (const w of Object.values(ZH_WORDS)) add(w, 4); }
   for (const t of taxiways) add(spellTaxiway(t, zh), 4);
   return out.slice(0, max);
 }

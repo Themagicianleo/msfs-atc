@@ -204,12 +204,28 @@ export function aircraftGeometry(type) {
   return parts;
 }
 
+// Arrivals are blue, departures magenta: the same two colours as on the map and in the lists, and unlike the
+// grey pavement, the yellow lines and the green grass, so aircraft are what the eye finds first.
+const KIND_COLOUR = { arr: 0x2ea8ff, dep: 0xff3d9a };
+const kindBody = new Map();
+const kindDisc = new Map();
+const AIRCRAFT_SCALE = 2.4; // bigger than life: a real 737 is a speck at the distance the airport is viewed from
 const tailMats = new Map();
 function makeAircraft(ac) {
   const grp = new THREE.Group();
   if (!tailMats.has(ac.code)) tailMats.set(ac.code, new THREE.MeshLambertMaterial({ color: tailColour(ac.code) }));
-  const mats = { body: BODY, grey: GREY, glass: GLASS, tail: tailMats.get(ac.code) };
+  const kind = ac.kind === 'arr' ? 'arr' : 'dep';
+  if (!kindBody.has(kind)) kindBody.set(kind, new THREE.MeshLambertMaterial({ color: KIND_COLOUR[kind], emissive: KIND_COLOUR[kind], emissiveIntensity: 0.25 }));
+  const mats = { body: kindBody.get(kind), grey: GREY, glass: GLASS, tail: tailMats.get(ac.code) };
   for (const { g, mat } of aircraftGeometry(ac.type || {})) grp.add(new THREE.Mesh(g, mats[mat]));
+  // a flat disc in the same colour on the ground under it
+  if (!kindDisc.has(kind)) kindDisc.set(kind, new THREE.MeshBasicMaterial({ color: KIND_COLOUR[kind], transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }));
+  const disc = new THREE.Mesh(new THREE.CircleGeometry((ac.type?.span || 36) * 0.75, 28), kindDisc.get(kind));
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.y = 0.35;
+  disc.renderOrder = 6;
+  grp.add(disc);
+  grp.scale.setScalar(AIRCRAFT_SCALE);
   grp.rotation.order = 'YZX';
   return grp;
 }

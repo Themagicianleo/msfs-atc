@@ -52,6 +52,18 @@ lets you pick them:
   the ICAO alphabet, this airport's taxiway names and the usual phrases; Chrome and Edge use this). Once what you
   said is a whole instruction and has stopped changing, it is sent without waiting for the browser's own
   end-of-speech delay: about half a second after you stop (a taxi route gets 0.9 s, since controllers pause between taxiways).
+- **AI voice recognition (optional):** under **Settings → AI voice recognition** the game can use Whisper, an open-source
+  speech model, running on your device instead of the browser's own recogniser (about 80 MB, downloaded once, then offline;
+  the browser's recogniser is used until it is ready). It is told the callsigns on frequency, this airport's taxiways and the
+  usual phrases, and what it hears is then matched **by sound** to those callsigns, to the ICAO alphabet inside a taxi route and
+  to the command words. So callsigns that are not English words (*Shenzhen*, *Loong Air*, *Tianfu*) are found even when the
+  model writes *Chen Jen* or *long air*. It is not retrained: it is guided by the prompt and the matching (`js/lib/asr-correct.js`).
+  It recognises a whole transmission after you stop talking (a moment's delay), in English and Chinese.
+- **Taxiway names are always said as code words,** never as a bare letter. Pilots say the English ICAO/FAA words in both
+  languages: *alpha, bravo one, whiskey alpha*, and in Chinese radio the same words inside the Chinese sentence
+  (*经 alpha、bravo 幺滑到跑道两拐外等待点*, digits in Chinese). Chinese calls are said by two voices: the Chinese voice for the
+  Chinese and an English voice for the code words (a Chinese voice cannot read "alpha"). You can say them in English or, as
+  recognisers sometimes write them, as Chinese transliterations (阿尔法, 布拉沃...); all are understood.
 - **Fast speech:** listening starts the moment you press (the key shows *Wait...* until the microphone is open;
   words said before that are lost). Merged words are split back (*alphabravo*, *bravo1*, *whiskeyalpha*), *double two* and
   *triple five* are read as digits, and clipped phrases work (*cleared land*, *hold pos*, *holdshort*, *go round*, *enter runway*).
@@ -82,11 +94,10 @@ lets you pick them:
   - Taxiing aircraft stop for traffic on their route and hold short of runways until cleared to cross.
   - A departure won't roll while someone is ahead on the runway.
   - Unanswered calls are repeated.
-- **Score:**
-  - Points: +50 per arrival parked, +50 per departure handed to departure (+15 if you
-    forgot the frequency change).
-  - Penalties: −100 go-around without landing clearance, −150 go-around with the runway
-    occupied, −250 runway conflict, −200 ground conflict, −10 per repeated call, −30 gridlock.
+- **No score.** Mistakes (a go-around you caused, a conflict, an aircraft that had to call again) appear in the radio log
+  as plain warnings.
+- **Colours:** arrivals are blue and departures magenta everywhere (map, 3D, tags, lists), drawn large with a rim and a
+  soft halo; taxiways and runways stay grey, so aircraft are what the eye finds first.
 - **Controls:** pause/1x/2x/4x speed; traffic None, Calm, Normal or Busy. Change the
   landing and departure runways with **Runways**, and the wind under **Settings and help**.
 - **Pushback and the departure runway:** when you clear an aircraft for pushback, the tower tells it which

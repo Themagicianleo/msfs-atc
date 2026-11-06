@@ -64,6 +64,21 @@ const ACCENTS = {
 };
 export function accentFor(airline) { return ACCENTS[airline] || []; }
 
+// A Chinese call with English words in it ("经 alpha、bravo 幺滑到跑道两拐外等待点") is said by two voices: the Chinese
+// voice for the Chinese, an English one for the code words (a Chinese voice cannot read "alpha"). [{text, lang}]
+export function splitLanguages(text, lang = 'zh') {
+  if (lang !== 'zh') return [{ text, lang }];
+  const runs = [];
+  const joined = String(text).replace(/([A-Za-z])\s*[、，,]\s*(?=[A-Za-z])/g, '$1, '); // "alpha、bravo": one English phrase
+  for (const m of joined.matchAll(/[A-Za-z][A-Za-z'-]*(?:[ ,]+[A-Za-z][A-Za-z'-]*)*|[^A-Za-z]+/g)) {
+    const t = m[0];
+    if (/^[A-Za-z]/.test(t)) runs.push({ text: t.replace(/[ ,]+$/, ''), lang: 'en' });
+    else if (/[^\s，。、,.]/.test(t)) runs.push({ text: t, lang: 'zh' });
+    else if (runs.length && runs[runs.length - 1].lang === 'zh') runs[runs.length - 1].text += t; // punctuation stays with the Chinese before it
+  }
+  return runs.length ? runs : [{ text, lang }];
+}
+
 export class Speaker {
   constructor(settings) {
     this.settings = settings;
@@ -133,13 +148,17 @@ export class Speaker {
   // radio: { airline, range } of the aircraft talking
   speak(text, unitKey, lang = 'en', opts = {}) {
     if (!this.settings.tts || !text) return;
+    if (lang === 'zh' && !opts.part && /[A-Za-z]{2}/.test(text)) {
+      splitLanguages(text, lang).forEach((r, i) => this.speak(r.text, unitKey, r.lang, { ...opts, part: true, gap: i ? 60 : undefined, reply: i ? false : opts.reply }));
+      return;
+    }
     // like a real radio: while the controller holds the key nobody else is heard. Calls from pilots
     // who wait their turn are played afterwards (see release()).
     if (this.muted) { this.held.push({ args: [text, unitKey, lang, opts], at: Date.now() }); return; }
     const { reply = false, airline = '', range = 3000 } = opts;
     this.fx.enabled = this.settings.radioFx !== false;
     if (this.fx.enabled || this.settings.builtinVoices) this.fx.wake(); // ready by the time the pilot talks
-    const pause = reply ? 600 + Math.random() * 900 : 150 + Math.random() * 500;
+    const pause = opts.gap ?? (reply ? 600 + Math.random() * 900 : 150 + Math.random() * 500);
     // on a busy frequency calls queue up; one that has waited too long is
     // not read out late (it is still in the radio log)
     const queued = Date.now();
