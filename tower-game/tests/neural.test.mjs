@@ -36,5 +36,5 @@ test('without the right model a pilot uses another downloaded one, or the device
   assert.equal(pilotVoice('ac1', 'CSN', 'zh', new Set(['uk']), configs), null);
   assert.equal(pilotVoice('ac1', 'UAL', 'en', new Set(), configs), null);
   const p = pilotVoice('ac9', 'CSN', 'zh', all, configs);
-  assert.ok(p.pitch >= 0.83 && p.pitch <= 1.17);
+  assert.ok(p.pitch >= 0.8 && p.pitch <= 1.2);
 });

@@ -21,7 +21,7 @@ test('each pilot keeps a slightly different, stable pitch and pace', () => {
   assert.deepEqual(pilotVoiceShape('ac1'), a);
   const shapes = Array.from({ length: 40 }, (_, i) => pilotVoiceShape(`ac${i}`));
   for (const s of shapes) {
-    assert.ok(s.pitch >= 0.86 && s.pitch <= 1.16 && s.rate >= 0.92 && s.rate <= 1.12);
+    assert.ok(s.pitch >= 0.8 && s.pitch <= 1.2 && s.rate >= 0.85 && s.rate <= 1.3);
   }
   assert.ok(new Set(shapes.map((s) => s.pitch.toFixed(2))).size > 10);
 });

@@ -5,7 +5,7 @@
 
 import { Formatter, render } from './lib/format.js';
 import { M_PER_NM, KT, Path, add, dist, dot, headingOf, mul, norm, sub, fromHeading, angleDiff } from './geo.js';
-import { endGeometry, onRunway, route, routeCrossings, routeNames, runwayForEnd, taxiwayNames, unknownVia } from './layout.js';
+import { endGeometry, joiningTaxiways, onRunway, route, routeCrossings, routeNames, runwayForEnd, taxiwayNames, taxiwaysNear, unknownVia } from './layout.js';
 import { zhDigits, zhReason, zhRunway, zhSpell, zhWind } from './zh.js';
 import { windComponents } from './lib/runway.js';
 
@@ -39,7 +39,21 @@ export const TRAFFIC_LEVELS = {
 
 const SPAWN_NM = 10;
 const GAME_SPACING_NM = 1.5; // added to the separation minimum so there is room to work
-const TAXI_SPEED = 10; // m/s, about 20 kt
+const TAXI_SPEED = 10; // m/s, about 20 kt (each pilot differs, see taxiStyle)
+// Every pilot taxis in a way of their own: a cautious one at about 14 kt, a brisk one at 29, quick or slow to pick up speed
+// and to slow for a corner. Taken from the callsign, so a given aircraft always taxis the same way (and the random
+// numbers of the traffic are not touched).
+function callsignHash(text) {
+  let h = 2166136261;
+  for (const c of String(text)) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
+  return h;
+}
+function taxiStyle(callsign) {
+  let h = 2166136261;
+  for (const c of String(callsign)) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
+  const f = (n) => ((h >>> n) % 1000) / 1000;
+  return { speed: 0.7 + f(0) * 0.75, accel: 0.65 + f(10) * 0.8, corner: 0.8 + f(20) * 0.5 };
+}
 const REPEAT_S = { takeoff: 120, cross: 90, default: 45 }; // pilots call again after this long
 const GROUND = new Set(['gate', 'pushback', 'pushed', 'taxi_out', 'holding', 'lineup', 'lined_up', 'takeoff',
   'rollout', 'vacated', 'taxi_in', 'parked']);
@@ -109,6 +123,25 @@ export class World {
   }
 
   // the runways a departure can be told to expect: the ones in use for departures
+  // A departure that asks for a landing runway (one that is in use for arrivals only and has a holding point). About a third
+  // of the pilots do, as taken from the callsign, so the same aircraft always asks. The controller says yes by sending it
+  // there ("taxi to holding point runway 28R"), or no by sending it to the departure runway.
+  altRunway(ac) {
+    if (this.altRequests === false) return null;
+    const dep = this.depEnds.length ? this.depEnds : [this.depEnd];
+    const sameRunway = (e) => dep.some((d) => runwayForEnd(this.L, d) === runwayForEnd(this.L, e));
+    const options = this.arrEnds.filter((e) => this.L.holdPoints[e] && !sameRunway(e));
+    if (!options.length) return null;
+    const h = callsignHash(`${ac.callsign}alt`);
+    return h % 100 < 33 ? options[(h >>> 8) % options.length] : null;
+  }
+
+  // the runways a departure can be sent to: those in use (for departures, then for arrivals) and the one it asked for
+  taxiRunways(ac) {
+    const dep = this.depEnds.length ? this.depEnds : [this.depEnd];
+    return [...new Set([ac.end, ac.wants, ...dep, ...this.arrEnds])].filter((e) => e && this.L.holdPoints[e]);
+  }
+
   pushRunways(ac) {
     const ends = this.depEnds.length ? this.depEnds : [this.depEnd];
     return [...new Set([ac.end, ...ends])].filter(Boolean);
@@ -275,6 +308,7 @@ export class World {
       voice: Math.floor(this.rng() * 1000), p: [0, 0], hdg: 0, alt: 0, v: 0,
       cleared: {}, flags: {}, crossings: [], hold: false, req: null, born: this.t,
     };
+    ac.taxi = taxiStyle(c.callsign);
     this.ac.push(ac);
     return ac;
   }
@@ -391,10 +425,10 @@ export class World {
     ac.alt = Math.max(0, (ac.dist * Math.tan((3 * Math.PI) / 180)) / 0.3048);
   }
 
-  setPath(ac, points, { speed = TAXI_SPEED, backwards = false, nodes = null } = {}) {
+  setPath(ac, points, { speed = null, backwards = false, nodes = null } = {}) {
     ac.path = new Path(points);
     ac.ps = 0;
-    ac.pathSpeed = speed;
+    ac.pathSpeed = speed ?? TAXI_SPEED * (ac.taxi?.speed || 1);
     ac.backwards = backwards;
     ac.routeNodes = nodes;
     ac.crossings = [];
@@ -509,6 +543,7 @@ export class World {
   // follow the current path; returns true when the end is reached
   follow(ac, dt, { accel = 1.0, decel = 2.0 } = {}) {
     const P = ac.path;
+    if (ac.state === 'taxi_out' || ac.state === 'taxi_in' || ac.state === 'pushed') accel *= ac.taxi?.accel || 1;
     let stopAt = P.length;
     const nextCross = ac.crossings.find((c) => !c.cleared && c.at >= ac.ps - 2);
     if (nextCross) stopAt = Math.min(stopAt, nextCross.at);
@@ -522,12 +557,12 @@ export class World {
       target = Math.min(target, Math.max(ac.exitSpeed, Math.sqrt(ac.exitSpeed ** 2 + 2 * ac.brake * (ac.exitAt - ac.ps))));
     } else if (ac.exitAt !== undefined) target = Math.min(target, ac.exitSpeed);
     // slow for corners on taxiways, as pilots do (not on a landing roll, nor lining up)
-    if (ac.pathSpeed <= TAXI_SPEED && (ac.state === 'taxi_out' || ac.state === 'taxi_in' || ac.state === 'pushed')) {
+    if (ac.pathSpeed <= TAXI_SPEED * 1.6 && (ac.state === 'taxi_out' || ac.state === 'taxi_in' || ac.state === 'pushed')) {
       for (const t of P.turns()) {
         if (t.s < ac.ps - 6) continue;
         const d = Math.max(0, t.s - ac.ps);
         if (d > 80) break;
-        target = Math.min(target, Math.sqrt(turnSpeed(t.angle) ** 2 + 2 * decel * d));
+        target = Math.min(target, Math.sqrt((turnSpeed(t.angle) * (ac.taxi?.corner || 1)) ** 2 + 2 * decel * d));
       }
     }
     const blocker = MOVING_ON_TAXIWAYS.has(ac.state) && ac.state !== 'rollout' ? this.trafficAhead(ac, P, decel) : null;
@@ -619,7 +654,13 @@ export class World {
         }
         return null;
       case 'pushed':
-        if (ac.callAt != null && this.t >= ac.callAt) { ac.callAt = null; this.request(ac, 'taxi', 'taxi'); }
+        if (ac.callAt != null && this.t >= ac.callAt) {
+          ac.callAt = null;
+          // some pilots ask for a runway that is only used for landings: shorter taxi, or just what they would like
+          ac.wants = this.altRunway(ac);
+          if (ac.wants && this.phrOf(ac).pilot.taxi_alt) this.request(ac, 'taxi', 'taxi_alt', { alt: this.rwy(ac, ac.wants) });
+          else { ac.wants = null; this.request(ac, 'taxi', 'taxi'); }
+        }
         return null;
       case 'taxi_out':
         if (this.follow(ac, dt)) {
@@ -842,7 +883,7 @@ export class World {
     if (s === 'final') list.push('land', 'continue', 'go_around');
     if (s === 'gate') list.push('push');
     if (s === 'pushed') list.push('taxi_out');
-    if (s === 'taxi_out') list.push('lineup', 'takeoff', ac.hold ? 'continue_taxi' : 'hold_position');
+    if (s === 'taxi_out') list.push('lineup', 'takeoff', ac.hold ? 'continue_taxi' : 'hold_position', 'taxi_out');
     if (s === 'holding') list.push('lineup', 'takeoff', 'hold_short', 'taxi_out');
     if (s === 'lineup' || s === 'lined_up') list.push('takeoff');
     if (s === 'vacated') list.push('taxi_in');
@@ -995,14 +1036,21 @@ export class World {
     return ac.kind === 'dep' ? ['pushed', 'taxi_out', 'holding'].includes(ac.state) : ['vacated', 'taxi_in'].includes(ac.state);
   }
 
-  planTaxi(ac, { waypoints = [], runway = null, gate = null } = {}) {
+  // the taxiways the controller can add next in the route picker: those that join the last one chosen, or, before
+  // any is chosen, those around the aircraft
+  taxiOptions(ac, via = []) {
+    if (!via.length) return taxiwaysNear(this.L, ac.p, 260);
+    return joiningTaxiways(this.L, via[via.length - 1], ac.p).filter((n) => !via.includes(n));
+  }
+
+  planTaxi(ac, { waypoints = [], via: chosen = [], runway = null, gate = null } = {}) {
     const dep = ac.kind === 'dep';
     if (!this.canPlanTaxi(ac)) return null;
     const end = runway || ac.end;
     const g = dep ? null : this.L.gates.find((x) => x.id === (gate || ac.gate));
     const to = dep ? this.L.holdPoints[end]?.h : g?.node;
     if (to === undefined || to === null) return null;
-    const r = this.routeFromHere(ac, to, { waypoints });
+    const r = this.routeFromHere(ac, to, { waypoints, via: chosen, prefer: dep ? 'A' : 'B' }); // as the taxi command does, so the preview is the route flown
     if (!r) return null;
     const known = taxiwayNames(this.L);
     const via = routeNames(this.L, r.nodes).filter((n) => known.has(n));

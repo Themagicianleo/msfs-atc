@@ -4,7 +4,7 @@
 
 import { unpackLayout } from './osm.js';
 import { chooseConfig, endWinds, runwayPlans } from './ops.js';
-import { taxiwayNames } from './layout.js';
+import { nearestTaxiway, taxiwayNames } from './layout.js';
 import { Speaker } from './lib/speech.js';
 import { AiRecognizer, MODEL as AI_MODEL, aiModelCached, aiSupport, deleteAiModel } from './lib/whisper.js';
 import { correctTranscript } from './lib/asr-correct.js';
@@ -557,7 +557,7 @@ function startPlan() {
   const ac = game.world?.find(game.selected);
   if (!ac) return;
   if (game.view !== 'map') setView('map');
-  game.plan = { id: ac.id, waypoints: [], runway: ac.kind === 'dep' ? ac.end : null, gate: ac.kind === 'arr' ? ac.gate : null };
+  game.plan = { id: ac.id, via: [], waypoints: [], runway: ac.kind === 'dep' ? ac.end : null, gate: ac.kind === 'arr' ? ac.gate : null };
   $('#plan').hidden = false;
   updatePlan();
 }
@@ -574,9 +574,11 @@ function updatePlan() {
   if (!p || !ac) { endPlan(); return; }
   p.at = performance.now();
   const r = w.planTaxi(ac, p);
+  p.note = '';
   if (!r) {
     if (!w.planTaxi(ac, {})) { endPlan(); return; } // it can't taxi any more
-    p.waypoints.pop(); // that point can't be reached: forget it
+    p.note = p.via.length ? `Can't route via ${p.via[p.via.length - 1]} from there.` : '';
+    p.via.pop(); // that taxiway can't be reached: forget it
     p.result = w.planTaxi(ac, p);
   } else p.result = r;
   const res = p.result;
@@ -585,11 +587,20 @@ function updatePlan() {
   $('#plan-text').innerHTML = '';
   $('#plan-text').append(
     Object.assign(document.createElement('b'), { textContent: `${ac.callsign}: ` }),
-    `${res.via.length ? `via ${res.via.join(', ')} ` : ''}to ${dest}${cross}`,
-    Object.assign(document.createElement('span'), { className: 'muted small',
-      textContent: p.waypoints.length ? '' : ` — tap taxiways to route through, ${ac.kind === 'dep' ? 'a holding point' : 'a stand'} to change the destination` }),
+    `${(p.via.length ? p.via : res.via).length ? `via ${(p.via.length ? p.via : res.via).join(', ')} ` : ''}to ${dest}${cross}`,
+    Object.assign(document.createElement('span'), { className: p.note ? 'danger small' : 'muted small',
+      textContent: p.note ? ` ${p.note}` : (p.via.length ? '' : ` — tap a taxiway on the map or pick one below; tap ${ac.kind === 'dep' ? 'a holding point' : 'a stand'} to change the destination`) }),
   );
   $('#plan-cross').parentElement.hidden = !res.cross.length;
+  // the taxiways that can come next, as buttons: no need to hit a line on the map
+  const next = $('#plan-next');
+  next.innerHTML = '';
+  for (const name of w.taxiOptions(ac, p.via)) {
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: 'chip tw', textContent: name });
+    b.dataset.name = name;
+    next.append(b);
+  }
+  next.hidden = !next.children.length;
 }
 
 function planTap(q) {
@@ -602,24 +613,31 @@ function planTap(q) {
   const px = (id) => { const s = renderer.toScreen(g.nodes[id].p); return Math.hypot(s[0] - q[0], s[1] - q[1]); };
   if (ac.kind === 'dep') {
     const hp = Object.entries(L.holdPoints).map(([end, h]) => ({ end, d: px(h.h) })).sort((a, b) => a.d - b.d)[0];
-    if (hp && hp.d < 22) { p.runway = hp.end; updatePlan(); return; }
+    if (hp && hp.d < 26) { p.runway = hp.end; updatePlan(); return; }
   } else {
     const st = L.gates.map((x) => ({ id: x.id, d: px(x.node) })).sort((a, b) => a.d - b.d)[0];
-    if (st && st.d < 16) { p.gate = st.id; updatePlan(); return; }
+    if (st && st.d < 22) { p.gate = st.id; updatePlan(); return; }
   }
-  let best = null;
-  g.nodes.forEach((n, i) => {
-    if (n.kind === 'rwy' || n.kind === 'gate') return;
-    const d = px(i);
-    if (d < 30 && (!best || d < best.d)) best = { i, d };
-  });
-  if (!best) return;
-  p.waypoints.push(best.i);
-  updatePlan();
+  // the taxiway under (or near) the finger: a generous 40 px, whatever the zoom
+  const at = renderer.toWorld(q);
+  const hit = nearestTaxiway(L, at, 40 / renderer.view.s);
+  if (!hit) return;
+  addPlanTaxiway(hit.name);
 }
 
-$('#plan-undo').addEventListener('click', () => { game.plan?.waypoints.pop(); updatePlan(); });
-$('#plan-clear').addEventListener('click', () => { if (game.plan) game.plan.waypoints = []; updatePlan(); });
+function addPlanTaxiway(name) {
+  const p = game.plan;
+  if (!p || p.via[p.via.length - 1] === name) return;
+  p.via.push(name);
+  updatePlan();
+}
+$('#plan-next').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-name]');
+  if (b) addPlanTaxiway(b.dataset.name);
+});
+
+$('#plan-undo').addEventListener('click', () => { game.plan?.via.pop(); updatePlan(); });
+$('#plan-clear').addEventListener('click', () => { if (game.plan) game.plan.via = []; updatePlan(); });
 $('#plan-cancel').addEventListener('click', endPlan);
 $('#plan-send').addEventListener('click', () => {
   const p = game.plan;
@@ -628,9 +646,10 @@ $('#plan-send').addEventListener('click', () => {
   if (!ac || !p.result) { endPlan(); return; }
   const res = p.result;
   const cross = $('#plan-cross').checked ? res.cross : [];
-  addMsg('you', 'You', w.taxiText(ac, res, cross.length > 0));
+  const said = p.via.length ? p.via : res.via; // the taxiways the controller chose
+  addMsg('you', 'You', w.taxiText(ac, { ...res, via: said }, cross.length > 0));
   speaker.fx.click();
-  w.command(ac.id, { type: 'taxi', waypoints: p.waypoints, via: res.via, runway: res.runway, gate: res.gate, cross });
+  w.command(ac.id, { type: 'taxi', via: said, runway: res.runway, gate: res.gate, cross });
   handleEvents(w.drain());
   endPlan();
 });
@@ -658,13 +677,13 @@ function renderPanel() {
   if (!w) return;
   const ac = w.find(game.selected);
   if (!ac && game.selected != null) game.selected = null;
-  const selKey = JSON.stringify([game.selected, ac?.state, ac?.gate, ac?.end, w.depEnds.join('+'), ac?.req?.type, ac?.hold, ac?.crossings?.map((c) => c.cleared), ac?.cleared]);
+  const selKey = JSON.stringify([game.selected, ac?.state, ac?.gate, ac?.end, ac?.wants, w.depEnds.join('+'), ac?.req?.type, ac?.hold, ac?.crossings?.map((c) => c.cleared), ac?.cleared]);
   if (selKey !== lastSel) {
     lastSel = selKey;
     $('#sel-cs').textContent = ac ? `${ac.cs.t}  (${ac.callsign} ${ac.type.code})` : 'No aircraft selected';
     $('#sel-state').textContent = ac ? (STATE_LABELS[ac.state] || ac.state) + (ac.end ? ` · RWY ${ac.end}` : '') + (ac.gate ? ` · ${ac.gate}` : '') : '';
     const dest = ac && taxiDestination(ac);
-    const req = ac?.req ? `Request: ${REQ_TEXT[ac.req.type] || ac.req.type}` : '';
+    const req = ac?.req ? `Request: ${ac.req.type === 'taxi' && ac.wants ? `ready to taxi, asks for runway ${ac.wants}` : (REQ_TEXT[ac.req.type] || ac.req.type)}` : '';
     $('#sel-req').textContent = [req, dest ? `Going to ${dest.long}` : ''].filter(Boolean).join(' · ');
     const box = $('#sel-buttons');
     box.innerHTML = '';
@@ -679,16 +698,24 @@ function renderPanel() {
       }
       for (const type of w.available(ac)) {
         // pushback: the runway to expect. With several departure runways, one button for each.
-        const runways = type === 'push' ? w.pushRunways(ac) : [];
-        for (const run of runways.length > 1 ? runways : [null]) {
+        let runways = type === 'push' ? w.pushRunways(ac) : [];
+        // a departure on the way to the runway (or asking to): one button for each runway it can be sent to. Once it is
+        // taxiing or holding, these are changes: "Change to RWY 28R" re-routes it there.
+        const change = type === 'taxi_out' && ac.kind === 'dep' && ac.state !== 'pushed';
+        if (type === 'taxi_out' && ac.kind === 'dep') {
+          runways = w.taxiRunways(ac);
+          if (change) runways = runways.filter((r) => r !== ac.end);
+          if (change && !runways.length) continue;
+        }
+        for (const run of (runways.length > 1 || change) ? runways : [null]) {
           const b = document.createElement('button');
           b.type = 'button';
           b.dataset.type = type;
           const label = w.phrOf(ac).buttons[type] || game.phr.buttons[type] || type;
-          b.textContent = run ? `${label} · RWY ${run}` : label;
+          b.textContent = change ? `Change to RWY ${run}` : (run ? `${label} · RWY ${run}` : label);
           b.title = w.controllerText(ac, type, run ? { runway: w.rwy(ac, run) } : {});
           if (run) b.dataset.runway = run;
-          if (isAnswer(ac.req, type) && (!run || run === ac.end)) b.className = 'primary';
+          if (isAnswer(ac.req, type) && (!run || run === (ac.wants || ac.end))) b.className = 'primary';
           box.append(b);
         }
       }

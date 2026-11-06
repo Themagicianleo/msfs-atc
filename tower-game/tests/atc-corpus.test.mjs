@@ -53,6 +53,9 @@ const ZH = [
   ['国航1234，跑道15外等待', 'CCA', 'hold_short', { runway: '15' }],
   ['国航1234，穿越跑道15', 'CCA', 'cross', { runway: '15' }],
   ['国航一二三四，继续滑行', 'CCA', 'continue_taxi'],
+  ['南方3101，更改跑道，滑到跑道17左外等待点', 'CSN', 'taxi', { runway: '17L' }],
+  ['南方3101，改用跑道17左', 'CSN', 'taxi', { runway: '17L' }],
+  ['东方5309，重新滑行，经A、B', 'CES', 'taxi', { via: ['A', 'B'] }],
 ];
 for (const [say, ac, type, extra = {}] of ZH) {
   test(`real-style Chinese: ${say}`, () => {
