@@ -135,6 +135,19 @@ function viaNames(tokens, known) {
     out.push(taken.name);
     i = taken.j;
   }
+  return fixGluedDigits(out, known);
+}
+
+// A recogniser that glues letters and a digit ("T G 6") puts the digit on the wrong letter. A name that does not exist
+// followed by one that does ("T", "G6") is read the other way when that gives names that all exist ("T6", "G").
+function fixGluedDigits(names, known) {
+  const out = [...names];
+  for (let i = 0; i + 1 < out.length; i += 1) {
+    const a = out[i];
+    const m = out[i + 1].match(/^([A-Z]+)(\d+)$/);
+    if (known.has(a) || !m || !/^[A-Z]+$/.test(a)) continue;
+    if (known.has(a + m[2]) && known.has(m[1])) { out[i] = a + m[2]; out[i + 1] = m[1]; i += 1; }
+  }
   return out;
 }
 

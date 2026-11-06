@@ -186,8 +186,28 @@ export class World {
     return { ok: true, text };
   }
 
+  // The reason a pilot gives, written and spoken. Spoken, taxiway letters are code words (alpha, 阿尔法), and runway,
+  // stand and wind numbers are read digit by digit, as in every other call.
+  reasonText(ac, reason) {
+    const f = this.f;
+    if (this.zh(ac)) {
+      const t = zhReason(reason, this.phrZh.reasons);
+      const s = t.replace(/滑行道([A-Z0-9、, ]+)/g, (_, names) => `滑行道${names.split(/[、, ]+/).filter(Boolean).map(zhSpell).join('、')}`)
+        .replace(/跑道(\d{1,2}[LRC]?)/g, (_, id) => `跑道${zhRunway(id).s}`)
+        .replace(/停机位([A-Z]?\d+[A-Z]?)/g, (_, id) => `停机位${zhSpell(id)}`)
+        .replace(/(顺风|侧风)(\d+)/g, (_, w, n) => `${w}${zhDigits(n)}`);
+      return { t, s };
+    }
+    const s = String(reason)
+      .replace(/taxiway ([A-Z0-9, ]+)$/, (_, names) => `taxiway ${names.split(/[, ]+/).filter(Boolean).map((n) => f.spell(n)).join(', ')}`)
+      .replace(/runway (\d{1,2}[LRC]?)\b/g, (_, id) => `runway ${f.runway(id).s}`)
+      .replace(/stand (\S+)/g, (m, id) => `stand ${/^\d+$/.test(id) ? id : f.spell(id)}`)
+      .replace(/(\d+) knots/g, (_, n) => `${f.spell(n)} knots`);
+    return { t: reason, s };
+  }
+
   unable(ac, reason) {
-    const said = this.zh(ac) ? zhReason(reason, this.phrZh.reasons) : reason;
+    const said = this.reasonText(ac, reason);
     const { text, speech } = render(this.pickWording(this.phrOf(ac).readback.unable), this.values(ac, { reason: said }));
     this.emit({ kind: 'pilot', ac: ac.id, callsign: ac.callsign, text, speech, ...this.radioInfo(ac), unable: true, lang: ac.lang || 'en' });
     return { ok: false, text, reason };

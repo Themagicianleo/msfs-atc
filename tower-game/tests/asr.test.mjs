@@ -190,3 +190,54 @@ test('the listener uses the AI model when it is ready: hears, fits to the radio,
     assert.equal(got.length, 1);
   } finally { delete globalThis.window; }
 });
+
+test('"unable" replies say taxiway letters, runways and stands the radio way too (the written text is unchanged)', () => {
+  const zh = world('CSN');
+  const a = zh.spawnArrival(null, 6);
+  zh.drain();
+  const r = zh.unable(a, "we can't find taxiway T, G6");
+  assert.match(r.text, /找不到滑行道T, G6/);
+  const ev = zh.drain().find((e) => e.kind === 'pilot' && e.unable);
+  assert.match(ev.speech, /找不到滑行道探戈、高尔夫六/);
+  assert.ok(!/[A-Z]/.test(ev.speech.replace(/\s/g, '')), ev.speech);
+  zh.unable(a, 'stand A12 is occupied');
+  assert.match(zh.drain().find((e) => e.unable).speech, /停机位阿尔法幺两被占用/);
+  zh.unable(a, 'runway 35R is not available');
+  assert.match(zh.drain().find((e) => e.unable).speech, /跑道三五右不可用|跑道三拐?五右/);
+  const en = world('AFL');
+  const b = en.spawnArrival(null, 6);
+  en.drain();
+  en.unable(b, "we can't find taxiway T, G6");
+  const e2 = en.drain().find((e) => e.unable);
+  assert.match(e2.text, /taxiway T, G6/);
+  assert.match(e2.speech, /taxiway tango, golf six/);
+  en.unable(b, 'stand A12 is occupied');
+  assert.match(en.drain().find((e) => e.unable).speech, /stand alpha one two is occupied/);
+});
+
+// ---------------------------------------------------------------- taxiway names as people (and recognisers) really give them
+import { unpackLayout } from '../js/osm.js';
+import { taxiwayNames } from '../js/layout.js';
+
+test('Daxing: one route, said many ways in Chinese and English, is understood as the same taxiways', () => {
+  const known = taxiwayNames(unpackLayout(json('../data/hq/ZBAD.json')));
+  const ac = [{ id: 1, code: 'CUA', tel: 'China United', telZh: '联航', num: '5720', callsign: 'CUA5720' }];
+  const via = (say) => understand(say, ac, PHR.commands, null, known, PHR_ZH.commands).cmd.via;
+  const want = ['Z1', 'T6', 'G', 'C1'];
+  for (const say of [
+    '联航5720经z1 t6 g c1滑到跑道35右外等待点',
+    '联航5720经祖鲁幺探戈六高尔夫查理幺滑到跑道35右外等待点',
+    '联航5720，经Z一、T六、G、C一滑到跑道35右外等待点',
+    '联航5720经 z 1 t 6 g c 1 滑到跑道35右外等待点',
+    '联航5720 经祖鲁1，探戈6，高尔夫，查理1，滑到跑道35右外等待点',
+    '联航5720经Zulu1 Tango6 Golf Charlie1滑到跑道35右外等待点',
+    '联航5720经泽德幺踢六吉西幺滑到跑道35右外等待点',
+    'China United 5720 taxi to holding point runway 35 right via zulu one, tango six, golf, charlie one',
+    'China United 5720 taxi via zulu 1 tango 6 golf charlie 1 to holding point runway 35 right',
+  ]) assert.deepEqual(via(say), want, say);
+  // what the recogniser wrote in the screenshot: digit stuck to the wrong letter (there is no taxiway T, but there is T6)
+  assert.deepEqual(via('联航无拐2栋滑行经过tg六'), ['T6', 'G']);
+  assert.deepEqual(via('China United 5720 taxi via t g 6'), ['T6', 'G']);
+  // and names that really are what was said are left alone
+  assert.deepEqual(via('联航5720经G6、T滑到跑道35右外等待点'), ['G6', 'T']);
+});
