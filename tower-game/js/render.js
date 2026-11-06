@@ -119,9 +119,16 @@ export class Renderer {
     const ys = pts.map((p) => p[1]);
     const minX = Math.min(...xs); const maxX = Math.max(...xs);
     const minY = Math.min(...ys); const maxY = Math.max(...ys);
-    this.view.cx = (minX + maxX) / 2;
-    this.view.cy = (minY + maxY) / 2;
-    this.view.s = Math.min(this.w / ((maxX - minX) * 1.25 || 1), this.h / ((maxY - minY) * 1.25 || 1));
+    // fit into the part of the screen no panel covers (the app says how much of each side is covered)
+    const ins = { l: 0, t: 0, r: 0, b: 0, ...(this.getInsets?.() || {}) };
+    const aw = Math.max(120, this.w - ins.l - ins.r);
+    const ah = Math.max(120, this.h - ins.t - ins.b);
+    const s = Math.min(aw / ((maxX - minX) * 1.25 || 1), ah / ((maxY - minY) * 1.25 || 1));
+    const mx = (minX + maxX) / 2;
+    const my = (minY + maxY) / 2;
+    this.view.s = s;
+    this.view.cx = mx - (ins.l + aw / 2 - this.w / 2) / s; // the airport's centre lands in the middle of the free area
+    this.view.cy = my + (ins.t + ah / 2 - this.h / 2) / s;
   }
 
   toScreen(p) {

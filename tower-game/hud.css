@@ -1,0 +1,133 @@
+/* Field-first layout ("HUD"), loaded after tower.css.
+   The airport fills the screen. A slim bar on top carries the clock, wind and speed; the radio, the talk key, the selected
+   aircraft and the traffic float over the map as small panels, instead of boxes beside it. Small tracked labels, tabular numbers,
+   hairline borders and one accent keep it calm. The look is still the game's own: glass panels, capsule controls, the system
+   font, light and dark. On a phone or a tablet in portrait the panels become a sheet under the map. */
+
+:root {
+  --panel: color-mix(in srgb, var(--surface) 95%, transparent);
+  --panel-edge: var(--line);
+  --panel-shadow: 0 10px 30px rgba(0, 0, 0, .16), 0 1px 2px rgba(0, 0, 0, .08);
+  --dock-w: clamp(340px, 27vw, 440px);
+  --gap: 10px;
+  --bar-h: 46px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --panel-shadow: 0 10px 30px rgba(0, 0, 0, .5), 0 1px 2px rgba(0, 0, 0, .4); } }
+:root[data-theme="dark"] { --panel-shadow: 0 10px 30px rgba(0, 0, 0, .5), 0 1px 2px rgba(0, 0, 0, .4); }
+
+body { font-size: 14px; letter-spacing: 0; }
+.ambient { display: none; } /* the map is the background */
+
+/* ---------- top bar: one flat line ---------- */
+.game-bar { height: var(--bar-h); min-height: var(--bar-h); padding: 0 12px; gap: 8px; flex-wrap: nowrap; align-items: center;
+  background: var(--sheet); border-bottom: 1px solid var(--panel-edge); position: relative; z-index: 12; }
+.game-bar .brand { padding: 0; font-size: 14px; font-weight: 600; letter-spacing: .01em; gap: 8px; }
+.game-bar .brand img { width: 24px; height: 24px; border-radius: 6px; }
+.game-bar .capsule, .game-bar .seg { height: 30px; min-height: 0; background: var(--fill); box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.game-bar .capsule { padding: 0 12px; font-size: 13px; font-weight: 500; }
+.game-bar .capsule.info { background: transparent; color: var(--muted); padding: 0 4px; font-variant-numeric: tabular-nums; }
+.game-bar .seg { padding: 2px; }
+.game-bar .seg button { padding: 4px 12px; font-size: 13px; min-width: 38px; }
+.game-bar .seg button[aria-pressed="true"] { background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, .18); }
+.game-bar #clock { font-family: var(--mono); font-size: 14px; font-weight: 600; letter-spacing: .04em; }
+#new-shift { color: var(--blue); }
+.alert-bar { position: absolute; z-index: 14; top: calc(var(--bar-h) + 8px); left: 50%; transform: translateX(-50%); margin: 0; max-width: min(640px, calc(100% - 24px)); font-size: 14px; }
+
+/* ---------- the field fills the screen ---------- */
+.game { position: relative; display: block; flex: 1; min-height: 0; padding: 0; gap: 0; }
+.map-wrap.card { position: absolute; inset: 0; flex: none; border-radius: 0; background: var(--bg); box-shadow: none; border: 0;
+  -webkit-backdrop-filter: none; backdrop-filter: none; animation: none; }
+#map, .map3d { border-radius: 0; }
+.map-hint { display: none; }
+
+/* map controls: one slim row, top left */
+.map-tools { left: var(--gap); right: calc(var(--dock-w) + var(--gap) * 2); top: var(--gap); justify-content: flex-start; align-items: center; gap: 6px; }
+.map-tools .capsule, .map-tools .seg, .map-config { height: 32px; background: var(--panel); border: 1px solid var(--panel-edge); box-shadow: var(--panel-shadow);
+  -webkit-backdrop-filter: none; backdrop-filter: none; }
+.map-tools .capsule { padding: 0 12px; font-size: 13px; }
+.map-tools .seg { padding: 2px; }
+.map-tools .seg button { padding: 4px 12px; font-size: 13px; }
+.map-tools .seg button[aria-pressed="true"] { background: var(--fill); box-shadow: none; color: var(--fg); }
+.map-config { position: static; display: inline-flex; align-items: center; gap: 8px; padding: 0 4px 0 6px; border-radius: 999px; color: var(--muted);
+  font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.map-config .btn { min-height: 24px; height: 24px; padding: 0 10px; font-size: 12px; text-transform: none; letter-spacing: 0; background: var(--fill); box-shadow: none; }
+.map-config label { gap: 6px; }
+.map-config .small-input { min-height: 24px; height: 24px; padding: 0 24px 0 8px; font-size: 12px; text-transform: none; letter-spacing: 0; background-color: var(--fill); }
+
+/* the route picker sits over the map, clear of the dock */
+.plan-bar { left: var(--gap); right: auto; width: min(680px, calc(100% - var(--dock-w) - var(--gap) * 3)); top: 52px; background: var(--panel); border: 1px solid var(--panel-edge); box-shadow: var(--panel-shadow); border-radius: 14px; }
+
+/* ---------- floating panels ---------- */
+.side { position: absolute; top: var(--gap); right: var(--gap); bottom: var(--gap); width: var(--dock-w); padding: 0; gap: 8px; overflow: visible;
+  display: flex; flex-direction: column; pointer-events: none; z-index: 6; }
+.side > *, .side-lists > * { pointer-events: auto; }
+.side-lists { pointer-events: none; flex: 1 1 auto; min-height: 0; gap: 8px; }
+.side .card, .talk { background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 14px; box-shadow: var(--panel-shadow);
+  -webkit-backdrop-filter: none; backdrop-filter: none; animation: none; }
+.talk { padding: 8px; gap: 6px; }
+.side .card-head { padding: 10px 12px 0; }
+.side .card-head h2 { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.side .card-body, .side-lists .card-body { padding: 8px 10px 10px; gap: 8px; }
+.side .sel-card .card-head h2#sel-cs { font-size: 15px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--fg); }
+#sel-state { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.sel-req { font-size: 12px; font-weight: 600; }
+
+/* the radio takes what is left of the dock under the traffic, so the whole left of the screen is map */
+#radio-card { flex: 1 1 0; min-height: 150px; }
+#radio-card .card-body { padding-top: 6px; }
+.log { font-size: 12.5px; line-height: 1.4; gap: 3px; }
+.msg { padding: 5px 9px; border-radius: 9px; }
+.msg .who { font-size: 11px; }
+
+/* talk key and typing box */
+.ptt { min-height: 52px; border-radius: 12px; font-size: 16px; letter-spacing: .01em; }
+.ptt .interim { font-size: 12px; }
+.cmd-row .input { min-height: 36px; font-size: 14px; border-radius: 10px; }
+.cmd-row .btn { min-height: 36px; }
+#voice-status { font-size: 12px; }
+.mic-lang button { padding: 4px 10px; font-size: 12px; }
+
+/* aircraft commands */
+.cmds { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 6px; }
+.cmds button { min-height: 36px; padding: 0 8px; white-space: nowrap; border-radius: 10px; font-size: 13px; background: var(--fill); box-shadow: none; }
+.cmds button.primary { background: var(--blue); box-shadow: 0 4px 12px color-mix(in srgb, var(--blue) 30%, transparent); }
+
+/* traffic: compact rows */
+#traffic-card { flex: 0 1 auto; max-height: 42%; }
+.strips { gap: 3px; }
+.strip { min-height: 34px; padding: 4px 10px; border-radius: 9px; font-size: 12px; border-left-width: 5px; }
+.strip .cs { font-size: 13px; letter-spacing: .02em; }
+
+.settings summary { padding-bottom: 0; }
+.settings > summary.card-head { padding: 12px 12px; }
+
+/* the route picker's taxiway buttons */
+.chip.tw { min-height: 34px; min-width: 44px; padding: 2px 10px; font-size: 14px; border-radius: 999px; }
+.plan-btns .btn { min-height: 30px; }
+
+/* ---------- phones and tablets in portrait: the panels become a sheet under the map ---------- */
+@media (orientation: portrait), (max-width: 900px) {
+  .game { display: flex; flex-direction: column; }
+  .map-wrap.card { position: relative; inset: auto; flex: 1 1 52%; min-height: 260px; }
+  .map-tools { right: var(--gap); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .map-tools > * { flex: none; }
+  .plan-bar { right: var(--gap); width: auto; }
+  .side { position: relative; inset: auto; width: auto; flex: 1 1 48%; min-height: 0; padding: 8px 8px 0; gap: 8px; overflow-y: auto; pointer-events: auto;
+    background: var(--sheet); border-top: 1px solid var(--panel-edge); border-radius: 18px 18px 0 0; margin-top: -14px; z-index: 3;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, .12); }
+  .side .card, .talk { box-shadow: none; background: var(--fill); border-color: transparent; }
+  .talk { background: transparent; padding: 0; }
+  .side-lists { pointer-events: auto; min-height: 220px; }
+  #radio-card { flex: 1 1 0; min-height: 0; }
+  .side-lists .card-head { display: none; }
+  .side-lists[data-tab="traffic"] #radio-card, .side-lists[data-tab="radio"] #traffic-card { display: none; }
+  #traffic-card { max-height: none; flex: 1 1 0; }
+  .map-config { position: static; }
+}
+@media (max-width: 600px) {
+  .game-bar { padding: 0 8px; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .game-bar .capsule.info { display: none; }
+  .map-tools { top: 8px; left: 8px; right: 8px; }
+  .ptt { min-height: 56px; }
+  .cmds { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
+}

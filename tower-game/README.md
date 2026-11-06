@@ -37,6 +37,10 @@ lets you pick them:
 - The **Runways** button over the map reopens the choice during the shift. **Next time, start straight away
   with the recommended runways** skips this step; turn it back on under **Settings → Ask which runways to use**.
 
+- **Layout:** the airport fills the screen. A slim bar on top carries the clock, wind and speed; the map controls (view,
+  Chart, Fit, Runways, Traffic) are one row over the map; the talk key, the selected aircraft, the traffic and the radio float
+  over the right-hand side as small panels (`hud.css`). On a phone or a tablet in portrait they become a sheet under the map,
+  with Traffic and Radio as tabs. Light and dark follow the device (Settings → Appearance).
 - **Select** an aircraft by tapping it on the map or its strip. A yellow ring and a
   highlighted strip mean it is calling you; the blue button is the usual answer.
 - **Where it's going:** aircraft on the ground show their destination on the strip, the map label and

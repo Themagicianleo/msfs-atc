@@ -15,6 +15,7 @@
   <link rel="icon" href="icons/icon-512.png">
   <link rel="stylesheet" href="efb-glass.css">
   <link rel="stylesheet" href="tower.css">
+  <link rel="stylesheet" href="hud.css">
 </head>
 <body>
   <div class="ambient" aria-hidden="true"></div>
@@ -104,12 +105,12 @@
       <div class="map-tools">
         <span id="view" class="seg view-seg" role="group" aria-label="View"><button type="button" data-view="map" aria-pressed="true">Map</button><button type="button" data-view="tower" aria-pressed="false">Tower</button><button type="button" data-view="orbit" aria-pressed="false">3D</button></span>
         <button id="chart" class="capsule glass-ctl" type="button">Chart</button><button id="follow" class="capsule glass-ctl" type="button" hidden>Follow</button><button id="fit" class="capsule glass-ctl" type="button">Fit</button>
-      </div>
-      <div class="map-config glass-ctl">
+        <div class="map-config glass-ctl">
         <button id="rwy-open" class="btn btn-small" type="button" title="Which runways land and depart">Runways</button>
         <label>Traffic
           <select id="traffic" class="input small-input"><option value="off">None</option><option value="calm">Calm</option><option value="normal">Normal</option><option value="busy">Busy</option></select>
         </label>
+      </div>
       </div>
       <div id="plan" class="plan-bar glass-ctl" hidden>
         <div id="plan-text" class="plan-text"></div>

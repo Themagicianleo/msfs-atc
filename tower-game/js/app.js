@@ -496,6 +496,14 @@ $('#cmd-form').addEventListener('submit', (e) => {
   $('#cmd-input').value = '';
 });
 
+// how much of the map the floating panels cover: the dock on the right and the controls on top (big screens), or just
+// the controls on top (portrait, where the panels sit under the map)
+renderer.getInsets = () => {
+  const portrait = window.matchMedia('(orientation: portrait), (max-width: 900px)').matches;
+  const dock = document.querySelector('.side')?.getBoundingClientRect();
+  return portrait ? { t: 48, b: 8, l: 8, r: 8 } : { t: 56, b: 16, l: 12, r: (dock ? dock.width : 0) + 22 };
+};
+
 renderer.onTap = (pos, q) => {
   if (!game.world) return;
   if (game.plan) { planTap(q); return; }
