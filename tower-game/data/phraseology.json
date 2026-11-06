@@ -10,6 +10,7 @@
     "vacated": ["{unit}, {callsign}, runway {runway} vacated, request taxi to stand {gate}.", "{unit}, {callsign}, vacated runway {runway}, for stand {gate}.", "{unit}, {callsign}, clear of runway {runway}, request taxi stand {gate}."],
     "push": ["{unit}, {callsign}, stand {gate}, request pushback.", "{unit}, {callsign}, stand {gate}, ready for pushback.", "{unit}, good day, {callsign} on stand {gate}, request push and start.", "{unit}, {callsign}, stand {gate}, request pushback and start up."],
     "taxi": ["{unit}, {callsign}, ready to taxi.", "{unit}, {callsign}, request taxi.", "{unit}, {callsign}, pushback complete, ready to taxi."],
+    "taxi_alt": ["{unit}, {callsign}, ready to taxi, request runway {alt} for departure.", "{unit}, {callsign}, pushback complete, request taxi, can we depart from runway {alt}?", "{unit}, {callsign}, request taxi, we would like runway {alt} if possible."],
     "ready": ["{unit}, {callsign}, holding point runway {runway}, ready for departure.", "{unit}, {callsign}, ready for departure runway {runway}.", "{unit}, {callsign}, holding point runway {runway}, fully ready."],
     "hold_short": ["{unit}, {callsign}, holding short runway {runway}.", "{unit}, {callsign}, holding short of runway {runway}."],
     "handoff": ["{unit}, {callsign}, request frequency change.", "{callsign}, request to change to departure."],
@@ -77,7 +78,7 @@
     { "cmd": "continue_taxi", "patterns": ["continue (taxi|taxiing)", "resume taxi"] },
     { "cmd": "continue", "patterns": ["continue approach", "^(?!.*taxi).*\\bcontinue\\b"] },
     { "cmd": "push", "patterns": ["push ?back", "\\bpush(ed)?\\b"] },
-    { "cmd": "taxi", "patterns": ["\\btax[iy](ing)?\\b"] },
+    { "cmd": "taxi", "patterns": ["\\btax[iy](ing)?\\b", "(change|switch)( of)?( the)?( departure)? runway", "use runway", "(amended|new|alternative) (taxi )?route", "re-?route"] },
     { "cmd": "contact", "patterns": ["contact (departure|radar|approach|center|centre|control|tower|ground|apron|clearance)", "frequency change approved", "good ?day", "monitor"] }
   ]
 }

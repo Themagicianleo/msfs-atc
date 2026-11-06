@@ -451,6 +451,59 @@ export function route(layout, from, to, { via = [], prefer = null, traffic = nul
   return path.concat(leg.slice(1));
 }
 
+// ---- picking taxiways (the route picker): by name, near a point, and the ones that join a taxiway
+const NAMED = new Set(['twy', 'conn', 'link']);
+function segDist(p, a, b) {
+  const dx = b[0] - a[0]; const dy = b[1] - a[1];
+  const l2 = dx * dx + dy * dy;
+  const t = l2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)) : 0;
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+}
+
+// the named taxiway nearest a point (within maxD metres): {name, d} or null
+export function nearestTaxiway(layout, p, maxD) {
+  const g = layout.graph;
+  let best = null;
+  for (const e of g.edges) {
+    if (!e.name || !NAMED.has(e.kind)) continue;
+    const d = segDist(p, g.nodes[e.a].p, g.nodes[e.b].p);
+    if (d <= maxD && (!best || d < best.d)) best = { name: e.name, d };
+  }
+  return best;
+}
+
+// names of the taxiways within `radius` metres of a point, nearest first
+export function taxiwaysNear(layout, p, radius, max = 16) {
+  const g = layout.graph;
+  const found = new Map();
+  for (const e of g.edges) {
+    if (!e.name || !NAMED.has(e.kind)) continue;
+    const d = segDist(p, g.nodes[e.a].p, g.nodes[e.b].p);
+    if (d <= radius && d < (found.get(e.name) ?? Infinity)) found.set(e.name, d);
+  }
+  return [...found].sort((a, b) => a[1] - b[1]).slice(0, max).map(([n]) => n);
+}
+
+// names of the taxiways that meet the named one, nearest to `from` first (the ones you can turn onto)
+export function joiningTaxiways(layout, name, from = null, max = 16) {
+  const g = layout.graph;
+  if (!layout._nodeNames) {
+    const at = new Map();
+    for (const e of g.edges) {
+      if (!e.name || !NAMED.has(e.kind)) continue;
+      for (const n of [e.a, e.b]) { if (!at.has(n)) at.set(n, new Set()); at.get(n).add(e.name); }
+    }
+    layout._nodeNames = at;
+  }
+  const found = new Map();
+  for (const [n, names] of layout._nodeNames) {
+    if (!names.has(name)) continue;
+    const d = from ? Math.hypot(g.nodes[n].p[0] - from[0], g.nodes[n].p[1] - from[1]) : 0;
+    for (const other of names) if (other !== name && d < (found.get(other) ?? Infinity)) found.set(other, d);
+  }
+  return [...found].sort((a, b) => a[1] - b[1]).slice(0, max).map(([n]) => n);
+}
+
 // names of the taxiways a node route uses, in order, without repeats
 export function routeNames(layout, nodes) {
   const g = layout.graph;

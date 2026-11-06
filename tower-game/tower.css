@@ -56,6 +56,9 @@ body { display: flex; flex-direction: column; overflow: hidden; min-height: 0;
 .view-seg button { min-width: 52px; }
 .plan-bar { position: absolute; left: 12px; right: 12px; top: 60px; z-index: 3; padding: 10px 12px; border-radius: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
 .plan-bar[hidden] { display: none; }
+.plan-next { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+.plan-next[hidden] { display: none; }
+.chip.tw { flex: none; min-width: 52px; min-height: 40px; padding: 4px 12px; font-size: 16px; font-family: var(--mono); }
 .plan-btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .plan-cross { margin-right: auto; font-size: 13px; }
 .plan-cross[hidden] { display: none; }

@@ -55,6 +55,18 @@ const AIRLINE_VOICES = {
 };
 const ANY = [['us'], ['uk'], ['intl'], ['mix']];
 
+// Speaker genders of the corpora behind the voice models, from the published speaker lists, so a frequency has women
+// and men in it. Speakers not listed (all of LibriTTS-R) are taken as they come: half of them are women anyway.
+const csv = (f, m) => ({ ...Object.fromEntries(f.split(' ').map((n) => [n, 'f'])), ...Object.fromEntries(m.split(' ').map((n) => [n, 'm'])) });
+export const SPEAKER_GENDER = {
+  intl: csv('SKA ZHAA LXC NCC HJK YDCK SVBI TNI MBMPS NJS PNV THV', 'ABA YBAA BWC TXHC HKK YKWK ASI RRBI EBVS ERMS HQTV TLV'),
+  mix: csv('clb eey ljm lnh slt slp axb', 'awb bdl jmk rms ksp aup gka'),
+  uk: Object.fromEntries([
+    ...'225 228 229 230 231 233 234 236 238 239 240 244 248 249 250 253 257 261 262 263 264 265 266 267 268 269 276 277 280 282 283 288 293 294 295 297 299 300 301 303 305 306 307 308 310 312 313 314 317 318 323 329 330 333 335 336 339 340 341 343 351 361 362'.split(' ').map((n) => [`p${n}`, 'f']),
+    ...'226 227 232 237 241 243 245 246 247 251 252 254 255 256 258 259 260 270 271 272 273 274 275 278 279 281 284 285 286 287 292 298 302 304 311 316 326 334 345 347 360 363 364 374 376'.split(' ').map((n) => [`p${n}`, 'm']),
+  ]),
+};
+
 function hash(key) {
   let h = 2166136261;
   for (const c of String(key)) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
@@ -89,12 +101,20 @@ export function pilotVoice(key, airline, lang, have, configs = {}) {
   if (cfg?.speaker_id_map && Object.keys(cfg.speaker_id_map).length) {
     const map = cfg.speaker_id_map;
     const names = group ? group.filter((n) => n in map) : Object.keys(map);
-    const list = names.length ? names : Object.keys(map);
+    let list = names.length ? names : Object.keys(map);
+    // about half of the pilots are women: each pilot has a gender of their own, and a voice of it where the model says which is which
+    const gender = SPEAKER_GENDER[model];
+    if (gender) {
+      const want = frac(`g${key}`) < 0.5 ? 'f' : 'm';
+      const same = list.filter((n) => gender[n] === want);
+      if (same.length) list = same;
+    }
     speaker = map[list[hash(`s${key}`) % list.length]];
   }
   // one Chinese voice: pitch spread wider so pilots don't all sound alike
-  const spread = model === 'zh' ? 0.34 : 0.16;
-  return { model, speaker, pitch: 1 - spread / 2 + frac(`p${key}`) * spread, rate: 0.94 + frac(`r${key}`) * 0.16 };
+  const spread = model === 'zh' ? 0.4 : 0.3;
+  // and quite different paces: some pilots are slow and measured, some quick (0.85 to 1.3 times)
+  return { model, speaker, pitch: 1 - spread / 2 + frac(`p${key}`) * spread, rate: 0.85 + frac(`r${key}`) * 0.45 };
 }
 
 // ---------------------------------------------------------------- downloads

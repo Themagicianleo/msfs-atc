@@ -82,13 +82,26 @@ lets you pick them:
   ("runway **to** seven left", "stand one **for**") are fixed when they stand next to a number.
 - **Choose the taxi route on the map:** select an aircraft that is ready to taxi (or taxiing) and tap
   **Choose route on map**.
-  - Tap points on the taxiways in the order it should use them. The route is drawn in yellow, and the bar
-    shows the instruction, e.g. *via J3, B, A6 to holding point runway 36*.
+  - Tap near a taxiway (a generous 40 px, at any zoom): its name is added to the route. Or pick from the row of
+    buttons under the bar, which offers only the taxiways that join the one you chose last (before the first, those
+    around the aircraft), so there is no need to hit a line exactly.
+  - The route is drawn in yellow, and the bar shows the instruction, e.g. *via B, A to holding point runway 36*. The
+    pilot reads back the taxiways you chose, and flies the route shown.
   - Tap a holding point (departures) or a stand (arrivals) to change where it goes.
   - **Clear to cross runways** adds the crossing clearance to the instruction. Untick it to clear each
     crossing yourself later.
-  - **Undo**, **Clear**, **Cancel** or **Send**. The aircraft taxis exactly that way and the pilot reads back
-    the taxiways.
+  - **Undo**, **Clear**, **Cancel** or **Send**.
+- **Changing the route or the runway:** a departure that is taxiing or holding can be sent somewhere else at any time:
+  the **Change to RWY …** buttons, or say it (*change runway, taxi to holding point runway 28 left*, *amended route via
+  alpha charlie*, *use runway 28 right via bravo*; Chinese: *更改跑道，滑到跑道17左外等待点*, *重新滑行，经A、B*), or pick a new
+  route on the map.
+- **Departures asking for the landing runway:** about a third of the departure pilots, when the plan lands on a runway the
+  departures don't use, ask for it (*ready to taxi, request runway 28R for departure*). Say yes by sending them there
+  (the highlighted button, or *taxi to holding point runway 28R*), or no by sending them to their own runway. They then
+  take off from it like from any runway: keep the arrivals in mind.
+- **Everyone is different:** pilots are women and men with their own voices (device voices by name; built-in voices by the
+  speaker lists of their corpora), speak slowly or quickly, and taxi in their own way (about 14 to 29 kt, quick or slow to
+  pick up speed and to slow for corners).
 - **Pilots** do what you say but use their eyes:
   - Arrivals without a landing clearance go around at 0.9 NM, and at 0.3 NM if the runway is still occupied.
   - Taxiing aircraft stop for traffic on their route and hold short of runways until cleared to cross.

@@ -11,6 +11,7 @@
     "vacated": "{unit}，{callsign}，已脱离跑道{runway}，请求滑回停机位{gate}。",
     "push": ["{unit}，{callsign}，停机位{gate}，请求推出。", "{unit}，{callsign}，停机位{gate}，推出开车。", "{unit}，你好，{callsign}，停机位{gate}，请求推出。"],
     "taxi": ["{unit}，{callsign}，准备好滑行。", "{unit}，{callsign}，推出完毕，请求滑行。"],
+    "taxi_alt": ["{unit}，{callsign}，准备好滑行，申请跑道{alt}起飞。", "{unit}，{callsign}，推出完毕，请求滑行，可以用跑道{alt}离场吗？"],
     "ready": ["{unit}，{callsign}，跑道{runway}外等待点，准备好起飞。", "{unit}，{callsign}，跑道{runway}，准备好了。"],
     "hold_short": "{unit}，{callsign}，跑道{runway}外等待。",
     "handoff": "{unit}，{callsign}，请求转换频率。",
@@ -92,7 +93,7 @@
     { "cmd": "hold_position", "patterns": ["原地等待", "保持原地", "停止", "停住", "暂停"] },
     { "cmd": "continue_taxi", "patterns": ["继续滑行"] },
     { "cmd": "continue", "patterns": ["继续进近"] },
-    { "cmd": "taxi", "patterns": ["滑行", "滑到", "滑回", "滑往", "滑向"] },
+    { "cmd": "taxi", "patterns": ["滑行", "滑到", "滑回", "滑往", "滑向", "更改跑道", "改用跑道", "改跑道", "重新滑行", "更改滑行路线"] },
     { "cmd": "contact", "patterns": ["联系", "再见", "转换频率"] }
   ]
 }

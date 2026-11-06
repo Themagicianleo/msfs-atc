@@ -26,6 +26,18 @@ export function voiceScore(v, efficient = false) {
   return s;
 }
 
+// Device voices don't say whether they are a woman or a man; the names of the common ones do.
+const FEMALE = /^(samantha|karen|moira|tessa|serena|martha|catherine|allison|susan|joelle|noelle|ava|zoe|nicky|stephanie|ting-ting|tingting|lili|yu-shu|meijia|sinji|aria|jenny|sonia|libby|hazel|zira|susan|heather|linda|catherine|amelie|anna|alice|paulina|monica|kyoko|sara|nora|ellen|fiona|veena|lekha|mei-jia|yaoyao|huihui|xiaoxiao|xiaoyi|hanhan|yating|female)\b|female/i;
+const MALE = /^(daniel|alex|aaron|arthur|gordon|rishi|tom|evan|nathan|oliver|fred|ralph|guy|ryan|david|mark|george|james|richard|thomas|google uk english male|male|yunxi|yunyang|kangkang|zhiwei|jorge|diego|thomas|otoya|ichiro|hemant|rishi)\b|\bmale\b/i;
+export function voiceGender(v) {
+  const name = String(v.name || '').replace(/^(microsoft|google|apple)\s+/i, ''); // "Microsoft Aria Online (Natural)" -> "Aria ..."
+  if (/\bfemale\b/i.test(name)) return 'f';
+  if (/\bmale\b/i.test(name)) return 'm';
+  if (FEMALE.test(name)) return 'f';
+  if (MALE.test(name)) return 'm';
+  return null;
+}
+
 // the better voices of a language, best first
 export function rankVoices(voices, langPrefix, efficient = false) {
   const want = langPrefix.toLowerCase();
@@ -46,7 +58,7 @@ function hash(key) {
 // a stable, different pitch and pace per pilot
 export function pilotVoiceShape(key) {
   const h = hash(key);
-  return { pitch: 0.86 + ((h % 1000) / 1000) * 0.3, rate: 0.92 + (((h >>> 10) % 1000) / 1000) * 0.2 };
+  return { pitch: 0.8 + ((h % 1000) / 1000) * 0.4, rate: 0.85 + (((h >>> 10) % 1000) / 1000) * 0.45 }; // slow and measured to quick
 }
 
 // Where an airline's pilots are from: the voice languages to try, best first.
@@ -118,7 +130,15 @@ export class Speaker {
   pick(pool, key) {
     if (!pool.length) return null;
     const eff = !!this.settings.efficient;
-    const top = pool.filter((v) => voiceScore(v, eff) >= voiceScore(pool[0], eff) - 30).slice(0, 12);
+    let top = pool.filter((v) => voiceScore(v, eff) >= voiceScore(pool[0], eff) - 30).slice(0, 12);
+    // each pilot has a gender of their own (about half women): a voice of that gender where the pool has one
+    const want = (hash(`g${key}`) % 100) < 50 ? 'f' : 'm';
+    const same = top.filter((v) => voiceGender(v) === want);
+    if (same.length) top = same;
+    else {
+      const wider = pool.filter((v) => voiceGender(v) === want).slice(0, 12);
+      if (wider.length) top = wider;
+    }
     return top[hash(key) % top.length];
   }
 
