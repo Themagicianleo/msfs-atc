@@ -59,8 +59,11 @@ lets you pick them:
   to the command words. So callsigns that are not English words (*Shenzhen*, *Loong Air*, *Tianfu*) are found even when the
   model writes *Chen Jen* or *long air*. It is not retrained: it is guided by the prompt and the matching (`js/lib/asr-correct.js`).
   It recognises a whole transmission after you stop talking (a moment's delay), in English and Chinese.
-- **Taxiway names are always said as code words,** by pilots in English (*alpha, bravo one, whiskey alpha*) and in Chinese
-  (*阿尔法、布拉沃幺、威士忌阿尔法*), never as a bare letter. You can say them either way; both languages are understood.
+- **Taxiway names are always said as code words,** never as a bare letter. Pilots say the English ICAO/FAA words in both
+  languages: *alpha, bravo one, whiskey alpha*, and in Chinese radio the same words inside the Chinese sentence
+  (*经 alpha、bravo 幺滑到跑道两拐外等待点*, digits in Chinese). Chinese calls are said by two voices: the Chinese voice for the
+  Chinese and an English voice for the code words (a Chinese voice cannot read "alpha"). You can say them in English or, as
+  recognisers sometimes write them, as Chinese transliterations (阿尔法, 布拉沃...); all are understood.
 - **Fast speech:** listening starts the moment you press (the key shows *Wait...* until the microphone is open;
   words said before that are lost). Merged words are split back (*alphabravo*, *bravo1*, *whiskeyalpha*), *double two* and
   *triple five* are read as digits, and clipped phrases work (*cleared land*, *hold pos*, *holdshort*, *go round*, *enter runway*).

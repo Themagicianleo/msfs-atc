@@ -5,6 +5,7 @@ import { buildLayout } from '../js/layout.js';
 import { World } from '../js/world.js';
 import { zhSpell } from '../js/zh.js';
 import { understand } from '../js/commands.js';
+import { Speaker, splitLanguages } from '../js/lib/speech.js';
 import { correctTranscript, recognitionPrompt, similarity, soundKey, toSimplified } from '../js/lib/asr-correct.js';
 import { recognitionHints } from '../js/lib/hints.js';
 import { EndOfSpeech, resample, rms } from '../js/lib/whisper.js';
@@ -28,17 +29,18 @@ function world(code) {
 }
 
 // ---------------------------------------------------------------- taxiway letters are said as code words
-test('Chinese radio says taxiway letters as code words, never as a bare letter', () => {
-  assert.equal(zhSpell('A'), '阿尔法');
-  assert.equal(zhSpell('WB1'), '威士忌布拉沃幺');
-  assert.equal(zhSpell('A12'), '阿尔法幺两');
+test('Chinese radio says taxiway letters as the English code words (digits stay Chinese), never a bare letter', () => {
+  assert.equal(zhSpell('A'), 'alpha');
+  assert.equal(zhSpell('WB1'), 'whiskey bravo 幺');
+  assert.equal(zhSpell('A12'), 'alpha 幺两');
+  assert.equal(zhSpell('X'), 'x-ray');
   assert.equal(zhSpell('3101'), '三幺洞幺');
   const w = world('CSN');
   const ac = w.spawnArrival(null, 6);
   const via = w.viaText({ via: ['A', 'B1', 'X'] }, ac);
   assert.equal(via.t, 'A、B1、X'); // shown as written
-  assert.equal(via.s, '阿尔法、布拉沃幺、艾克斯雷'); // spoken as code words
-  assert.ok(!/[A-Z]/.test(via.s));
+  assert.equal(via.s, 'alpha、bravo 幺、x-ray'); // spoken as code words
+  assert.ok(!/(^|[^a-z-])[a-zA-Z]($|[^a-z-])/.test(via.s), 'no bare letter');
 });
 
 test('English radio says taxiway letters as FAA/ICAO code words', () => {
@@ -54,7 +56,7 @@ test('what the pilot says in Chinese or English is understood back as the same t
   const en = understand('Aeroflot 123 taxi to stand 12 via alpha, bravo one, whiskey alpha', ac, PHR.commands, null, known);
   assert.deepEqual(en.cmd.via, ['A', 'B1', 'WA']);
   const acz = [{ id: 2, tel: 'China Southern', telZh: '南方', code: 'CSN', num: '3101', callsign: 'CSN3101' }];
-  const zh = understand(`南方3101，经${zhSpell('A')}${zhSpell('B1')}${zhSpell('WA')}滑到停机位12`, acz, PHR.commands, null, known, PHR_ZH.commands);
+  const zh = understand(`南方3101，经${['A', 'B1', 'WA'].map(zhSpell).join('、')}滑到停机位12`, acz, PHR.commands, null, known, PHR_ZH.commands);
   assert.deepEqual(zh.cmd.via, ['A', 'B1', 'WA']);
 });
 
@@ -198,10 +200,10 @@ test('"unable" replies say taxiway letters, runways and stands the radio way too
   const r = zh.unable(a, "we can't find taxiway T, G6");
   assert.match(r.text, /找不到滑行道T, G6/);
   const ev = zh.drain().find((e) => e.kind === 'pilot' && e.unable);
-  assert.match(ev.speech, /找不到滑行道探戈、高尔夫六/);
-  assert.ok(!/[A-Z]/.test(ev.speech.replace(/\s/g, '')), ev.speech);
+  assert.match(ev.speech, /找不到滑行道tango、golf 六/);
+  assert.ok(!/[A-Z]/.test(ev.speech), ev.speech);
   zh.unable(a, 'stand A12 is occupied');
-  assert.match(zh.drain().find((e) => e.unable).speech, /停机位阿尔法幺两被占用/);
+  assert.match(zh.drain().find((e) => e.unable).speech, /停机位alpha 幺两被占用/);
   zh.unable(a, 'runway 35R is not available');
   assert.match(zh.drain().find((e) => e.unable).speech, /跑道三五右不可用|跑道三拐?五右/);
   const en = world('AFL');
@@ -240,4 +242,20 @@ test('Daxing: one route, said many ways in Chinese and English, is understood as
   assert.deepEqual(via('China United 5720 taxi via t g 6'), ['T6', 'G']);
   // and names that really are what was said are left alone
   assert.deepEqual(via('联航5720经G6、T滑到跑道35右外等待点'), ['G6', 'T']);
+});
+
+test('a Chinese call with English code words is said by a Chinese voice and an English voice, in order', () => {
+  assert.deepEqual(splitLanguages('经alpha、bravo 幺、whiskey alpha滑到跑道两拐外等待点，南方三幺六六。'), [
+    { text: '经', lang: 'zh' }, { text: 'alpha, bravo', lang: 'en' }, { text: ' 幺、', lang: 'zh' },
+    { text: 'whiskey alpha', lang: 'en' }, { text: '滑到跑道两拐外等待点，南方三幺六六。', lang: 'zh' }]);
+  assert.deepEqual(splitLanguages('跑道三五右，可以起飞'), [{ text: '跑道三五右，可以起飞', lang: 'zh' }]);
+  assert.deepEqual(splitLanguages('taxi via alpha', 'en'), [{ text: 'taxi via alpha', lang: 'en' }]);
+  // the speaker hands each part to the right voice (muted here, so the parts are only queued)
+  const sp = Object.create(Speaker.prototype);
+  Object.assign(sp, { settings: { tts: true }, muted: true, held: [] });
+  sp.speak('经alpha、bravo 幺滑到跑道两拐外等待点，南方三幺六六。', 'ac1', 'zh', { reply: true, airline: 'CSN' });
+  assert.deepEqual(sp.held.map((h) => [h.args[0], h.args[2]]), [['经', 'zh'], ['alpha, bravo', 'en'], [' 幺滑到跑道两拐外等待点，南方三幺六六。', 'zh']]);
+  assert.equal(sp.held[0].args[3].reply, true); // only the first part waits like a reply
+  assert.equal(sp.held[1].args[3].reply, false);
+  assert.equal(sp.held[1].args[3].airline, 'CSN'); // the English words take the pilot's own accent (Chinese airline: Mandarin-accented English)
 });

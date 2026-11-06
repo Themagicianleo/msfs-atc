@@ -11,14 +11,25 @@ export function zhDigits(str) {
   return String(str).replace(/\d/g, (d) => READ[d]);
 }
 
-// The ICAO/FAA code words as said in Chinese radio. Taxiway letters are spoken as these, never as a bare letter.
+// Chinese radio says taxiway letters as the English ICAO/FAA code words, in the middle of a Chinese sentence
+// ("经 alpha、bravo 幺"); the digits stay Chinese. Never a bare letter, and not a Chinese transliteration either.
+export const SPOKEN_CODE_WORDS = { A: 'alpha', B: 'bravo', C: 'charlie', D: 'delta', E: 'echo', F: 'foxtrot', G: 'golf', H: 'hotel', I: 'india',
+  J: 'juliet', K: 'kilo', L: 'lima', M: 'mike', N: 'november', O: 'oscar', P: 'papa', Q: 'quebec', R: 'romeo', S: 'sierra', T: 'tango',
+  U: 'uniform', V: 'victor', W: 'whiskey', X: 'x-ray', Y: 'yankee', Z: 'zulu' };
+// the Chinese transliterations a recogniser may write (understood when heard, see CODE_WORDS_ZH_HEARD below)
 export const ZH_CODE_WORDS = { A: '阿尔法', B: '布拉沃', C: '查理', D: '德尔塔', E: '艾科', F: '福克斯特', G: '高尔夫', H: '赫特尔', I: '印度',
   J: '朱丽叶', K: '基洛', L: '利马', M: '迈克', N: '诺维姆博', O: '奥斯卡', P: '帕帕', Q: '魁北克', R: '罗密欧', S: '塞拉', T: '探戈',
   U: '优尼佛姆', V: '维克多', W: '威士忌', X: '艾克斯雷', Y: '洋基', Z: '祖鲁' };
 
-// "WA" -> "威士忌阿尔法", "B1" -> "布拉沃幺", "3101" -> "三幺洞幺"; a stand like "A12" is read the same way
+// "WB1" -> "whiskey bravo 幺"; "A12" -> "alpha 幺 两"; "3101" -> "三幺洞幺". Letters are separate words, so the text can be
+// handed to an English voice word by word (see splitLanguages in speech.js).
 export function zhSpell(str) {
-  return [...String(str).toUpperCase()].map((c) => (/\d/.test(c) ? READ[c] : (ZH_CODE_WORDS[c] || c))).join('');
+  const parts = [];
+  for (const c of String(str).toUpperCase()) {
+    if (/\d/.test(c)) parts.push(READ[c]);
+    else parts.push(SPOKEN_CODE_WORDS[c] || c);
+  }
+  return parts.join(' ').replace(/(?<=[\u4e00-\u9fff]) (?=[\u4e00-\u9fff])/g, '');
 }
 
 export function zhRunway(id) {

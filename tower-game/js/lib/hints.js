@@ -44,7 +44,7 @@ export function recognitionHints({ aircraft = [], taxiways = [], zh = false, max
   }
   for (const t of (zh ? ZH_COMMANDS : EN_COMMANDS)) add(t, 5);
   for (const w of WORDS) add(w, 7);
-  if (zh) for (const w of Object.values(ZH_WORDS)) add(w, 6);
+  if (zh) { for (const w of WORDS) add(w, 7); for (const w of Object.values(ZH_WORDS)) add(w, 4); }
   for (const t of taxiways) add(spellTaxiway(t, zh), 4);
   return out.slice(0, max);
 }
