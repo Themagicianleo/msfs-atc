@@ -438,6 +438,11 @@ function addMsg(cls, who, text, onClick) {
   box.append(div);
   while (box.children.length > 150) box.firstChild.remove();
   box.scrollTop = box.scrollHeight;
+  if (cls !== 'sys') { // the latest call, one line, for when the panels are shut
+    const t = $('#ticker');
+    t.textContent = `${who ? `${who}  ` : ''}${text}`;
+    t.hidden = document.querySelector('.side').dataset.open !== 'none';
+  }
 }
 const sys = (text, cls = 'sys') => addMsg(cls, '', text);
 
@@ -501,7 +506,11 @@ $('#cmd-form').addEventListener('submit', (e) => {
 renderer.getInsets = () => {
   const portrait = window.matchMedia('(orientation: portrait), (max-width: 900px)').matches;
   const dock = document.querySelector('.side')?.getBoundingClientRect();
-  return portrait ? { t: 48, b: 8, l: 8, r: 8 } : { t: 56, b: 16, l: 12, r: (dock ? dock.width : 0) + 22 };
+  if (portrait) {
+    const bar = ['.talk', '#side-tabs'].reduce((h, q) => h + (document.querySelector(q)?.getBoundingClientRect().height || 0), 0);
+    return { t: 48, b: bar + 24, l: 8, r: 8 };
+  }
+  return { t: 56, b: 16, l: 12, r: (dock ? dock.width : 0) + 22 };
 };
 
 renderer.onTap = (pos, q) => {
@@ -679,12 +688,21 @@ function stripState(a) {
 // The panel is rebuilt only when something structural changes, so a tap is
 // never lost on an element that was just replaced; distances update in place.
 let lastSel = '';
+let lastPicked = null;
 let lastStrips = '';
 function renderPanel() {
   const w = game.world;
   if (!w) return;
   const ac = w.find(game.selected);
   if (!ac && game.selected != null) game.selected = null;
+  if (game.selected !== lastPicked) { // the tap on an aircraft brings up its panel under the thumb
+    lastPicked = game.selected;
+    if (narrowQuery.matches) {
+      if (game.selected != null) openDock('aircraft', false);
+      else if (document.querySelector('.side').dataset.open === 'aircraft') openDock('aircraft');
+    }
+  }
+  $('#tab-dot').hidden = !w.ac.some((a) => a.req);
   const selKey = JSON.stringify([game.selected, ac?.state, ac?.gate, ac?.end, ac?.wants, w.depEnds.join('+'), ac?.req?.type, ac?.hold, ac?.crossings?.map((c) => c.cleared), ac?.cleared]);
   if (selKey !== lastSel) {
     lastSel = selKey;
@@ -769,12 +787,23 @@ $('#strips').addEventListener('click', (e) => {
 });
 
 // Traffic / Radio tabs (narrow screens show one list at a time, so each gets the room)
+// Narrow screens: the map is the whole screen. Under it only the tabs and the talk key show; a tab opens its panel over the map,
+// the same tab again closes it. (On big screens all the panels are always out and the tabs are hidden.)
+const narrowQuery = window.matchMedia('(orientation: portrait), (max-width: 900px)');
+function openDock(tab, toggle = true) {
+  const side = document.querySelector('.side');
+  const next = toggle && side.dataset.open === tab ? 'none' : tab;
+  side.dataset.open = next;
+  $$('#side-tabs button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.tab === next)));
+  if (next === 'settings') document.querySelector('details.settings').open = true;
+  if (next === 'radio') { const log = $('#log'); log.scrollTop = log.scrollHeight; }
+  $('#ticker').hidden = next !== 'none' || !$('#ticker').textContent;
+}
 $('#side-tabs').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-tab]');
-  if (!b) return;
-  document.querySelector('.side-lists').dataset.tab = b.dataset.tab;
-  $$('#side-tabs button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  if (b) openDock(b.dataset.tab);
 });
+$('#ticker').addEventListener('click', () => openDock('radio', false));
 
 // ---------------------------------------------------------------- voice
 const ai = new AiRecognizer();
