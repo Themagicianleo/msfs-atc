@@ -45,10 +45,10 @@ export class Listener {
 
   setState(state, detail = '') { this.onState?.(state, detail); }
 
-  start() {
+  start(useAi = true) {
     if (this.disabled || this.active) return;
     this.aiMode = false;
-    if (this.ai?.usable()) { this.startAi(); return; }
+    if (useAi && !this.aiSkip && this.ai?.usable()) { this.startAi(); return; }
     const rec = new this.support.SR();
     rec.lang = this.lang;
     rec.interimResults = true;
@@ -135,10 +135,17 @@ export class Listener {
       });
     } catch (err) {
       this.active = false;
-      if (err?.name === 'NotAllowedError' || err?.name === 'SecurityError') this.disable('Microphone permission was denied.');
-      else this.fail(`Could not open the microphone (${err?.message || err}).`);
+      if (err?.name === 'NotAllowedError' || err?.name === 'SecurityError') { this.disable('Microphone permission was denied.'); return; }
+      // The model's microphone would not open: this press uses the browser's own recogniser instead, and after two such
+      // failures so does everything else until the page is reloaded. Voice input does not stop.
+      this.aiMicFails = (this.aiMicFails || 0) + 1;
+      if (this.aiMicFails >= 2) this.aiSkip = true;
+      this.aiMicError = String(err?.message || err);
+      if (this.support.ok) { this.start(false); return; }
+      this.fail(`Could not open the microphone (${this.aiMicError}).`);
       return;
     }
+    this.aiMicFails = 0;
     if (token !== this.aiToken || !this.active) { rec.abort(); return; }
     this.recording = rec;
     this.setState('listening');

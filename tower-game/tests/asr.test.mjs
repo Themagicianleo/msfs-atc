@@ -259,3 +259,58 @@ test('a Chinese call with English code words is said by a Chinese voice and an E
   assert.equal(sp.held[1].args[3].reply, false);
   assert.equal(sp.held[1].args[3].airline, 'CSN'); // the English words take the pilot's own accent (Chinese airline: Mandarin-accented English)
 });
+
+// ---------------------------------------------------------------- iPad: the microphone and the audio session
+import { AiRecognizer } from '../js/lib/whisper.js';
+
+test('recording asks iOS for play-and-record and puts the audio session back (the radio keeps it on "playback")', async () => {
+  const session = { type: 'playback' };
+  const seen = [];
+  const track = { stop() {} };
+  const ctxs = [];
+  class Ctx { constructor() { this.sampleRate = 48000; this.state = 'running'; this.destination = {}; ctxs.push(this); }
+    resume() { return Promise.resolve(); } close() { return Promise.resolve(); }
+    createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
+    createScriptProcessor() { return { connect() {}, disconnect() {}, onaudioprocess: null }; } }
+  const nav = { audioSession: session, mediaDevices: { getUserMedia: async () => { seen.push(session.type); return { getTracks: () => [track] }; } } };
+  Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
+  globalThis.window = { AudioContext: Ctx };
+  try {
+    const rec = await new AiRecognizer(null).record();
+    assert.deepEqual(seen, ['play-and-record']); // while the microphone is opened
+    assert.equal(session.type, 'play-and-record'); // and while recording
+    rec.abort();
+    assert.equal(session.type, 'playback'); // back, so the pilots are heard
+    // a microphone that fails to open leaves the session as it was
+    nav.mediaDevices.getUserMedia = async () => { throw new Error('AudioSession category is not compatible with audio capture.'); };
+    await assert.rejects(() => new AiRecognizer(null).record(), /AudioSession/);
+    assert.equal(session.type, 'playback');
+  } finally { delete globalThis.window; delete globalThis.navigator; }
+});
+
+test('if the model\'s microphone cannot be opened, the browser\'s recogniser takes that press, and voice input does not stop', async () => {
+  const started = [];
+  function SR() { this.start = () => { started.push('browser'); this.onstart?.(); }; this.stop = () => {}; this.abort = () => {}; }
+  globalThis.window = { SpeechRecognition: SR, isSecureContext: true, matchMedia: () => ({ matches: false }), navigator: {} };
+  try {
+    let tried = 0;
+    const ai = { status: 'ready', usable() { return this.status === 'ready'; }, record: async () => { tried += 1; throw new Error('AudioSession category is not compatible with audio capture.'); } };
+    const states = [];
+    const l = new Listener({ lang: 'en-US', ai, onFinal: () => {}, onState: (s, d) => states.push([s, d]) });
+    l.start();
+    await new Promise((r) => setTimeout(r, 5));
+    assert.deepEqual(started, ['browser']); // the browser's recogniser listens instead
+    assert.equal(l.disabled, false);
+    assert.equal(l.failures, 0); // not counted as a failure
+    assert.ok(!states.some(([s]) => s === 'error' || s === 'disabled'));
+    l.active = false;
+    l.start(); // second failure: from now on the model is skipped
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(l.aiSkip, true);
+    l.active = false;
+    l.start();
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(tried, 2); // not tried a third time
+    assert.equal(started.length, 3);
+  } finally { delete globalThis.window; }
+});
