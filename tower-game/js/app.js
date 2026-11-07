@@ -804,6 +804,8 @@ $('#side-tabs').addEventListener('click', (e) => {
   if (b) openDock(b.dataset.tab);
 });
 $('#ticker').addEventListener('click', () => openDock('radio', false));
+// open Settings: on big screens it takes the dock's height (and the lists step aside); see hud.css
+document.querySelector('details.settings').addEventListener('toggle', (e) => document.querySelector('.side').classList.toggle('settings-open', e.target.open));
 
 // ---------------------------------------------------------------- voice
 const ai = new AiRecognizer();
