@@ -89,7 +89,7 @@ body { font-size: 14px; letter-spacing: 0; }
 
 /* aircraft commands */
 .cmds { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 6px; }
-.cmds button { min-height: 36px; padding: 0 8px; white-space: nowrap; border-radius: 10px; font-size: 13px; background: var(--fill); box-shadow: none; }
+.cmds button { min-height: 36px; padding: 4px 8px; line-height: 1.2; border-radius: 10px; font-size: 13px; background: var(--fill); box-shadow: none; }
 .cmds button.primary { background: var(--blue); box-shadow: 0 4px 12px color-mix(in srgb, var(--blue) 30%, transparent); }
 
 /* traffic: compact rows */
@@ -105,29 +105,57 @@ body { font-size: 14px; letter-spacing: 0; }
 .chip.tw { min-height: 34px; min-width: 44px; padding: 2px 10px; font-size: 14px; border-radius: 999px; }
 .plan-btns .btn { min-height: 30px; }
 
-/* ---------- phones and tablets in portrait: the panels become a sheet under the map ---------- */
+/* the tabs and the ticker only exist on narrow screens */
+.side-tabs, .ticker { display: none; }
+.dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--orange); vertical-align: 1px; }
+
+/* ---------- phones and tablets in portrait: the map is the whole screen ----------
+   Under it only a tab row and the talk key show. A tab opens its panel over the map (the same tab again shuts it), the
+   latest radio call runs as one line while the panels are shut, and tapping an aircraft opens its panel. */
 @media (orientation: portrait), (max-width: 900px) {
-  .game { display: flex; flex-direction: column; }
-  .map-wrap.card { position: relative; inset: auto; flex: 1 1 52%; min-height: 260px; }
+  .game { display: block; }
+  .map-wrap.card { position: absolute; inset: 0; min-height: 0; }
   .map-tools { right: var(--gap); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .map-tools > * { flex: none; }
   .plan-bar { right: var(--gap); width: auto; }
-  .side { position: relative; inset: auto; width: auto; flex: 1 1 48%; min-height: 0; padding: 8px 8px 0; gap: 8px; overflow-y: auto; pointer-events: auto;
-    background: var(--sheet); border-top: 1px solid var(--panel-edge); border-radius: 18px 18px 0 0; margin-top: -14px; z-index: 3;
-    box-shadow: 0 -8px 24px rgba(0, 0, 0, .12); }
-  .side .card, .talk { box-shadow: none; background: var(--fill); border-color: transparent; }
-  .talk { background: transparent; padding: 0; }
-  .side-lists { pointer-events: auto; min-height: 220px; }
-  #radio-card { flex: 1 1 0; min-height: 0; }
+
+  .side { position: absolute; inset: auto 0 0 0; width: auto; max-height: calc(100% - 56px); padding: 0 var(--gap) calc(var(--gap) + env(safe-area-inset-bottom, 0px));
+    gap: 6px; overflow: visible; pointer-events: none; background: none; border: 0; box-shadow: none; margin: 0; border-radius: 0; z-index: 8; }
+  .side > * { pointer-events: auto; }
+  .side-lists { pointer-events: none; min-height: 0; }
+  .side .card, .talk { background: var(--panel); border: 1px solid var(--panel-edge); box-shadow: var(--panel-shadow); }
+
+  /* from the top of the stack down: the open panel, the ticker, the tabs, the talk key */
+  #selected, .side-lists, .settings { display: none; order: 1; }
+  .ticker { order: 2; }
+  .side-tabs { order: 3; }
+  .talk { order: 4; }
+  .side[data-open="aircraft"] #selected { display: block; max-height: 46vh; overflow-y: auto; }
+  .side[data-open="traffic"] .side-lists, .side[data-open="radio"] .side-lists { display: flex; max-height: min(44vh, 380px); flex: 0 1 auto; }
+  .side[data-open="traffic"] #radio-card, .side[data-open="radio"] #traffic-card { display: none; }
+  .side[data-open="settings"] .settings { display: block; max-height: 56vh; overflow-y: auto; }
   .side-lists .card-head { display: none; }
-  .side-lists[data-tab="traffic"] #radio-card, .side-lists[data-tab="radio"] #traffic-card { display: none; }
-  #traffic-card { max-height: none; flex: 1 1 0; }
-  .map-config { position: static; }
+  #traffic-card, #radio-card { max-height: none; flex: 0 1 auto; min-height: 0; }
+  #traffic-card .card-body, #radio-card .card-body { min-height: 0; overflow: hidden; }
+  .side .card, .talk { background: color-mix(in srgb, var(--surface) 97%, transparent); }
+  .side-lists .card-body { padding-top: 10px; }
+
+  .side-tabs { display: flex; width: 100%; padding: 2px; background: var(--panel); border: 1px solid var(--panel-edge); box-shadow: var(--panel-shadow); }
+  .side-tabs button { flex: 1 1 0; padding: 7px 4px; font-size: 13px; text-align: center; }
+  .side-tabs button[aria-pressed="true"] { background: var(--fill); box-shadow: none; }
+  .ticker { display: block; padding: 6px 12px; border-radius: 12px; font-size: 12.5px; line-height: 1.35; color: var(--fg); cursor: pointer;
+    background: var(--panel); border: 1px solid var(--panel-edge); box-shadow: var(--panel-shadow); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ticker[hidden] { display: none; }
+  .talk { padding: 6px; gap: 6px; }
+  .ptt { min-height: 50px; }
 }
 @media (max-width: 600px) {
   .game-bar { padding: 0 8px; gap: 6px; overflow-x: auto; scrollbar-width: none; }
   .game-bar .capsule.info { display: none; }
   .map-tools { top: 8px; left: 8px; right: 8px; }
-  .ptt { min-height: 56px; }
   .cmds { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
+  .cmd-row .input { min-height: 40px; }
+}
+@media (orientation: portrait), (max-width: 900px) {
+  .cmds { grid-template-columns: repeat(2, 1fr); }
 }

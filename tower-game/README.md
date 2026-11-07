@@ -39,8 +39,10 @@ lets you pick them:
 
 - **Layout:** the airport fills the screen. A slim bar on top carries the clock, wind and speed; the map controls (view,
   Chart, Fit, Runways, Traffic) are one row over the map; the talk key, the selected aircraft, the traffic and the radio float
-  over the right-hand side as small panels (`hud.css`). On a phone or a tablet in portrait they become a sheet under the map,
-  with Traffic and Radio as tabs. Light and dark follow the device (Settings → Appearance).
+  over the right-hand side as small panels (`hud.css`). On a phone or a tablet in portrait the map is the whole screen and only
+  a tab row (Aircraft, Traffic, Radio, More) and the talk key sit under it: a tab opens its panel over the map (tap it again to
+  shut it), the latest radio call runs as one line while the panels are shut, a dot on Traffic shows someone is calling, and
+  tapping an aircraft opens its panel. Light and dark follow the device (Settings → Appearance).
 - **Select** an aircraft by tapping it on the map or its strip. A yellow ring and a
   highlighted strip mean it is calling you; the blue button is the usual answer.
 - **Where it's going:** aircraft on the ground show their destination on the strip, the map label and

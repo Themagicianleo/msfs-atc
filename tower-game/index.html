@@ -126,7 +126,7 @@
       <div id="map-hint" class="map-hint muted">Drag to pan · pinch or scroll to zoom · tap an aircraft to select it</div>
     </section>
 
-    <aside class="side">
+    <aside class="side" data-open="none">
       <div class="talk">
       <div class="ptt-row">
         <button id="ptt" class="ptt hero-tile" type="button"><span id="ptt-label">Start talking</span><span id="ptt-interim" class="interim"></span></button>
@@ -152,8 +152,7 @@
         </div>
       </section>
 
-      <div class="side-lists" data-tab="traffic">
-      <span id="side-tabs" class="seg side-tabs" role="group" aria-label="Show"><button type="button" data-tab="traffic" aria-pressed="true">Traffic</button><button type="button" data-tab="radio" aria-pressed="false">Radio</button></span>
+      <div class="side-lists">
       <section class="card" id="traffic-card">
         <div class="card-head"><h2>Traffic</h2></div>
         <div class="card-body"><div id="strips" class="strips"></div></div>
@@ -165,6 +164,11 @@
       </section>
 
       </div>
+
+      <div id="ticker" class="ticker" role="button" tabindex="0" aria-label="Latest radio call, tap to open the radio" hidden></div>
+      <span id="side-tabs" class="seg side-tabs" role="group" aria-label="Show">
+        <button type="button" data-tab="aircraft" aria-pressed="false">Aircraft</button><button type="button" data-tab="traffic" aria-pressed="false">Traffic<i id="tab-dot" class="dot" hidden></i></button><button type="button" data-tab="radio" aria-pressed="false">Radio</button><button type="button" data-tab="settings" aria-pressed="false">More</button>
+      </span>
 
       <details class="card settings">
         <summary class="card-head"><h2>Settings and help</h2></summary>
