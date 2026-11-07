@@ -145,7 +145,19 @@ export class AiRecognizer {
   // tells the caller what the microphone hears.
   async record(onEvent) {
     const Ctx = window.AudioContext || window.webkitAudioContext;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    // iOS Safari: while the audio session is in "playback" (which the radio sets so the pilots are heard) the microphone cannot be
+    // opened ("AudioSession category is not compatible with audio capture"). Record in play-and-record, then put it back.
+    const session = navigator.audioSession;
+    const before = session?.type;
+    const setSession = (type) => { try { if (session && type) session.type = type; } catch { /* older Safari: nothing to set */ } };
+    setSession('play-and-record');
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    } catch (err) {
+      setSession(before);
+      throw err;
+    }
     const ctx = new Ctx();
     if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
     const src = ctx.createMediaStreamSource(stream);
@@ -172,6 +184,7 @@ export class AiRecognizer {
       try { node.disconnect(); src.disconnect(); } catch { /* ignore */ }
       stream.getTracks().forEach((t) => t.stop());
       ctx.close().catch(() => {});
+      setSession(before);
     };
     return {
       rate: ctx.sampleRate,
