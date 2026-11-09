@@ -199,3 +199,32 @@ test('the controller can change a taxiing departure to another runway, or to ano
   // a runway with no holding point is refused politely
   assert.equal(w.command(ac.id, { type: 'taxi', runway: '09' }).ok, false);
 });
+
+// ---------------------------------------------------------------- a runway named without its side ("35" for 35R): the recogniser often drops it
+import { runwaysForArg } from '../js/layout.js';
+
+test('"runway 17" with the side lost means the end the aircraft is on, or going to; with nothing to go by the pilot asks', () => {
+  const { w, ac, L } = daxing();
+  assert.deepEqual(runwaysForArg(L, '17').map((r) => r.id).sort(), ['17L/35R', '17R/35L']);
+  assert.equal(runwaysForArg(L, '17L').length, 1);
+  assert.deepEqual(runwaysForArg(L, '99'), []);
+  assert.equal(w.resolveEnd(ac, '17'), '17R'); // it is a 17R departure
+  assert.equal(w.resolveEnd(ac, '17L'), '17L'); // a full name is taken as said
+  // a taxi instruction with the side missing goes where the aircraft is going
+  const r = w.command(ac.id, { type: 'taxi', runway: '17' });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(ac.end, '17R');
+  // an arrival on 17L is cleared to land "runway 17"
+  const arr = w.spawnArrival(null, 6);
+  assert.equal(arr.end, '17L');
+  assert.equal(w.command(arr.id, { type: 'land', runway: '17' }).ok, true);
+  assert.equal(arr.cleared.land, true);
+  // 35: neither 35L nor 35R is in use, so there is nothing to go by: "which runway?"
+  w.drain();
+  const bad = w.command(ac.id, { type: 'taxi', runway: '35' });
+  assert.equal(bad.ok, false);
+  assert.match(bad.text, /which runway: runway 35[LR] or runway 35[LR]/);
+  const ev = w.drain().find((e) => e.unable);
+  assert.match(ev.speech, /runway three five (left|right)/);
+  assert.equal(ac.end, '17R'); // and nothing changed
+});

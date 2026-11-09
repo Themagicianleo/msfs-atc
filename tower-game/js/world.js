@@ -5,7 +5,7 @@
 
 import { Formatter, render } from './lib/format.js';
 import { M_PER_NM, KT, Path, add, dist, dot, headingOf, mul, norm, sub, fromHeading, angleDiff } from './geo.js';
-import { endGeometry, joiningTaxiways, onRunway, route, routeCrossings, routeNames, runwayForEnd, taxiwayNames, taxiwaysNear, unknownVia } from './layout.js';
+import { endGeometry, joiningTaxiways, onRunway, route, routeCrossings, routeNames, runwayForEnd, runwaysForArg, taxiwayNames, taxiwaysNear, unknownVia } from './layout.js';
 import { zhDigits, zhReason, zhRunway, zhSpell, zhWind } from './zh.js';
 import { windComponents } from './lib/runway.js';
 
@@ -899,7 +899,12 @@ export class World {
     const ac = this.find(id);
     if (!ac) return { ok: false, text: 'No such aircraft.' };
     const s = ac.state;
-    const runwayArg = cmd.runway ? String(cmd.runway).toUpperCase() : null;
+    const said = cmd.runway ? String(cmd.runway).toUpperCase() : null;
+    const runwayArg = this.resolveEnd(ac, said, cmd.type);
+    if (said && !runwayArg) {
+      const ends = this.L.runways.flatMap((r) => [r.identA, r.identB]).filter((e) => e.replace(/[LRC]$/, '').padStart(2, '0') === said.padStart(2, '0'));
+      return this.unable(ac, `which runway: ${ends.map((e) => `runway ${e}`).join(' or ')}`);
+    }
     const done = (key, extra) => { ac.req = null; return this.readback(ac, key, extra); };
     switch (cmd.type) {
       case 'land':
@@ -981,6 +986,34 @@ export class World {
     }
   }
 
+  // "runway 35" with the side lost (recognisers often drop it): which end is meant. The one it is on or going to, the crossing it
+  // is waiting at, then the ends in use; with nothing to go by, null (the pilot asks). A full name ("35R") is taken as said.
+  resolveEnd(ac, arg, type = null) {
+    if (!arg) return arg;
+    const a = String(arg).toUpperCase();
+    if (runwayForEnd(this.L, a)) return a;
+    const m = a.match(/^(\d{1,2})$/);
+    if (!m) return a;
+    const num = (e) => String(e).replace(/[LRC]$/, '').padStart(2, '0');
+    const ends = this.L.runways.flatMap((r) => [r.identA, r.identB]).filter((e) => num(e) === m[1].padStart(2, '0'));
+    if (ends.length <= 1) return ends[0] || a;
+    const dep = this.depEnds.length ? this.depEnds : [this.depEnd];
+    const waiting = type === 'cross' || type === 'hold_short' ? ac.crossings.filter((c) => c.at >= ac.ps - 2)
+      .flatMap((c) => { const r = this.L.runways.find((x) => x.id === c.runway); return r ? [r.identA, r.identB] : []; }) : [];
+    return [...waiting, ac.end, ac.wants, ...dep, ...this.arrEnds].find((e) => e && ends.includes(e)) || null;
+  }
+
+  // the full name of a runway in a list the controller gave ("35" -> "35R", the one the route crosses)
+  fullEnd(ac, id) {
+    if (runwayForEnd(this.L, id)) return String(id).toUpperCase();
+    const rs = runwaysForArg(this.L, id);
+    const hit = ac.crossings.map((c) => this.L.runways.find((r) => r.id === c.runway)).find((r) => r && rs.includes(r));
+    const r = hit || (rs.length === 1 ? rs[0] : null);
+    if (!r) return id;
+    const n = String(id).padStart(2, '0');
+    return String(r.identA).replace(/[LRC]$/, '') === n ? r.identA : r.identB;
+  }
+
   crossIdent(c) {
     return this.L.runways.find((r) => r.id === c.runway)?.identA || '';
   }
@@ -994,8 +1027,8 @@ export class World {
 
   applyCrossClearances(ac, cross = []) {
     for (const ident of cross) {
-      const r = runwayForEnd(this.L, ident);
-      for (const c of ac.crossings) if (r && c.runway === r.id) c.cleared = true;
+      const rs = runwaysForArg(this.L, ident); // "35" without a side clears the crossing of whichever 35 the route crosses
+      for (const c of ac.crossings) if (rs.some((r) => c.runway === r.id)) c.cleared = true;
     }
   }
 
@@ -1010,8 +1043,8 @@ export class World {
   // "hold short of runway 15" given with a taxi route: stop there until cleared to cross
   applyHoldShort(ac, hold = []) {
     for (const ident of hold) {
-      const r = runwayForEnd(this.L, ident);
-      for (const c of ac.crossings) if (r && c.runway === r.id) c.cleared = false;
+      const rs = runwaysForArg(this.L, ident);
+      for (const c of ac.crossings) if (rs.some((r) => c.runway === r.id)) c.cleared = false;
     }
   }
 
@@ -1075,6 +1108,7 @@ export class World {
     this.setPath(ac, r.points, { nodes: r.nodes });
     this.applyCrossClearances(ac, cmd.cross);
     this.applyHoldShort(ac, cmd.holdShort);
+    cmd = { ...cmd, cross: cmd.cross?.map((id) => this.fullEnd(ac, id)), holdShort: cmd.holdShort?.map((id) => this.fullEnd(ac, id)) };
     return done('taxi_out', { via: this.viaText(cmd, ac), cross: this.crossText(cmd, ac), hold: this.holdText(cmd, ac) });
   }
 
@@ -1095,6 +1129,7 @@ export class World {
     this.setPath(ac, r.points, { nodes: r.nodes });
     this.applyCrossClearances(ac, cmd.cross);
     this.applyHoldShort(ac, cmd.holdShort);
+    cmd = { ...cmd, cross: cmd.cross?.map((id) => this.fullEnd(ac, id)), holdShort: cmd.holdShort?.map((id) => this.fullEnd(ac, id)) };
     gate = null;
     return done('taxi_in', { via: this.viaText(cmd, ac), cross: this.crossText(cmd, ac), hold: this.holdText(cmd, ac) });
   }

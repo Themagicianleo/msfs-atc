@@ -70,6 +70,10 @@ lets you pick them:
   (*经 alpha、bravo 幺滑到跑道两拐外等待点*, digits in Chinese). Chinese calls are said by two voices: the Chinese voice for the
   Chinese and an English voice for the code words (a Chinese voice cannot read "alpha"). You can say them in English or, as
   recognisers sometimes write them, as Chinese transliterations (阿尔法, 布拉沃...); all are understood.
+- **Runway sides lost by the recogniser:** if only the number comes through (*跑道35* for *35右*), the game uses the runway the
+  aircraft is on or going to, then the one it is waiting to cross, then the ones in use; with nothing to go by the pilot asks
+  *which runway: runway 35L or runway 35R*. The recogniser is also told this airport's runway names with their sides
+  (*跑道35右*, *runway three five right*), and more spellings of left and right are understood (佑, 幼, *right*, *R*...).
 - **Fast speech:** listening starts the moment you press (the key shows *Wait...* until the microphone is open;
   words said before that are lost). Merged words are split back (*alphabravo*, *bravo1*, *whiskeyalpha*), *double two* and
   *triple five* are read as digits, and clipped phrases work (*cleared land*, *hold pos*, *holdshort*, *go round*, *enter runway*).

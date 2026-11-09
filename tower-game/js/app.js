@@ -837,7 +837,7 @@ const listener = new Listener({
   // what the recogniser should listen for: callsigns on frequency, the ICAO alphabet, this airport's taxiways
   getHints: () => {
     const w = game.world;
-    return recognitionHints({ aircraft: w?.ac || [], taxiways: game.known || [], zh: listener.lang.toLowerCase().startsWith('zh') });
+    return recognitionHints({ aircraft: w?.ac || [], taxiways: game.known || [], runways: w ? w.L.runways.flatMap((r) => [r.identA, r.identB]) : [], zh: listener.lang.toLowerCase().startsWith('zh') });
   },
 });
 
