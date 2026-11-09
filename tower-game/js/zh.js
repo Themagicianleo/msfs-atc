@@ -218,7 +218,7 @@ export function zhNormalize(text, names = []) {
     t = t.replace(/(\d+)[,，](\d{3})(?!\d)/g, (m, a, b) => (a.length <= 3 ? a + b : m)); // 3,101
     // the side may come after a pause ("跑道17，右"), or as a code word (罗密欧 = R, already turned into a letter)
     const SEP = '[\\s，,、]*';
-    return t.replace(new RegExp(`(\\d)${SEP}(左|做|坐|座|佐)`, 'g'), '$1L').replace(new RegExp(`(\\d)${SEP}(右|又|有|友|油|诱)`, 'g'), '$1R')
+    return t.replace(new RegExp(`(\\d)${SEP}(左|做|坐|座|佐|作|昨|撮)`, 'g'), '$1L').replace(new RegExp(`(\\d)${SEP}(右|又|有|友|油|诱|佑|幼|优|柚|祐)`, 'g'), '$1R')
       .replace(new RegExp(`(\\d)${SEP}(中|钟|终|忠)`, 'g'), '$1C')
       .replace(/(?<=(?:跑道|穿越)\d{1,2})\s+([LRC])(?![A-Z0-9])/g, '$1');
   }).join('');
@@ -230,6 +230,7 @@ const REASONS = [
   [/^we are lined up for runway (\S+)$/, (m) => `我们对准的是跑道${m[1]}`],
   [/^runway (\S+) is not available$/, (m) => `跑道${m[1]}不可用`],
   [/^we can't find taxiway (.+)$/, (m) => `找不到滑行道${m[1]}`],
+  [/^which runway: (.+)$/, (m) => `请问是哪条跑道：${m[1].split(' or ').map((x) => x.replace(/^runway /, '跑道')).join('，还是')}`],
   [/^there is no stand (\S+)$/, (m) => `没有停机位${m[1]}`],
   [/^stand (\S+) is occupied$/, (m) => `停机位${m[1]}被占用`],
   [/^stand (\S+) is too small for us$/, (m) => `停机位${m[1]}太小`],

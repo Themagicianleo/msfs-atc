@@ -33,7 +33,7 @@ function spokenNumber(num, zh) {
 
 // aircraft: [{tel, telZh, num, callsign}]; taxiways: iterable of names. Returns [{text, boost}]
 // (boost 1..10), at most `max` phrases, most useful first.
-export function recognitionHints({ aircraft = [], taxiways = [], zh = false, max = 180 } = {}) {
+export function recognitionHints({ aircraft = [], taxiways = [], runways = [], zh = false, max = 180 } = {}) {
   const out = [];
   const seen = new Set();
   const add = (text, boost) => { if (text && !seen.has(text)) { seen.add(text); out.push({ text, boost }); } };
@@ -41,6 +41,20 @@ export function recognitionHints({ aircraft = [], taxiways = [], zh = false, max
     const chinese = zh && !!ac.telZh;
     add(`${chinese ? ac.telZh : ac.tel}${chinese ? '' : ' '}${spokenNumber(ac.num, chinese)}`.trim(), 10);
     add(String(ac.callsign || '').trim(), 6);
+  }
+  // the runway names, with the side: "跑道35右", "runway three five right". The side is what a recogniser loses.
+  for (const r of runways) {
+    const m = String(r).toUpperCase().match(/^(\d{1,2})([LRC]?)$/);
+    if (!m) continue;
+    const num = m[1].padStart(2, '0');
+    if (zh) {
+      const side = { L: '左', R: '右', C: '中' }[m[2]] || '';
+      add(`跑道${num}${side}`, 9);
+      add(`跑道${[...num].map((c) => ZH_DIGITS[Number(c)]).join('')}${side}`, 8);
+    } else {
+      const side = { L: 'left', R: 'right', C: 'center' }[m[2]] || '';
+      add(`runway ${[...num].map((c) => DIGITS[Number(c)]).join(' ')}${side ? ` ${side}` : ''}`, 9);
+    }
   }
   for (const t of (zh ? ZH_COMMANDS : EN_COMMANDS)) add(t, 5);
   for (const w of WORDS) add(w, 7);

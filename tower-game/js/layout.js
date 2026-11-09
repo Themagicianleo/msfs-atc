@@ -531,6 +531,19 @@ export function runwayForEnd(layout, ident) {
   return layout.runways.find((r) => r.identA === id || r.identB === id) || null;
 }
 
+// The runways a runway name can mean. "35R" is one; "35" (a recogniser often drops the side) is every runway that has an end
+// numbered 35: 35L/17R and 35R/17L.
+export function runwaysForArg(layout, ident) {
+  const id = String(ident || '').toUpperCase();
+  const exact = runwayForEnd(layout, id);
+  if (exact) return [exact];
+  const m = id.match(/^(\d{1,2})$/);
+  if (!m) return [];
+  const n = m[1].padStart(2, '0');
+  const num = (e) => String(e).replace(/[LRC]$/, '').padStart(2, '0');
+  return layout.runways.filter((r) => num(r.identA) === n || num(r.identB) === n);
+}
+
 // threshold point and landing/take-off direction for a runway end
 export function endGeometry(layout, ident) {
   const r = runwayForEnd(layout, ident);

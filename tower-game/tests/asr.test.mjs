@@ -314,3 +314,27 @@ test('if the model\'s microphone cannot be opened, the browser\'s recogniser tak
     assert.equal(started.length, 3);
   } finally { delete globalThis.window; }
 });
+
+test('in Chinese the pilot asks which runway, and says the digits and the side the radio way', () => {
+  const w = world('CSN');
+  const L = w.L;
+  const a = w.spawnArrival(null, 6);
+  w.drain();
+  w.unable(a, 'which runway: runway 35L or runway 35R');
+  const ev = w.drain().find((e) => e.unable);
+  assert.match(ev.text, /请问是哪条跑道：跑道35L，还是跑道35R/);
+  assert.match(ev.speech, /跑道三五左，还是跑道三五右/);
+  assert.ok(L);
+});
+
+test('the side said as a homophone or in English is still the side, and the recogniser is told the runway names', () => {
+  const known = new Set(['A']);
+  const ac = [{ id: 1, code: 'CUA', tel: 'China United', telZh: '联航', num: '5720', callsign: 'CUA5720' }];
+  const run = (say) => understand(say, ac, PHR.commands, null, known, PHR_ZH.commands).cmd.runway;
+  for (const [say, want] of [['联航5720，滑到跑道35右外等待点', '35R'], ['联航5720，滑到跑道35佑外等待点', '35R'], ['联航5720，滑到跑道35幼外等待点', '35R'],
+    ['联航5720，滑到跑道35 right 外等待点', '35R'], ['联航5720，跑道35做，可以起飞', '35L'], ['联航5720，滑到跑道35外等待点', '35']]) assert.equal(run(say), want, say);
+  const zh = recognitionHints({ runways: ['35R', '35L', '17R'], zh: true }).map((h) => h.text);
+  assert.ok(zh.includes('跑道35右') && zh.includes('跑道35左') && zh.includes('跑道三五右'), zh.join());
+  const en = recognitionHints({ runways: ['35R', '17L'] }).map((h) => h.text);
+  assert.ok(en.includes('runway three five right') && en.includes('runway one seven left'), en.join());
+});
