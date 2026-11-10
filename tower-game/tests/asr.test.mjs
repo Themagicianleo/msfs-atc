@@ -252,7 +252,7 @@ test('a Chinese call with English code words is said by a Chinese voice and an E
   assert.deepEqual(splitLanguages('taxi via alpha', 'en'), [{ text: 'taxi via alpha', lang: 'en' }]);
   // the speaker hands each part to the right voice (muted here, so the parts are only queued)
   const sp = Object.create(Speaker.prototype);
-  Object.assign(sp, { settings: { tts: true }, muted: true, held: [] });
+  Object.assign(sp, { settings: { tts: true, pacing: false }, muted: true, held: [] });
   sp.speak('经alpha、bravo 幺滑到跑道两拐外等待点，南方三幺六六。', 'ac1', 'zh', { reply: true, airline: 'CSN' });
   assert.deepEqual(sp.held.map((h) => [h.args[0], h.args[2]]), [['经', 'zh'], ['alpha, bravo', 'en'], [' 幺滑到跑道两拐外等待点，南方三幺六六。', 'zh']]);
   assert.equal(sp.held[0].args[3].reply, true); // only the first part waits like a reply

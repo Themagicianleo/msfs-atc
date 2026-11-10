@@ -76,6 +76,54 @@ const ACCENTS = {
 };
 export function accentFor(airline) { return ACCENTS[airline] || []; }
 
+// ---------------------------------------------------------------- natural pacing
+// A text-to-speech voice reads a whole call in one breath at one pace, with every digit equally spaced: that is what sounds
+// like a machine. A pilot reads a call in phrases, with small pauses, digits in groups ("two seven, left"), a little quicker
+// here and slower there, and a falling tone at the end. This cuts a call into phrases and gives each its own pause, pace and
+// pitch, the same ones every time for a given pilot (so a pilot has a manner, not a random wobble).
+const NUMBER_WORD = '(?:zero|one|two|three|four|five|six|seven|eight|nine|niner|fife|tree)';
+const DIGIT_RUN = new RegExp(`\\b${NUMBER_WORD}(?: ${NUMBER_WORD}){3,}\\b`, 'gi');
+
+// "one two three four five six" -> "one two three, four five six": groups of two or three, as callsigns and QNH are read
+export function groupDigits(text) {
+  return String(text).replace(DIGIT_RUN, (run) => {
+    const w = run.split(' ');
+    const sizes = w.length === 4 ? [2, 2] : w.length === 5 ? [3, 2] : w.length === 6 ? [3, 3] : w.length === 7 ? [3, 2, 2] : [3, 3, ...Array(w.length - 6).fill(2)];
+    let at = 0;
+    return sizes.map((n) => { const part = w.slice(at, at + n).join(' '); at += n; return part; }).filter(Boolean).join(', ');
+  });
+}
+
+// [{text, gap, pitch, rate}]: the phrases of a call. gap: pause before the phrase (ms); pitch and rate: multipliers.
+export function phrasesOf(text, key = 'x', { max = 5 } = {}) {
+  const pieces = String(text).match(/[^,;.!?，。；、：:]+[,;.!?，。；、：:]*\s*/g) || [String(text)];
+  const bare = (t) => t.replace(/[,;.!?，。；、：:\s]/g, '').length;
+  // very short pieces ("Roger,") stay with the next one
+  const merged = [];
+  for (const t of pieces.map((x) => x.trim()).filter(Boolean)) {
+    if (merged.length && bare(merged[merged.length - 1]) < 4) merged[merged.length - 1] += ` ${t}`;
+    else merged.push(t);
+  }
+  // too many pieces: join the two neighbours that are shortest together, so a call is not chopped up
+  while (merged.length > max) {
+    let k = 0;
+    for (let i = 1; i < merged.length - 1; i += 1) if (merged[i].length + merged[i + 1].length < merged[k].length + merged[k + 1].length) k = i;
+    merged.splice(k, 2, `${merged[k]} ${merged[k + 1]}`);
+  }
+  const h = (n) => ((hash(`${key}${n}`) % 1000) / 1000);
+  return merged.map((t, i) => {
+    const last = i === merged.length - 1;
+    const afterStop = i > 0 && /[.!?。]\s*$/.test(merged[i - 1]);
+    return {
+      // the pause replaces the comma; digits inside a phrase are grouped with a comma the voice takes as a breath
+      text: groupDigits(t.replace(/[,;，；、]+\s*$/, '').trim()),
+      gap: i === 0 ? undefined : Math.round((afterStop ? 220 : 70) + h(`g${i}`) * (afterStop ? 180 : 110)),
+      rate: (0.95 + h(`r${i}`) * 0.12) * (last ? 0.95 : 1), // a little slower to finish
+      pitch: (0.97 + h(`p${i}`) * 0.06) * (last ? 0.95 : 1), // and the tone falls
+    };
+  }).filter((p) => p.text);
+}
+
 // A Chinese call with English words in it ("经 alpha、bravo 幺滑到跑道两拐外等待点") is said by two voices: the Chinese
 // voice for the Chinese, an English one for the code words (a Chinese voice cannot read "alpha"). [{text, lang}]
 export function splitLanguages(text, lang = 'zh') {
@@ -168,6 +216,14 @@ export class Speaker {
   // radio: { airline, range } of the aircraft talking
   speak(text, unitKey, lang = 'en', opts = {}) {
     if (!this.settings.tts || !text) return;
+    // natural pacing: a call in phrases, each with its own pause, pace and pitch (Settings: Natural pacing)
+    if (!opts.phrase && this.settings.pacing !== false) {
+      const phrases = phrasesOf(text, unitKey || 'x');
+      if (phrases.length > 1) {
+        phrases.forEach((p, i) => this.speak(p.text, unitKey, lang, { ...opts, phrase: true, gap: i ? p.gap : opts.gap, reply: i ? false : opts.reply, pros: { rate: p.rate, pitch: p.pitch } }));
+        return;
+      }
+    }
     if (lang === 'zh' && !opts.part && /[A-Za-z]{2}/.test(text)) {
       splitLanguages(text, lang).forEach((r, i) => this.speak(r.text, unitKey, r.lang, { ...opts, part: true, gap: i ? 60 : undefined, reply: i ? false : opts.reply }));
       return;
@@ -189,7 +245,8 @@ export class Speaker {
     const nv = this.settings.builtinVoices && this.neural?.voiceFor(unitKey || 'x', airline, lang);
     if (nv) {
       const rate = Number(this.settings.rate) || 1;
-      const voice = { ...nv, rate: nv.rate * rate };
+      const pros = opts.pros || { rate: 1, pitch: 1 };
+      const voice = { ...nv, rate: nv.rate * rate * pros.rate, pitch: nv.pitch * pros.pitch };
       const audio = this.neural.synth(text, voice);
       audio.catch(() => {});
       this.chain = this.chain.then(wait).then(() => audio)
@@ -199,23 +256,23 @@ export class Speaker {
           return Promise.resolve(this.fx.play(s.pcm, s.sampleRate, { pitch: voice.pitch, key: unitKey, range, volume: 1 - Math.min(0.25, (range || 0) / 80000) }))
             .then((played) => { this.talkMs = (this.talkMs || 0) + performance.now() - t0; return played; });
         })
-        .then((played) => (played ? null : this.say(text, unitKey, lang, airline, range)))
-        .catch((e) => (e?.message === 'stale' ? null : this.say(text, unitKey, lang, airline, range)));
+        .then((played) => (played ? null : this.say(text, unitKey, lang, airline, range, opts.pros)))
+        .catch((e) => (e?.message === 'stale' ? null : this.say(text, unitKey, lang, airline, range, opts.pros)));
       return;
     }
     if (!this.supported) return;
-    this.chain = this.chain.then(wait).then(() => this.say(text, unitKey, lang, airline, range)).catch(() => {});
+    this.chain = this.chain.then(wait).then(() => this.say(text, unitKey, lang, airline, range, opts.pros)).catch(() => {});
   }
 
-  say(text, unitKey, lang, airline, range) {
+  say(text, unitKey, lang, airline, range, pros = null) {
     if (!this.supported) return null;
     const u = new SpeechSynthesisUtterance(text);
     const voice = lang && lang !== 'en' ? this.voiceForLang(lang, unitKey) : this.voiceFor(unitKey, airline);
     u.volume = 1 - Math.min(0.25, (range || 0) / 80000); // a far aircraft is a little quieter
     if (voice) { u.voice = voice; u.lang = voice.lang; } else { u.lang = lang === 'zh' ? 'zh-CN' : 'en-US'; }
     const shape = this.settings.varyVoices ? pilotVoiceShape(unitKey || 'x') : { pitch: 1, rate: 1 };
-    u.rate = (Number(this.settings.rate) || 1) * shape.rate;
-    u.pitch = (Number(this.settings.pitch) || 1) * shape.pitch;
+    u.rate = (Number(this.settings.rate) || 1) * shape.rate * (pros?.rate || 1);
+    u.pitch = (Number(this.settings.pitch) || 1) * shape.pitch * (pros?.pitch || 1);
     this.fx.enabled = this.settings.radioFx !== false;
     let began = 0;
     u.onstart = () => { began = performance.now(); this.fx.keyUp({ key: unitKey, range }); };
