@@ -17,6 +17,9 @@ const FATAL = new Set(['not-allowed', 'service-not-allowed', 'language-not-suppo
 const MAX_FAILURES = 3;
 
 export function voiceSupport() {
+  // The Mac app (Electron) has the browser's recogniser object but it cannot work there (it needs Google's service): voice is
+  // then the AI model's job (Settings -> AI voice recognition, on by default in the app).
+  if (typeof window !== 'undefined' && window.towerDesktop) return { ok: true, SR: null, desktop: true, standalone: false };
   const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
   if (!SR) return { ok: false, reason: 'This browser has no speech recognition.' };
   if (!window.isSecureContext) return { ok: false, reason: 'Voice input needs the secure (https://) address.' };
@@ -49,6 +52,10 @@ export class Listener {
     if (this.disabled || this.active) return;
     this.aiMode = false;
     if (useAi && !this.aiSkip && this.ai?.usable()) { this.startAi(); return; }
+    if (!this.support.SR) { // the desktop app without its AI model (still downloading, or off)
+      this.fail('Voice input in the Mac app uses the AI model: turn it on under Settings, AI voice recognition (one download), then try again. You can type or use the buttons meanwhile.');
+      return;
+    }
     const rec = new this.support.SR();
     rec.lang = this.lang;
     rec.interimResults = true;

@@ -1,0 +1,34 @@
+{
+  "name": "tower-controller-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tower Controller for Mac: the tower game in its own window, for Apple Silicon.",
+  "author": "Themagicianleo",
+  "license": "UNLICENSED",
+  "main": "main.js",
+  "scripts": {
+    "test": "node --test test/*.test.cjs",
+    "site": "node ../tower-game/tools/build_site.mjs app",
+    "start": "electron .",
+    "pack": "electron-builder --mac dir --arm64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.3.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.themagicianleo.towercontroller",
+    "productName": "Tower Controller",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "preload.js", "lib/**", "app/**", "package.json"],
+    "asar": true,
+    "mac": {
+      "category": "public.app-category.games",
+      "target": [{ "target": "dir", "arch": ["arm64"] }],
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "extendInfo": { "NSMicrophoneUsageDescription": "Tower Controller listens to the radio calls you speak to your aircraft." }
+    }
+  }
+}

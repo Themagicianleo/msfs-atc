@@ -28,7 +28,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(`tower.${k}`, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
-const settings = { effects: 'auto', voiceQuality: 'best', tts: true, radioFx: true, pacing: true, accents: true, builtinVoices: false, aiVoice: false, autoRunways: false, events: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
+const settings = { effects: 'auto', voiceQuality: 'best', tts: true, radioFx: true, pacing: true, accents: true, builtinVoices: false, aiVoice: !!window.towerDesktop, autoRunways: false, events: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
 const saveSettings = () => store.set('settings', settings);
 // voices vary per aircraft; the Speaker reads these keys
 const speakerSettings = { efficient: settings.voiceQuality === 'efficient', tts: settings.tts, radioFx: settings.radioFx, pacing: settings.pacing, accents: settings.accents, builtinVoices: settings.builtinVoices, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
@@ -875,7 +875,7 @@ $('#mic-lang').addEventListener('click', (e) => {
 
 function renderVoice() {
   const s = voiceSupport();
-  $('#voice-diag').textContent = s.ok ? `Speech recognition available${s.standalone ? ' (Home Screen app: if it fails, use a Safari tab)' : ''}.` : s.reason;
+  $('#voice-diag').textContent = s.desktop ? 'Mac app: voice input uses the AI model (Settings, AI voice recognition).' : s.ok ? `Speech recognition available${s.standalone ? ' (Home Screen app: if it fails, use a Safari tab)' : ''}.` : s.reason;
   $('#ptt').classList.toggle('disabled', listener.disabled);
   if (listener.disabled) $('#ptt-label').textContent = 'Voice unavailable: type or use buttons';
   else setTalkLabel(listener.active);
