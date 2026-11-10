@@ -28,7 +28,7 @@ test('Daxing apron bays: one-way lanes are in the data, and the other airports h
   assert.ok(oneWay.length > 150, `${oneWay.length} one-way segments`);
   const names = new Set(oneWay.map((e) => e.name));
   for (const n of ['Z8', 'Z9', 'Z7', 'Y7', 'Y8', 'Y6', 'Y2', 'Y3', 'Y1', 'Z2', 'Z1', 'Z3']) assert.ok(names.has(n), `${n} is one-way`);
-  for (const code of ['WSSS', 'KSFO']) assert.equal(hq(code).graph.edges.filter((e) => e.dir).length, 0, code);
+  for (const code of ['WSSS']) assert.equal(hq(code).graph.edges.filter((e) => e.dir).length, 0, code);
 });
 
 test('every Daxing stand can still be reached from the runway exits and can reach every runway', () => {

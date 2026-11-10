@@ -3,7 +3,7 @@ holding points, terminals) of the game's airports from OpenStreetMap, via the
 public Overpass API, into data/osm/<ICAO>.json.
 
     python tools/fetch_osm.py            # all airports in AIRPORTS
-    python tools/fetch_osm.py KSFO       # one airport
+    python tools/fetch_osm.py WSSS       # one airport
 
 The data is (c) OpenStreetMap contributors and licensed under the Open Data
 Commons Open Database License (ODbL); see data/osm/LICENSE.md. Standard
@@ -20,7 +20,7 @@ import urllib.request
 from pathlib import Path
 
 # airport reference point and half-size of the box to download (degrees)
-AIRPORTS = {"WSSS": (1.3644, 103.9915, 0.055), "ZBAD": (39.5098, 116.4105, 0.06), "KSFO": (37.6188, -122.3756, 0.045)}
+AIRPORTS = {"WSSS": (1.3644, 103.9915, 0.055), "ZBAD": (39.5098, 116.4105, 0.06)}
 SERVERS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]
 OUT = Path(__file__).resolve().parent.parent / "data" / "osm"
 

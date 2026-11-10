@@ -1,6 +1,6 @@
 // Which runways land and which depart, from the wind.
-// An airport's traffic profile can list real configurations (e.g. SFO's West
-// Plan: land 28L/28R, depart 1L/1R); those are the plans, plus mixed versions
+// An airport's traffic profile can list real configurations (e.g. Changi's
+// North plan: land 02L, depart 02C); those are the plans, plus mixed versions
 // where the runways are parallel. Otherwise the plans are made from the
 // runways: land on the end most into the wind, with its parallel runways
 // either split (some land, some depart) or mixed (all runways do both).

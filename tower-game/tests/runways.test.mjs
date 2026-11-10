@@ -27,30 +27,31 @@ function newWorld(arr, dep) {
 }
 
 test('the recommended plan follows the wind, and its headwind is shown for every runway end', () => {
-  const { L, profile } = hq('KSFO');
-  assert.equal(chooseConfig(L, wind(280, 12), profile).name, 'West Plan');
-  assert.equal(chooseConfig(L, wind(150, 10), profile).name, 'Southeast Plan');
-  const winds = endWinds(L, wind(280, 12));
-  const e28 = winds.find((e) => e.ident === '28L');
-  assert.ok(e28.headwind >= 10 && e28.crosswind <= 4, JSON.stringify(e28));
-  assert.ok(winds.find((e) => e.ident === '10R').headwind < -9, 'the opposite end has a tailwind');
+  const { L, profile } = hq('WSSS');
+  assert.equal(chooseConfig(L, wind(20, 12), profile).name, 'North (02)');
+  assert.equal(chooseConfig(L, wind(200, 10), profile).name, 'South (20)');
+  const winds = endWinds(L, wind(20, 12));
+  const e02 = winds.find((e) => e.ident === '02L');
+  assert.ok(e02.headwind >= 10 && e02.crosswind <= 4, JSON.stringify(e02));
+  assert.ok(winds.find((e) => e.ident === '20R').headwind < -9, 'the opposite end has a tailwind');
 });
 
 test('an airport with its own plans offers those; a plan into the wind is recommended when they have a tailwind', () => {
-  const { L, profile } = hq('KSFO');
-  // a good wind: only the published plans
-  const good = runwayPlans(L, wind(280, 12), profile);
-  assert.deepEqual(good.map((p) => p.name).sort(), ['Southeast Plan', 'West Plan']);
-  // an awkward one: both published plans have a tailwind, so runway 10 is recommended (and they stay on the list)
-  const plans = runwayPlans(L, wind(100, 9), profile);
-  assert.deepEqual(plans[0].arr, ['10L']);
+  const { L, profile } = hq('ZBAD');
+  // a good wind: the published plan for it comes first
+  const good = runwayPlans(L, wind(350, 12), profile);
+  assert.ok(good.some((p) => /North flow/.test(p.name)) && good.some((p) => /South flow/.test(p.name)));
+  assert.match(good[0].name, /North flow/);
+  assert.deepEqual([good[0].arr, good[0].dep], [['35R', '01L'], ['35L']]);
+  assert.match(runwayPlans(L, wind(170, 10), profile)[0].name, /South flow/);
+  // an airport whose only published plan has a tailwind: a plan into the wind is recommended, and the published one stays on the list
+  const only = { ...profile, configs: profile.configs.filter((c) => /North/.test(c.name)) };
+  const plans = runwayPlans(L, wind(170, 9), only);
   assert.ok(plans[0].headwind >= 8 && /not a published plan/.test(plans[0].reason), JSON.stringify(plans[0]));
-  const se = plans.find((p) => p.name === 'Southeast Plan');
-  assert.ok(se && se.headwind < 0, 'the Southeast Plan is still there, with its tailwind');
-  // and the same for a wind from the north-east
-  assert.ok(runwayPlans(L, wind(70, 14), profile)[0].headwind >= 9);
+  const north = plans.find((p) => /North flow/.test(p.name));
+  assert.ok(north && north.headwind < 0, 'the North flow is still there, with its tailwind');
   // every runway end can be chosen, with its wind
-  assert.ok(endWinds(L, wind(100, 9)).find((e) => e.ident === '10L').headwind >= 8);
+  assert.ok(endWinds(L, wind(170, 9)).find((e) => e.ident === '17L').headwind >= 8);
 });
 
 test('several runways at once: split and mixed plans for parallels', () => {
@@ -63,10 +64,10 @@ test('several runways at once: split and mixed plans for parallels', () => {
   assert.ok(mixed.arr.length >= 2 && /harder/.test(mixed.reason), 'every runway lands and departs, and says it is harder');
   const z = hq('ZBAD');
   const zp = runwayPlans(z.L, wind(180, 9), z.profile);
-  assert.deepEqual([zp[0].arr, zp[0].dep], [['17L'], ['17R']]);
+  assert.deepEqual([zp[0].arr, zp[0].dep], [['17L', '19R'], ['17R', '11L']]); // Daxing's South flow
   assert.ok(zp.some((p) => p.arr.length > 1 && p.dep.length > 1));
-  // a wind from the north-west is down the diagonal runway
-  assert.deepEqual(runwayPlans(z.L, wind(290, 9), z.profile)[0].arr, ['29R']);
+  // a wind from the north-west: no plan recommended has a tailwind
+  assert.ok(runwayPlans(z.L, wind(290, 9), z.profile)[0].headwind >= 0);
 });
 
 test('departures alternate between the runways in use, and are told which to expect at pushback', () => {

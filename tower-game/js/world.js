@@ -74,7 +74,7 @@ export const SCORE = {
 export class World {
   // profile: data/traffic/<ICAO>.json (real airlines and fleets), types: data/aircraft.json
   constructor({ layout, phr, airlines = {}, rng = Math.random, arrEnd, depEnd, traffic = 'normal', wind = null, unit,
-    profile = null, types = null, phrZh = null }) {
+    profile = null, types = null, phrZh = null, events = false }) {
     this.L = layout;
     // where the tower is, for how strong a pilot sounds on the radio
     { const t = layout.terminals?.length ? layout.terminals.flat() : (layout.terminal || []); this.towerAt = layout.towerPos || (t.length ? [t.reduce((s, p) => s + p[0], 0) / t.length, t.reduce((s, p) => s + p[1], 0) / t.length] : [0, 0]); }
@@ -97,7 +97,13 @@ export class World {
     this.ac = [];
     this.out = [];
     this.score = 0;
-    this.stats = { arrived: 0, departed: 0, goArounds: 0, conflicts: 0, repeats: 0 };
+    this.stats = { arrived: 0, departed: 0, goArounds: 0, conflicts: 0, repeats: 0, waitSum: 0, waits: 0 };
+    // Things that happen on a real frequency and are not the controller's doing: a pilot goes around by himself, an arrival asks
+    // for priority, a departure is not ready at the holding point, aircraft brake harder or softer, the wind shifts. Off unless
+    // asked for (the game asks), and each aircraft's part is taken from its callsign, so a given flight always does the same.
+    this.events = events;
+    this.windSeed = callsignHash(`${layout.airport?.icao || 'x'}wind`) || 1;
+    this.nextWindAt = 480 + (this.windSeed % 420);
     this.nextId = 1;
     this.requeue = [];
     this.conflictPairs = new Set();
@@ -247,8 +253,28 @@ export class World {
   }
 
   request(ac, type, key, extra) {
-    ac.req = { type, key, extra, t: this.t };
+    ac.req = { type, key, extra, t: this.t, since: this.t }; // since: when it first asked (t is reset each time it calls again)
     this.say(ac, key, extra);
+  }
+
+  chance(ac, tag, percent) {
+    return this.events && (callsignHash(`${ac.callsign}${tag}`) % 1000) < percent * 10;
+  }
+
+  // The wind does not stay put: every 8 to 20 minutes it backs or veers by 10 to 35 degrees and gains or loses a few knots.
+  // A big enough shift means the runways in use get a tailwind, and pilots start refusing them: time to change runways.
+  windShift() {
+    const w = this.wind;
+    if (!this.events || !w || !w.available || w.wind_dir == null) return;
+    if (this.t < this.nextWindAt) return;
+    const rnd = () => { this.windSeed = (this.windSeed * 16807) % 2147483647; return (this.windSeed - 1) / 2147483646; };
+    this.nextWindAt = this.t + 480 + rnd() * 720;
+    const turn = (10 + Math.round(rnd() * 25)) * (rnd() < 0.5 ? -1 : 1);
+    w.wind_dir = Math.round((((w.wind_dir + turn) % 360) + 360) % 360 / 10) * 10 || 360;
+    w.wind_kt = Math.max(2, Math.min(28, Math.round((w.wind_kt || 0) + (rnd() * 8 - 4))));
+    w.gust_kt = null;
+    w.raw = null;
+    this.emit({ kind: 'wind', wind: w, turn });
   }
 
   points(delta, reason, ac) {
@@ -353,7 +379,10 @@ export class World {
     ac.dist = distNm * M_PER_NM;
     ac.v = ac.type.vapp * KT;
     this.placeOnFinal(ac);
-    this.request(ac, 'land', 'arr_checkin');
+    if (!base && this.chance(ac, 'pri', 4) && this.phrOf(ac).pilot.arr_priority) ac.priority = true;
+    else if (!base && this.chance(ac, 'uns', 5)) ac.unstable = true; // will go around by itself (see updateFinal)
+    if (this.events) ac.brake0 = 1.6 + (callsignHash(`${ac.callsign}brk`) % 100) / 100; // 1.6 to 2.6 m/s2: which exit it makes
+    this.request(ac, 'land', ac.priority ? 'arr_priority' : 'arr_checkin');
     return ac;
   }
 
@@ -603,6 +632,7 @@ export class World {
   step(dt) {
     this.t += dt;
     this.spawner(dt);
+    this.windShift();
     for (const ac of [...this.ac]) this.update(ac, dt);
     this.checkConflicts();
     for (const ac of this.ac) {
@@ -617,6 +647,11 @@ export class World {
   }
 
   update(ac, dt) {
+    if (ac.state === 'holding' && ac.notReadyUntil && this.t >= ac.notReadyUntil) {
+      ac.notReadyUntil = null;
+      if (ac.cleared.lineup || ac.cleared.takeoff) this.startLineup(ac);
+      else this.request(ac, 'takeoff', 'ready');
+    }
     switch (ac.state) {
       case 'final': return this.updateFinal(ac, dt);
       case 'rollout': {
@@ -667,7 +702,12 @@ export class World {
           ac.state = 'holding';
           ac.v = 0;
           ac.atNode = this.L.holdPoints[ac.end].h;
-          if (ac.cleared.lineup || ac.cleared.takeoff) this.startLineup(ac);
+          if (!ac.flags.wasNotReady && this.chance(ac, 'nrdy', 7) && this.phrOf(ac).pilot.not_ready) {
+            // cabin not secure, a last checklist: it says so, and calls ready a minute or two later
+            ac.flags.wasNotReady = true;
+            ac.notReadyUntil = this.t + 50 + (callsignHash(`${ac.callsign}wait`) % 70);
+            this.say(ac, 'not_ready');
+          } else if (ac.cleared.lineup || ac.cleared.takeoff) this.startLineup(ac);
           else this.request(ac, 'takeoff', 'ready');
         }
         return null;
@@ -702,10 +742,15 @@ export class World {
     ac.dist -= gs * dt;
     this.placeOnFinal(ac);
     const e = endGeometry(this.L, ac.end);
+    // nobody's fault: an approach that is not stable by 1,000 ft is flown again
+    if (ac.unstable && ac.dist < 1.6 * M_PER_NM && ac.dist > 0.9 * M_PER_NM) {
+      ac.unstable = false;
+      return this.goAround(ac, 'unstable approach', 0, 'go_around_own');
+    }
     if (!ac.cleared.land) {
       if (ac.dist < 2.5 * M_PER_NM && !ac.flags.shortCall) {
         ac.flags.shortCall = true;
-        ac.req = { type: 'land', key: 'arr_short_final', t: this.t };
+        ac.req = { type: 'land', key: 'arr_short_final', t: this.t, since: ac.req?.since ?? this.t };
         this.say(ac, 'arr_short_final');
       }
       if (ac.dist < 0.9 * M_PER_NM) return this.goAround(ac, 'no landing clearance', SCORE.goAroundNoClearance);
@@ -723,7 +768,7 @@ export class World {
     ac.v = Math.max(35, ac.v - this.windOn(ac.end).head * 0.8); // touchdown ground speed
     // first exit the aircraft can make with normal braking (about 2 m/s2) at turn-off speed
     const exitSpeed = 15; // m/s, about 30 kt
-    ac.brake = 2.0;
+    ac.brake = ac.brake0 || 2.0;
     const need = 300 + (ac.v ** 2 - exitSpeed ** 2) / (2 * ac.brake);
     const exits = this.L.exits[ac.end];
     const ex = exits.find((x) => x.along >= need) || exits[exits.length - 1];
@@ -810,13 +855,14 @@ export class World {
     return null;
   }
 
-  goAround(ac, reason, penalty) {
+  goAround(ac, reason, penalty, key = 'go_around') {
     ac.state = 'go_around';
     ac.goAt = this.t;
     ac.req = null;
     ac.v = Math.max(ac.v, 70);
     this.stats.goArounds += 1;
-    this.say(ac, 'go_around');
+    this.say(ac, this.phrOf(ac).pilot[key] ? key : 'go_around');
+    if (ac.priority && penalty) this.alert(`Priority aircraft ${ac.callsign} had to go around`, ac);
     if (penalty) this.points(penalty, `${ac.callsign} went around: ${reason}`, ac);
     this.gateUse.delete(ac.gate);
     this.requeue.push({ at: this.t + 120, base: { callsign: ac.callsign, code: ac.code, tel: ac.tel, num: ac.num, type: ac.type } });
@@ -885,7 +931,7 @@ export class World {
     if (s === 'pushed') list.push('taxi_out');
     if (s === 'taxi_out') list.push('lineup', 'takeoff', ac.hold ? 'continue_taxi' : 'hold_position', 'taxi_out');
     if (s === 'holding') list.push('lineup', 'takeoff', 'hold_short', 'taxi_out');
-    if (s === 'lineup' || s === 'lined_up') list.push('takeoff');
+    if (s === 'lineup' || s === 'lined_up') list.push(ac.cleared.takeoff ? 'cancel_takeoff' : 'takeoff');
     if (s === 'vacated') list.push('taxi_in');
     if (s === 'taxi_in') list.push(ac.hold ? 'continue_taxi' : 'hold_position', 'taxi_in');
     if (s === 'pushback') list.push(ac.hold ? 'continue_taxi' : 'hold_position');
@@ -905,7 +951,11 @@ export class World {
       const ends = this.L.runways.flatMap((r) => [r.identA, r.identB]).filter((e) => e.replace(/[LRC]$/, '').padStart(2, '0') === said.padStart(2, '0'));
       return this.unable(ac, `which runway: ${ends.map((e) => `runway ${e}`).join(' or ')}`);
     }
-    const done = (key, extra) => { ac.req = null; return this.readback(ac, key, extra); };
+    const done = (key, extra) => {
+      if (ac.req) { this.stats.waitSum += this.t - (ac.req.since ?? ac.req.t); this.stats.waits += 1; } // how long pilots wait for an answer
+      ac.req = null;
+      return this.readback(ac, key, extra);
+    };
     switch (cmd.type) {
       case 'land':
         if (s !== 'final') return this.unable(ac, 'we are not on final');
@@ -972,11 +1022,18 @@ export class World {
         if (!['taxi_out', 'holding', 'lineup', 'lined_up'].includes(s)) return this.unable(ac, 'we are not at the runway');
         if (runwayArg && runwayArg !== ac.end) return this.unable(ac, `we are taxiing for runway ${ac.end}`);
         if (cmd.type === 'takeoff') { const lim = this.windLimit(ac); if (lim) return this.unable(ac, lim); }
+        if (ac.notReadyUntil && this.t < ac.notReadyUntil) return this.unable(ac, 'we are not ready yet');
         ac.cleared.lineup = true;
         if (cmd.type === 'takeoff') { ac.cleared.takeoff = true; this.checkDepartureSeparation(ac); }
         if (s === 'holding') this.startLineup(ac);
         return done(cmd.type === 'takeoff' ? 'takeoff' : 'lineup');
       }
+      case 'cancel_takeoff':
+        // before the roll starts it is just a cancelled clearance; once rolling, pilots continue (a rejected take-off is theirs to call)
+        if (s === 'takeoff' || s === 'climb') return this.unable(ac, 'we are already rolling');
+        if (!ac.cleared.takeoff) return this.unable(ac, 'we have no take-off clearance');
+        ac.cleared.takeoff = false;
+        return this.readback(ac, 'cancel_takeoff');
       case 'contact':
         if (s !== 'climb') return this.unable(ac, 'we are not airborne yet');
         ac.cleared.contact = true;

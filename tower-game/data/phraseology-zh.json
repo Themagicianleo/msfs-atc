@@ -8,6 +8,9 @@
     "arr_checkin": ["{unit}，{callsign}，盲降跑道{runway}，{distance}。", "{unit}，你好，{callsign}，盲降跑道{runway}，{distance}。", "{unit}，{callsign}，建立盲降跑道{runway}，{distance}。"],
     "arr_short_final": "{unit}，{callsign}，跑道{runway}短五边。",
     "go_around": "{callsign}，复飞。",
+    "go_around_own": ["{callsign}，复飞，进近不稳定。", "{callsign}，复飞，遇到风切变。"],
+    "arr_priority": ["{unit}，{callsign}，机上有病人，请求优先落地，盲降跑道{runway}，{distance}。", "{unit}，{callsign}，最低油量，盲降跑道{runway}，{distance}。"],
+    "not_ready": ["{unit}，{callsign}，跑道{runway}外等待点，还需要两分钟。", "{unit}，{callsign}，接近跑道{runway}外等待点，客舱还没准备好。"],
     "vacated": "{unit}，{callsign}，已脱离跑道{runway}，请求滑回停机位{gate}。",
     "push": ["{unit}，{callsign}，停机位{gate}，请求推出。", "{unit}，{callsign}，停机位{gate}，推出开车。", "{unit}，你好，{callsign}，停机位{gate}，请求推出。"],
     "taxi": ["{unit}，{callsign}，准备好滑行。", "{unit}，{callsign}，推出完毕，请求滑行。"],
@@ -32,6 +35,7 @@
     "lineup": "跑道{runway}，进跑道等待，{callsign}。",
     "takeoff": ["跑道{runway}，可以起飞，{callsign}。", "可以起飞，跑道{runway}，{callsign}。"],
     "contact": ["联系离场，再见，{callsign}。", "联系离场，{callsign}，再见。"],
+    "cancel_takeoff": "原地等待，取消起飞许可，{callsign}。",
     "unable": "无法执行，{reason}，{callsign}。",
     "say_again": "{callsign}，请重复。"
   },
@@ -56,6 +60,7 @@
     "land": "可以落地",
     "continue": "继续进近",
     "go_around": "复飞",
+    "cancel_takeoff": "取消起飞",
     "push": "可以推出",
     "taxi_out": "滑行到跑道",
     "taxi_in": "滑回停机位",
@@ -79,21 +84,25 @@
     "no runway crossing on our route": "路线上没有穿越跑道",
     "we are not at the runway": "我们不在跑道",
     "we are not airborne yet": "我们还没有起飞",
-    "no taxi route": "没有滑行路线"
+    "no taxi route": "没有滑行路线",
+    "we are not ready yet": "我们还没准备好",
+    "we are already rolling": "我们已经开始滑跑",
+    "we have no take-off clearance": "我们没有起飞许可"
   },
 
   "commands": [
+    { "cmd": "cancel_takeoff", "patterns": ["取消起飞", "起飞许可取消", "立即停止", "中断起飞"] },
     { "cmd": "go_around", "patterns": ["复飞"] },
+    { "cmd": "continue", "patterns": ["继续进近"] },
     { "cmd": "land", "patterns": ["可以落地", "允许落地", "准许落地", "落地", "着陆"] },
     { "cmd": "push", "patterns": ["推出"] },
     { "cmd": "takeoff", "patterns": ["可以起飞", "允许起飞", "准许起飞", "起飞"] },
-    { "cmd": "lineup", "patterns": ["进跑道", "跑道等待"] },
+    { "cmd": "lineup", "patterns": ["进跑道", "跑道等待", "进入跑道", "对正跑道", "上跑道"] },
     { "cmd": "cross", "patterns": ["^(?!.*滑).*穿越"] },
-    { "cmd": "hold_short", "patterns": ["^(?!.*滑).*外等待"] },
-    { "cmd": "hold_position", "patterns": ["原地等待", "保持原地", "停止", "停住", "暂停"] },
+    { "cmd": "hold_short", "patterns": ["^(?!.*滑).*外等"] },
+    { "cmd": "hold_position", "patterns": ["原地等待", "保持原地", "停止", "停住", "暂停", "^(?!.*(跑道|滑到|滑行到)).*等待$", "原地等"] },
     { "cmd": "continue_taxi", "patterns": ["继续滑行"] },
-    { "cmd": "continue", "patterns": ["继续进近"] },
     { "cmd": "taxi", "patterns": ["滑行", "滑到", "滑回", "滑往", "滑向", "更改跑道", "改用跑道", "改跑道", "重新滑行", "更改滑行路线"] },
-    { "cmd": "contact", "patterns": ["联系", "再见", "转换频率"] }
+    { "cmd": "contact", "patterns": ["联系", "再见", "转换频率", "换频", "转频", "频率转换"] }
   ]
 }
