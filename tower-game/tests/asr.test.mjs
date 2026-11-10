@@ -338,3 +338,26 @@ test('the side said as a homophone or in English is still the side, and the reco
   const en = recognitionHints({ runways: ['35R', '17L'] }).map((h) => h.text);
   assert.ok(en.includes('runway three five right') && en.includes('runway one seven left'), en.join());
 });
+
+test('in the Mac app voice input is the AI model\'s job: the browser recogniser is not used, and the player is told what to do', async () => {
+  const { voiceSupport } = await import('../js/lib/voice.js');
+  globalThis.window = { towerDesktop: { platform: 'darwin', arch: 'arm64' }, SpeechRecognition: function SR() { throw new Error('must not be used'); }, isSecureContext: true };
+  try {
+    const s = voiceSupport();
+    assert.equal(s.ok, true);
+    assert.equal(s.desktop, true);
+    assert.equal(s.SR, null);
+    const states = [];
+    const l = new Listener({ lang: 'en-US', onFinal: () => {}, onState: (st, d) => states.push([st, d]) });
+    l.start(); // no model yet
+    assert.equal(l.active, false);
+    assert.match(states.at(-1)[1], /AI model/);
+    // with the model ready it records as in the browser
+    const rec = { heard: () => false, stop: async () => new Float32Array(0), abort() {} };
+    const ai = { status: 'ready', usable() { return true; }, record: async () => rec, transcribe: async () => '' };
+    const l2 = new Listener({ lang: 'en-US', ai, onFinal: () => {}, onState: () => {} });
+    l2.start();
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(l2.active, true);
+  } finally { delete globalThis.window; }
+});

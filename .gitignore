@@ -5,3 +5,6 @@ __pycache__/
 userdata/
 node_modules/
 test-results/
+desktop/app/
+desktop/dist/
+desktop/node_modules/
