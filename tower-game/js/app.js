@@ -28,10 +28,10 @@ const store = {
   set(k, v) { try { localStorage.setItem(`tower.${k}`, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
-const settings = { effects: 'auto', voiceQuality: 'best', tts: true, radioFx: true, accents: true, builtinVoices: false, aiVoice: false, autoRunways: false, events: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
+const settings = { effects: 'auto', voiceQuality: 'best', tts: true, radioFx: true, pacing: true, accents: true, builtinVoices: false, aiVoice: false, autoRunways: false, events: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
 const saveSettings = () => store.set('settings', settings);
 // voices vary per aircraft; the Speaker reads these keys
-const speakerSettings = { efficient: settings.voiceQuality === 'efficient', tts: settings.tts, radioFx: settings.radioFx, accents: settings.accents, builtinVoices: settings.builtinVoices, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
+const speakerSettings = { efficient: settings.voiceQuality === 'efficient', tts: settings.tts, radioFx: settings.radioFx, pacing: settings.pacing, accents: settings.accents, builtinVoices: settings.builtinVoices, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
 const speaker = new Speaker(speakerSettings);
 speaker.neural = new NeuralVoices();
 
@@ -947,6 +947,8 @@ $('#builtin-delete').addEventListener('click', async () => {
 });
 renderBuiltin();
 $('#set-accents').addEventListener('change', (e) => { settings.accents = speakerSettings.accents = e.target.checked; saveSettings(); });
+$('#set-pacing').checked = settings.pacing !== false;
+$('#set-pacing').addEventListener('change', (e) => { settings.pacing = speakerSettings.pacing = e.target.checked; saveSettings(); speaker.stop(); });
 $('#set-radio').addEventListener('change', (e) => { settings.radioFx = speakerSettings.radioFx = e.target.checked; saveSettings(); });
 $('#set-tts').addEventListener('change', (e) => { settings.tts = speakerSettings.tts = e.target.checked; saveSettings(); if (!e.target.checked) speaker.stop(); });
 $('#set-rate').value = settings.rate;

@@ -111,6 +111,11 @@ lets you pick them:
 - **Everyone is different:** pilots are women and men with their own voices (device voices by name; built-in voices by the
   speaker lists of their corpora), speak slowly or quickly, and taxi in their own way (about 14 to 29 kt, quick or slow to
   pick up speed and to slow for corners).
+- **Natural pacing** (Settings → Natural pacing, on by default): a pilot's call is spoken in phrases, with small pauses,
+  digits in groups (*one two, three four*), a little quicker here and slower there, and a falling tone at the end. Each pilot
+  has a manner of their own. For the most natural speech, also download your device's Enhanced or Premium voices
+  (iPad: Settings → Accessibility → Spoken Content → Voices) and keep **Voice quality: Best**; the built-in voices are
+  neural but still synthetic.
 - **Pilots** do what you say but use their eyes:
   - Arrivals without a landing clearance go around at 0.9 NM, and at 0.3 NM if the runway is still occupied.
   - Taxiing aircraft stop for traffic on their route and hold short of runways until cleared to cross.

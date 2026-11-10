@@ -228,3 +228,52 @@ test('"runway 17" with the side lost means the end the aircraft is on, or going 
   assert.match(ev.speech, /runway three five (left|right)/);
   assert.equal(ac.end, '17R'); // and nothing changed
 });
+
+// ---------------------------------------------------------------- natural pacing: a call in phrases, not one flat breath
+import { groupDigits, phrasesOf } from '../js/lib/speech.js';
+
+test('digits are read in groups, as pilots read callsigns and QNH', () => {
+  assert.equal(groupDigits('Speedbird one two three four'), 'Speedbird one two, three four');
+  assert.equal(groupDigits('QNH one zero one three'), 'QNH one zero, one three');
+  assert.equal(groupDigits('squawk four five six seven eight'), 'squawk four five six, seven eight'.replace('four five six,', 'four five six,'));
+  assert.equal(groupDigits('runway two seven left'), 'runway two seven left'); // short runs stay as they are
+  assert.equal(groupDigits('one two one decimal niner'), 'one two one decimal niner'); // a frequency
+});
+
+test('a call is cut into phrases with their own pauses, pace and pitch; the same ones every time for a pilot', () => {
+  const call = 'Cleared to land runway two seven left, wind two seven zero degrees, one zero knots, Speedbird one two three four.';
+  const a = phrasesOf(call, 'ac7');
+  assert.deepEqual(a.map((p) => p.text), ['Cleared to land runway two seven left', 'wind two seven zero degrees', 'one zero knots', 'Speedbird one two, three four.']);
+  assert.equal(a[0].gap, undefined); // the first phrase waits as a call does
+  assert.ok(a.slice(1).every((p) => p.gap >= 70 && p.gap <= 400));
+  assert.deepEqual(phrasesOf(call, 'ac7'), a); // stable
+  assert.notDeepEqual(phrasesOf(call, 'ac8').map((p) => p.rate), a.map((p) => p.rate)); // another pilot, another manner
+  for (const p of a) assert.ok(p.rate > 0.85 && p.rate < 1.1 && p.pitch > 0.88 && p.pitch < 1.05);
+  const last = a[a.length - 1];
+  assert.ok(last.pitch < 1 && last.rate < 1.02, 'the tone falls at the end');
+  // a short word stays with the next piece, and a long call is not chopped into more than five
+  assert.deepEqual(phrasesOf('OK, wilco.', 'x').map((p) => p.text), ['OK, wilco.']);
+  assert.ok(phrasesOf('a one, b two, c three, d four, e five, f six, g seven, h eight', 'x').length <= 5);
+  assert.deepEqual(phrasesOf('Roger.', 'x').map((p) => p.text), ['Roger.']);
+});
+
+test('the speaker says each phrase in turn, with its own pace, keeping the pilot\'s voice and accent; off, it is one utterance', () => {
+  const make = (pacing) => { const sp = Object.create(Speaker.prototype); Object.assign(sp, { settings: { tts: true, pacing }, muted: true, held: [] }); return sp; };
+  const call = 'Cleared to land runway two seven left, wind two seven zero degrees, Speedbird one two three four.';
+  const sp = make(true);
+  sp.speak(call, 'ac1', 'en', { reply: true, airline: 'BAW' });
+  assert.deepEqual(sp.held.map((h) => h.args[0]), ['Cleared to land runway two seven left', 'wind two seven zero degrees', 'Speedbird one two, three four.']);
+  assert.equal(sp.held[0].args[3].reply, true);
+  assert.ok(sp.held.slice(1).every((h) => h.args[3].reply === false && h.args[3].gap >= 70));
+  assert.ok(sp.held.every((h) => h.args[3].airline === 'BAW' && h.args[3].pros.rate > 0.85));
+  const off = make(false);
+  off.speak(call, 'ac1', 'en', { reply: true });
+  assert.equal(off.held.length, 1);
+  assert.equal(off.held[0].args[0], call);
+  // Chinese: phrases first, then each phrase by language
+  const zh = make(true);
+  zh.speak('经alpha、bravo 幺滑到跑道两拐外等待点，南方三幺六六。', 'ac1', 'zh', {});
+  const heard = zh.held.map((h) => [h.args[0], h.args[2]]);
+  assert.ok(heard.some(([t, l]) => /alpha/.test(t) && l === 'en'), JSON.stringify(heard));
+  assert.ok(heard.some(([t, l]) => /南方/.test(t) && l === 'zh'));
+});
