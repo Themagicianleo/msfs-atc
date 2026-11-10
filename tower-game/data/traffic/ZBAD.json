@@ -9,13 +9,91 @@
   "tower": "Daxing Tower",
   "tower_zh": "大兴塔台",
   "units": "metric",
-  "tower_pos": { "lat": 39.50303, "lon": 116.40604, "source": "TWR(W) on the CAAC aircraft parking chart ZBAD 2P-1 (2025-03-15), placed relative to stands 418 and 422; approximate" },
-  "not_stands": ["E6"],
+  "tower_pos": {
+   "lat": 39.50303,
+   "lon": 116.40604,
+   "source": "TWR(W) on the CAAC aircraft parking chart ZBAD 2P-1 (2025-03-15), placed relative to stands 418 and 422; approximate"
+  },
+  "not_stands": [
+   "E6"
+  ],
   "flows": [
-   { "bay": "NE (stands 151-166)", "tip": [379, 1288], "in": { "name": "Z8", "from": [753, 1334] }, "out": ["Z9", "Z7"], "reach": 400 },
-   { "bay": "NW (stands 104-125)", "tip": [-489, 1180], "in": { "name": "Y7", "from": [-1000, 1122] }, "out": ["Y8", "Y6"], "reach": 520 },
-   { "bay": "SW (stands 131-137, 180-184)", "tip": [-228, 836], "in": { "name": "Y2", "from": [-272, 302] }, "out": ["Y3", "Y1"], "reach": 440 },
-   { "bay": "SE (stands 141-146, 192-197)", "tip": [206, 888], "in": { "name": "Z2", "from": [383, 341] }, "out": ["Z1", "Z3"], "reach": 600 }
+   {
+    "bay": "NE (stands 151-166)",
+    "tip": [
+     379,
+     1288
+    ],
+    "in": {
+     "name": "Z8",
+     "from": [
+      753,
+      1334
+     ]
+    },
+    "out": [
+     "Z9",
+     "Z7"
+    ],
+    "reach": 400
+   },
+   {
+    "bay": "NW (stands 104-125)",
+    "tip": [
+     -489,
+     1180
+    ],
+    "in": {
+     "name": "Y7",
+     "from": [
+      -1000,
+      1122
+     ]
+    },
+    "out": [
+     "Y8",
+     "Y6"
+    ],
+    "reach": 520
+   },
+   {
+    "bay": "SW (stands 131-137, 180-184)",
+    "tip": [
+     -228,
+     836
+    ],
+    "in": {
+     "name": "Y2",
+     "from": [
+      -272,
+      302
+     ]
+    },
+    "out": [
+     "Y3",
+     "Y1"
+    ],
+    "reach": 440
+   },
+   {
+    "bay": "SE (stands 141-146, 192-197)",
+    "tip": [
+     206,
+     888
+    ],
+    "in": {
+     "name": "Z2",
+     "from": [
+      383,
+      341
+     ]
+    },
+    "out": [
+     "Z1",
+     "Z3"
+    ],
+    "reach": 600
+   }
   ],
   "lang_note": "Chinese airlines (lang zh) use Chinese radiotelephony with their Chinese callsigns; others use English."
  },
@@ -214,6 +292,117 @@
    "destinations": [
     "UUEE"
    ]
+  },
+  {
+   "code": "CCA",
+   "callsign": "Air China",
+   "weight": 9,
+   "numbers": [
+    1301,
+    1399
+   ],
+   "types": {
+    "A20N": 2,
+    "A21N": 2,
+    "B738": 2,
+    "A359": 1,
+    "B789": 1
+   },
+   "destinations": [
+    "ZSSS",
+    "ZGGG",
+    "ZUUU",
+    "ZGSZ",
+    "ZSHC",
+    "EGLL",
+    "EDDF"
+   ],
+   "callsign_zh": "国航",
+   "lang": "zh"
+  },
+  {
+   "code": "CHB",
+   "callsign": "Hebei Air",
+   "weight": 4,
+   "numbers": [
+    6601,
+    6699
+   ],
+   "types": {
+    "B738": 3,
+    "E190": 1
+   },
+   "destinations": [
+    "ZUUU",
+    "ZSAM",
+    "ZGGG",
+    "ZJHK"
+   ],
+   "callsign_zh": "河北",
+   "lang": "zh"
+  },
+  {
+   "code": "FIN",
+   "callsign": "Finnair",
+   "weight": 1,
+   "numbers": [
+    80,
+    89
+   ],
+   "types": {
+    "A359": 1
+   },
+   "destinations": [
+    "EFHK"
+   ]
+  },
+  {
+   "code": "LOT",
+   "callsign": "Lot",
+   "weight": 1,
+   "numbers": [
+    90,
+    99
+   ],
+   "types": {
+    "B788": 1,
+    "B789": 1
+   },
+   "destinations": [
+    "EPWA"
+   ]
   }
- ]
+ ],
+ "configs": [
+  {
+   "name": "North flow 向北运行",
+   "wind": [
+    270,
+    90
+   ],
+   "arr": [
+    "35R",
+    "01L"
+   ],
+   "dep": [
+    "35L"
+   ]
+  },
+  {
+   "name": "South flow 向南运行",
+   "wind": [
+    90,
+    270
+   ],
+   "arr": [
+    "17L",
+    "19R"
+   ],
+   "dep": [
+    "17R",
+    "11L"
+   ]
+  }
+ ],
+ "configs_about": "Runway configurations: arrivals and departures for a wind direction range [from, to] (degrees true, clockwise). Typical Daxing operations, simplified: the east and west runways land, the centre one departs, and 11L departs to the east in south flow."
 }

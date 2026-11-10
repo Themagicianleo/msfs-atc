@@ -29,14 +29,14 @@ jobs:
         working-directory: tower-game
         # one airport at a time, so a slow one doesn't lose the others
         run: |
-          for a in WSSS ZBAD KSFO; do python -u tools/fetch_osm.py $a || echo "::warning::$a failed"; done
+          for a in WSSS ZBAD; do python -u tools/fetch_osm.py $a || echo "::warning::$a failed"; done
       - name: Commit the data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add tower-game/data/osm
           if git diff --cached --quiet; then echo "no changes"; exit 0; fi
-          git commit -m "Update OpenStreetMap airport data (WSSS, ZBAD, KSFO)"
+          git commit -m "Update OpenStreetMap airport data (WSSS, ZBAD)"
           # the branch may have moved while downloading: put the data commit on top
           for i in 1 2 3; do git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0; sleep 5; done
           exit 1

@@ -24,7 +24,7 @@ lets you pick them:
 - Tap a plan to use it, or tap runway ends under **Landing** and **Departures** to build your own: any number of
   runways for each, and the same runway for both.
 - Plans:
-  - The airport's own plans: San Francisco's West and Southeast Plans, Changi's North and South. The one
+  - The airport's own plans: Changi's North and South, Daxing's North and South flow. The one
     for the wind is recommended. If the wind suits none of them (a tailwind of 3 kt or more on landing),
     a plan straight into the wind is recommended instead, marked *not a published plan*, and the published
     plans stay on the list with their tailwind in red.
@@ -32,8 +32,7 @@ lets you pick them:
     arrivals and departures share runways, so you have to fit departures between arrivals.
   - Airports without published plans (Daxing and the generated ones): the runway into the wind with its
     parallels, split (some land, some depart) or mixed.
-  - Anything else you like, runway by runway. Mixed plans and crossing runways are the hardest; at San
-    Francisco, landing and departing on 28L/28R together needs careful crossing clearances.
+  - Anything else you like, runway by runway. Mixed plans and crossing runways are the hardest.
 - The **Runways** button over the map reopens the choice during the shift. **Next time, start straight away
   with the recommended runways** skips this step; turn it back on under **Settings → Ask which runways to use**.
 
@@ -117,6 +116,20 @@ lets you pick them:
   - Taxiing aircraft stop for traffic on their route and hold short of runways until cleared to cross.
   - A departure won't roll while someone is ahead on the runway.
   - Unanswered calls are repeated.
+- **Real-life events** (Settings → Real-life events, on by default). Things that are not your doing, and that a real tower
+  deals with:
+  - **The wind shifts** every 8 to 20 minutes, by 10 to 35 degrees and a few knots. The radio log says so, and warns when a
+    runway in use now has a tailwind: pilots refuse a tailwind above 10 kt, so change runways.
+  - **Pilots go around by themselves** now and then (unstable approach, windshear). They come back for another approach.
+  - **Priority arrivals** (*PAN PAN, medical emergency* or *minimum fuel*) are marked PRIORITY on their strip; making one
+    go around is flagged.
+  - **Not ready:** some departures reach the holding point and need a minute or two; they refuse a clearance until then.
+  - **Braking differs**, so arrivals don't all make the same exit.
+  Each flight's part is taken from its callsign, so it is varied but not random noise.
+- **Cancel a take-off clearance** before the roll starts: the button, or *hold position, cancel take-off clearance* /
+  *取消起飞许可*. Once rolling, pilots continue.
+- **Strips show the wait:** a calling aircraft's strip counts how long it has waited (amber after a minute, red after two),
+  and the Traffic header keeps the shift so far: landed, departed, go-arounds, conflicts, and how fast you answer on average.
 - **No score.** Mistakes (a go-around you caused, a conflict, an aircraft that had to call again) appear in the radio log
   as plain warnings.
 - **Colours:** arrivals are blue and departures magenta everywhere (map, 3D, tags, lists), drawn large with a rim and a
@@ -149,14 +162,14 @@ when you first open a 3D view, so the 2D map stays as fast as before.
 - **Tower:** at Daxing it stands where the CAAC aircraft parking chart (ZBAD 2P-1, 2025-03-15) shows the west
   tower, TWR(W), in the courtyard south-west of the terminal; the position was read off the chart against
   nearby stands, so it is approximate. At Changi it is at the coordinates the AIP Singapore aerodrome chart gives
-  for the control tower (01°21'33"N 103°59'22"E). At San Francisco the game puts it in the open space nearest the
+  for the control tower (01°21'33"N 103°59'22"E). At other airports the game puts it in the open space nearest the
   middle of the terminals. The cab is at about 72 m.
   Set `meta.tower_pos` in `data/traffic/<ICAO>.json` to move it.
 - **Appearance:** light and dark follow the game's appearance; dark looks like dusk, with runway lights.
 
-### The detailed airports: WSSS, ZBAD, KSFO
+### The detailed airports: WSSS and ZBAD
 
-**Singapore Changi (WSSS), Beijing Daxing (ZBAD) and San Francisco (KSFO)** use the real
+**Singapore Changi (WSSS) and Beijing Daxing (ZBAD)** use the real
 airport layout from [OpenStreetMap](https://www.openstreetmap.org/copyright)
 (© OpenStreetMap contributors, ODbL). That includes:
 - runways and real named taxiways and taxilanes;
@@ -172,8 +185,8 @@ alpha, bravo one*. Spoken letters are matched against the airport's actual taxiw
 names, and pilots refuse taxiways that don't exist.
 
 **Traffic** comes from the airlines that serve each airport. Each one uses its real
-radio callsign (*Singapore*, *Scooter*, *China Southern*, *Lianhang*, *United*,
-*Skywest*…), a typical fleet there, and real destinations. Aircraft are drawn to
+radio callsign (*Singapore*, *Scooter*, *China Southern*, *Lianhang*, *Air China*,
+*Hebei Air*…), a typical fleet there, and real destinations. Aircraft are drawn to
 scale and use their own approach and rotation speeds and ICAO wake category.
 
 **Wake turbulence:**
@@ -183,10 +196,9 @@ scale and use their own approach and rotation speeds and ICAO wake category.
   runway costs points (2 min behind a heavy, 3 min behind an A380 for medium aircraft).
 
 **Runway plans:**
-- San Francisco uses its West Plan (land 28L and 28R, depart 1L and 1R) or Southeast
-  Plan (land 19L/19R, depart 10L/10R), depending on the wind.
 - Changi lands on 02L/20R and departs 02C/20C.
-- Daxing lands on the runway most into the wind and departs from a parallel one.
+- Daxing uses its North flow (land 35R and 01L, depart 35L) or South flow (land 17L and 19R, depart 17R and 11L),
+  depending on the wind (simplified from its real operations).
 - Choose your own, with any number of runways landing and departing, in the runway step or with **Runways**.
 
 The traffic mix is representative, not a real schedule, and the runway plans are
@@ -367,7 +379,7 @@ those devices have installed. The game then speaks with free, open-source
 - **Download, once per device:** the browser downloads what the airport's airlines need and keeps it for
   offline play:
   - Changi or Daxing: about 170–185 MB.
-  - San Francisco and other airports: about 265 MB.
+  - Other airports: about 265 MB.
   - Later shifts at the same airport download nothing.
   - **Delete downloaded voices** frees the space.
 - **Where it downloads from:**

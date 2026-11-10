@@ -38,10 +38,6 @@
           <span class="feat-code">ZBAD</span><span class="feat-name">北京大兴 Beijing Daxing</span>
           <span class="feat-sub">中文无线电通话 · 公制单位 · Chinese radio, metric units</span>
         </button>
-        <button type="button" class="feat card" data-code="KSFO">
-          <span class="feat-code">KSFO</span><span class="feat-name">San Francisco</span>
-          <span class="feat-sub">United hub · West Plan: land 28L/28R, depart 1L/1R</span>
-        </button>
       </div>
 
       <section class="section">
@@ -154,7 +150,7 @@
 
       <div class="side-lists">
       <section class="card" id="traffic-card">
-        <div class="card-head"><h2>Traffic</h2></div>
+        <div class="card-head"><h2>Traffic</h2><span id="shift-stats" class="shift-stats muted"></span></div>
         <div class="card-body"><div id="strips" class="strips"></div></div>
       </section>
 
@@ -194,6 +190,7 @@
             <pre id="perf-report" class="perf muted small">Open this section while playing to see it.</pre>
             <p id="version" class="muted small"></p>
           </div>
+          <label class="check"><input type="checkbox" id="set-events" checked> Real-life events: wind shifts, pilots going around, priority arrivals, aircraft not ready</label>
           <label class="check"><input type="checkbox" id="set-askrwy" checked> Ask which runways to use when a shift starts</label>
           <label class="check"><input type="checkbox" id="set-tts" checked> Speak pilot calls</label>
           <label class="check"><input type="checkbox" id="set-radio" checked> Radio sound (squelch and static)</label>

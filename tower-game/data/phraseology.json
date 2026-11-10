@@ -7,6 +7,9 @@
     "arr_checkin": ["{unit}, {callsign}, {approach} runway {runway}, {distance}.", "{unit}, good day, {callsign}, established {approach} runway {runway}, {distance}.", "{unit}, {callsign}, with you on the {approach} runway {runway}, {distance} out.", "{unit}, hello, {callsign}, {approach} runway {runway}, {distance}."],
     "arr_short_final": ["{unit}, {callsign}, short final runway {runway}.", "{callsign}, short final runway {runway}.", "{unit}, {callsign}, on short final {runway}."],
     "go_around": ["{callsign}, going around.", "Going around, {callsign}.", "{callsign}, go-around."],
+    "go_around_own": ["{callsign}, going around, unstable approach.", "{callsign}, going around, windshear.", "Going around, {callsign}, we were too high."],
+    "arr_priority": ["{unit}, {callsign}, PAN PAN, medical emergency on board, {approach} runway {runway}, {distance}, request priority.", "{unit}, {callsign}, minimum fuel, {approach} runway {runway}, {distance}."],
+    "not_ready": ["{unit}, {callsign}, holding point runway {runway}, we need two minutes.", "{unit}, {callsign}, approaching holding point runway {runway}, not ready yet, cabin not secure."],
     "vacated": ["{unit}, {callsign}, runway {runway} vacated, request taxi to stand {gate}.", "{unit}, {callsign}, vacated runway {runway}, for stand {gate}.", "{unit}, {callsign}, clear of runway {runway}, request taxi stand {gate}."],
     "push": ["{unit}, {callsign}, stand {gate}, request pushback.", "{unit}, {callsign}, stand {gate}, ready for pushback.", "{unit}, good day, {callsign} on stand {gate}, request push and start.", "{unit}, {callsign}, stand {gate}, request pushback and start up."],
     "taxi": ["{unit}, {callsign}, ready to taxi.", "{unit}, {callsign}, request taxi.", "{unit}, {callsign}, pushback complete, ready to taxi."],
@@ -31,6 +34,7 @@
     "lineup": ["Line up and wait runway {runway}, {callsign}.", "Lining up runway {runway}, {callsign}.", "Line up and wait {runway}, {callsign}."],
     "takeoff": ["Cleared for take-off runway {runway}, {callsign}.", "Cleared for take-off {runway}, {callsign}.", "Runway {runway}, cleared for take-off, {callsign}."],
     "contact": ["Contact departure, good day, {callsign}.", "Over to departure, good day, {callsign}.", "Departure, {callsign}, thanks for your help.", "Contact departure, {callsign}, bye bye."],
+    "cancel_takeoff": ["Holding position, take-off clearance cancelled, {callsign}.", "Cancel take-off, holding position, {callsign}."],
     "unable": "Unable, {reason}, {callsign}.",
     "say_again": ["Say again for {callsign}?", "{callsign}, say again?", "Sorry, say again for {callsign}?"]
   },
@@ -48,13 +52,15 @@
     "hold_short": "{callsign}, hold short runway {runway}.",
     "lineup": "{callsign}, runway {runway}, line up and wait.",
     "takeoff": "{callsign}, [wind {wind}, ]runway {runway}, cleared for take-off.",
-    "contact": "{callsign}, contact departure, good day."
+    "contact": "{callsign}, contact departure, good day.",
+    "cancel_takeoff": "{callsign}, hold position, cancel take-off clearance."
   },
 
   "buttons": {
     "land": "Cleared to land",
     "continue": "Continue approach",
     "go_around": "Go around",
+    "cancel_takeoff": "Cancel take-off",
     "push": "Pushback approved",
     "taxi_out": "Taxi to runway",
     "taxi_in": "Taxi to stand",
@@ -68,6 +74,7 @@
   },
 
   "commands": [
+    { "cmd": "cancel_takeoff", "patterns": ["cancel(l?ed|ling)? (the |your )?(take ?off|departure)", "take ?off (clearance )?(is )?cancel", "stop immediately"] },
     { "cmd": "go_around", "patterns": ["go ?a?round", "missed approach"] },
     { "cmd": "land", "patterns": ["clear\\w* to land", "clear\\w* land", "cleared for (the )?landing", "clear\\w* (to )?touch ?down"] },
     { "cmd": "takeoff", "patterns": ["clear\\w* for (immediate )?take ?off", "clear\\w* take ?off", "clear\\w* for departure", "clear\\w* (to )?(depart|go)\\b"] },

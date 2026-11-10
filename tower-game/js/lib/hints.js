@@ -14,9 +14,9 @@ const ZH_DIGITS = '洞幺两三四五六拐八九';
 
 const EN_COMMANDS = ['cleared to land', 'cleared for take-off', 'line up and wait', 'hold position', 'hold short of runway', 'cross runway',
   'taxi to holding point runway', 'taxi to stand', 'via', 'pushback approved', 'expect runway', 'continue taxi', 'continue approach', 'go around',
-  'contact departure', 'taxiway', 'good day'];
+  'contact departure', 'taxiway', 'good day', 'cancel take-off clearance', 'change runway', 'amended route'];
 const ZH_COMMANDS = ['可以落地', '可以起飞', '进跑道等待', '原地等待', '外等待点', '穿越跑道', '滑到跑道', '滑到停机位', '经', '滑行道', '可以推出', '预计跑道',
-  '继续滑行', '继续进近', '复飞', '联系离场', '再见'];
+  '继续滑行', '继续进近', '复飞', '联系离场', '再见', '取消起飞许可', '进入跑道', '对正跑道', '同意推出', '推出开车', '滑行到', '停机位', '更改跑道', '左', '右', '中'];
 
 // "B1" -> "bravo one"; "WA" -> "whiskey alpha"
 export function spellTaxiway(name, zh = false) {

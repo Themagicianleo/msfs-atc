@@ -28,7 +28,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(`tower.${k}`, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
-const settings = { effects: 'auto', voiceQuality: 'best', tts: true, radioFx: true, accents: true, builtinVoices: false, aiVoice: false, autoRunways: false, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
+const settings = { effects: 'auto', voiceQuality: 'best', tts: true, radioFx: true, accents: true, builtinVoices: false, aiVoice: false, autoRunways: false, events: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
 const saveSettings = () => store.set('settings', settings);
 // voices vary per aircraft; the Speaker reads these keys
 const speakerSettings = { efficient: settings.voiceQuality === 'efficient', tts: settings.tts, radioFx: settings.radioFx, accents: settings.accents, builtinVoices: settings.builtinVoices, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
@@ -115,7 +115,7 @@ function showWind() {
 }
 
 // the detailed airports: real layout from OpenStreetMap, real airlines
-export const FEATURED = ['WSSS', 'ZBAD', 'KSFO'];
+export const FEATURED = ['WSSS', 'ZBAD'];
 
 async function loadFeatured(code) {
   const [packed, profile, types] = await Promise.all([loadJson(`data/hq/${code}.json`),
@@ -267,7 +267,9 @@ $('#rwy-step').addEventListener('submit', (e) => {
     return;
   }
   settings.autoRunways = $('#rwy-auto').checked;
-  $('#set-askrwy').checked = !settings.autoRunways;
+  $('#set-events').checked = settings.events !== false;
+$('#set-events').addEventListener('change', (e) => { settings.events = e.target.checked; if (game.world) game.world.events = e.target.checked; saveSettings(); });
+$('#set-askrwy').checked = !settings.autoRunways;
   saveSettings();
   beginShift(rwy.ctx, { ...cfg, arr, dep });
 });
@@ -290,7 +292,7 @@ function beginShift(ctx, cfg) {
   game.phrZh = chinese ? phrZh : null;
   game.metric = profile?.meta?.units === 'metric';
   setMicLang(chinese ? 'zh-CN' : settings.lang, chinese);
-  game.world = new World({ layout, phr, phrZh: game.phrZh, airlines, arrEnd: cfg.arr, depEnd: cfg.dep, traffic, wind,
+  game.world = new World({ layout, phr, phrZh: game.phrZh, airlines, arrEnd: cfg.arr, depEnd: cfg.dep, traffic, wind, events: settings.events !== false,
     profile, types: hq?.types || null,
     unit: profile?.meta?.tower || `${airport.municipality || airport.name || airport.icao} Tower` });
   game.selected = null;
@@ -454,6 +456,13 @@ function handleEvents(events) {
       speaker.speak(ev.speech, `ac${ev.voice}`, ev.lang, { reply: !!(ev.readback || ev.unable), ...radio });
     } else if (ev.kind === 'score') {
       if (ev.delta < 0) sys(ev.reason, 'bad'); // what went wrong, as a plain warning (there is no score)
+    } else if (ev.kind === 'wind') {
+      // the wind has shifted: show it, and say so if a runway in use now has a tailwind (pilots will start refusing it)
+      game.wind = ev.wind;
+      showWind();
+      const w = game.world;
+      const tail = [...new Set([...w.arrEnds, ...w.depEnds])].filter((e) => -w.windOn(e).headKt >= 5);
+      sys(`${windText(ev.wind, game.metric)}: the wind has ${ev.turn > 0 ? 'veered' : 'backed'} ${Math.abs(ev.turn)}°.${tail.length ? ` Tailwind now on runway ${tail.join(', ')}: consider changing runways (Runways).` : ''}`, tail.length ? 'bad' : 'sys');
     } else if (ev.kind === 'alert') {
       const a = $('#alert');
       a.textContent = ev.text;
@@ -747,7 +756,7 @@ function renderPanel() {
       }
     }
   }
-  const stripKey = JSON.stringify([game.selected, w.ac.map((a) => [a.id, a.state, a.req?.type, a.cleared.land, a.end])]);
+  const stripKey = JSON.stringify([game.selected, w.ac.map((a) => [a.id, a.state, a.req?.type, a.cleared.land, a.end, a.priority])]);
   const strips = $('#strips');
   if (stripKey !== lastStrips) {
     lastStrips = stripKey;
@@ -755,11 +764,11 @@ function renderPanel() {
     const order = [...w.ac].sort((a, b) => (b.req ? 1 : 0) - (a.req ? 1 : 0) || a.id - b.id);
     for (const a of order) {
       const d = document.createElement('div');
-      d.className = `strip ${a.kind}${a.id === game.selected ? ' sel' : ''}${a.req ? ' req' : ''}`;
+      d.className = `strip ${a.kind}${a.id === game.selected ? ' sel' : ''}${a.req ? ' req' : ''}${a.priority ? ' pri' : ''}`;
       d.dataset.id = a.id;
       d.append(Object.assign(document.createElement('span'), { className: 'cs', textContent: a.callsign }),
         Object.assign(document.createElement('span'), { className: 'st', textContent: '' }),
-        Object.assign(document.createElement('span'), { className: 'rq', textContent: a.req ? '● call' : '' }));
+        Object.assign(document.createElement('span'), { className: 'rq', textContent: '' }));
       strips.append(d);
     }
   }
@@ -772,7 +781,18 @@ function renderPanel() {
     const txt = `${a.type.code} · ${stripState(a)}${dest ? ` → ${dest.short}` : ''} · ${a.kind === 'arr' ? 'ARR' : 'DEP'}${rwy}${route}`;
     const st = d.querySelector('.st');
     if (st.textContent !== txt) st.textContent = txt;
+    // how long it has been waiting for an answer; amber after a minute, red after two
+    const waited = a.req ? Math.floor(w.t - (a.req.since ?? a.req.t)) : 0;
+    const rq = d.querySelector('.rq');
+    const label = `${a.priority ? 'PRIORITY ' : ''}${a.req ? `● ${Math.floor(waited / 60)}:${String(waited % 60).padStart(2, '0')}` : (a.notReadyUntil ? 'not ready' : '')}`;
+    if (rq.textContent !== label) rq.textContent = label;
+    d.classList.toggle('late', waited >= 60 && waited < 120);
+    d.classList.toggle('verylate', waited >= 120);
   }
+  // the shift so far
+  const s = w.stats;
+  const sum = `${s.arrived} landed · ${s.departed} departed · ${s.goArounds} go-around${s.goArounds === 1 ? '' : 's'} · ${s.conflicts} conflict${s.conflicts === 1 ? '' : 's'}${s.waits ? ` · answered in ${Math.round(s.waitSum / s.waits)} s on average` : ''}`;
+  if ($('#shift-stats').textContent !== sum) $('#shift-stats').textContent = sum;
 }
 
 // one listener per container (elements inside are replaced over time)
