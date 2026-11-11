@@ -111,6 +111,15 @@ lets you pick them:
 - **Everyone is different:** pilots are women and men with their own voices (device voices by name; built-in voices by the
   speaker lists of their corpora), speak slowly or quickly, and taxi in their own way (about 14 to 29 kt, quick or slow to
   pick up speed and to slow for corners).
+- **Performance** (Settings → Performance): *Automatic* judges the device (cores and memory the browser reports) and picks
+  **Balanced** or **Smooth**; **Sharp** draws everything the screen has. What costs a slow device is not the airport (a map is
+  drawn once and kept) but the pixels filled 60 times a second, so:
+  - a **pixel budget** (a 1440x900 retina laptop is drawn at about 1.8x, not 2x; Smooth about 1.2x; a phone or tablet is unchanged);
+  - **30 pictures a second** on a laptop (Smooth: 20), as aircraft move slowly (while you pan or zoom, every frame is drawn);
+  - Smooth also uses flat controls, no anti-aliasing in 3D and slower panel updates;
+  - the game still lowers its own detail if the device struggles, and the Mac app stops drawing when its window is hidden.
+  `node tools/bench-sim.mjs` measures the simulation (about 0.05 ms a step at Daxing: it is never the problem) and
+  `node tools/perf-throttle.mjs` the drawing with the CPU slowed 4x and 6x.
 - **Natural pacing** (Settings → Natural pacing, on by default): a pilot's call is spoken in phrases, with small pauses,
   digits in groups (*one two, three four*), a little quicker here and slower there, and a falling tone at the end. Each pilot
   has a manner of their own. For the most natural speech, also download your device's Enhanced or Premium voices

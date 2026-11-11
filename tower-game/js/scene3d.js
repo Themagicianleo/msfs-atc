@@ -7,6 +7,7 @@ import * as THREE from './vendor/three.module.min.js';
 import { STATE_LABELS, edgeGroups } from './render.js';
 import { taxiDestination } from './world.js';
 import { M_PER_NM } from './geo.js';
+import { pixelRatio } from './lib/perf.js';
 
 const FT = 0.3048;
 const DEG = Math.PI / 180;
@@ -264,7 +265,7 @@ export function towerSpot(L) {
 
 // ------------------------------------------------------------------ the scene
 export class Scene3D {
-  constructor(wrap) {
+  constructor(wrap, opts = {}) {
     this.wrap = wrap;
     this.cv = document.createElement('canvas');
     this.cv.className = 'map3d';
@@ -277,7 +278,7 @@ export class Scene3D {
     // every fragment) and anti-aliasing only on a pointer-driven (laptop) screen, where it is cheap.
     // 'low-power' asks a phone for its efficient GPU path.
     const touch = !!window.matchMedia?.('(pointer: coarse)').matches;
-    this.gl = new THREE.WebGLRenderer({ canvas: this.cv, antialias: !touch, powerPreference: 'low-power' });
+    this.gl = new THREE.WebGLRenderer({ canvas: this.cv, antialias: !touch && opts.antialias !== false, powerPreference: 'low-power' });
     this.maxDpr = touch ? (Math.min(window.innerWidth, window.innerHeight) < 700 ? 1 : 1.25) : 1.5; // a phone 1, an iPad 1.25
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, 1, 1, 60000);
@@ -315,7 +316,7 @@ export class Scene3D {
   resize() {
     const r = this.wrap.getBoundingClientRect();
     this.w = r.width; this.h = r.height;
-    this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.maxDpr || 1.5)); // sharp enough, and a third less to draw than 2x
+    this.gl.setPixelRatio(pixelRatio({ devicePixelRatio: window.devicePixelRatio, maxDpr: this.maxDpr || 1.5, cssW: r.width, cssH: r.height, budget: this.pixelBudget })); // sharp enough, and a third less to draw than 2x
     this.gl.setSize(r.width, r.height, false);
     this.camera.aspect = r.width / Math.max(1, r.height);
     this.camera.updateProjectionMatrix();

@@ -8,6 +8,7 @@ import { nearestTaxiway, taxiwayNames } from './layout.js';
 import { Speaker } from './lib/speech.js';
 import { AiRecognizer, MODEL as AI_MODEL, aiModelCached, aiSupport, deleteAiModel } from './lib/whisper.js';
 import { correctTranscript } from './lib/asr-correct.js';
+import { deviceClass, drawInterval as pickInterval, profileFor } from './lib/perf.js';
 import { MODELS, NeuralVoices, cachedModels, deleteVoices, modelsFor } from './lib/neural.js';
 import { Listener, voiceSupport } from './lib/voice.js';
 import { understand, understandBest } from './commands.js';
@@ -28,7 +29,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(`tower.${k}`, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
-const settings = { effects: 'auto', voiceQuality: 'best', tts: true, radioFx: true, pacing: true, accents: true, builtinVoices: false, aiVoice: !!window.towerDesktop, autoRunways: false, events: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
+const settings = { effects: 'auto', voiceQuality: 'best', tts: true, performance: 'auto', radioFx: true, pacing: true, accents: true, builtinVoices: false, aiVoice: !!window.towerDesktop, autoRunways: false, events: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
 const saveSettings = () => store.set('settings', settings);
 // voices vary per aircraft; the Speaker reads these keys
 const speakerSettings = { efficient: settings.voiceQuality === 'efficient', tts: settings.tts, radioFx: settings.radioFx, pacing: settings.pacing, accents: settings.accents, builtinVoices: settings.builtinVoices, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
@@ -367,7 +368,8 @@ async function setView(view) {
   if (view !== 'map' && !game.scene3d) {
     try {
       const { Scene3D } = await import('./scene3d.js');
-      game.scene3d = new Scene3D($('.map-wrap'));
+      game.scene3d = new Scene3D($('.map-wrap'), { antialias: activeProfile().antialias });
+      syncPerformance();
       game.scene3d.onTap = (q) => {
         if (!game.world) return;
         const ac = game.scene3d.pick(game.world, q);
@@ -1008,11 +1010,27 @@ renderAi();
 // If the device still can't keep up the game lowers its own detail, step by step.
 const COARSE = !!window.matchMedia?.('(pointer: coarse)').matches;
 // minInterval: the shortest time between pictures the game has been forced to by a struggling device
-const perf = { minInterval: 0, level: 0 };
-// How often a picture is drawn. Aircraft move slowly, so on a touch device a normal-speed game
-// needs 20 a second, and only a fast-forwarded one 30 (a laptop draws every frame it can).
-const drawInterval = () => Math.max(perf.minInterval, COARSE ? (game.view !== 'map' || game.speed < 2 ? 50 : 33) : 0);
-const PANEL_MS = 150;
+const perf = { minInterval: 0, level: 0, dprCap: 0 };
+// How hard to work: from the Performance setting (Automatic / Smooth / Sharp) and what kind of device this is (see lib/perf.js)
+const device = deviceClass({ cores: navigator.hardwareConcurrency || 4, memory: navigator.deviceMemory ?? null, coarse: COARSE });
+const activeProfile = () => profileFor(settings.performance || 'auto', device);
+// How often a picture is drawn. Aircraft move slowly: 30 a second look the same as 60 and cost half, on a laptop too (while
+// you pan or zoom every frame is drawn); a touch device keeps its own pacing; a struggling device is slowed further.
+const drawInterval = () => pickInterval({ profile: activeProfile(), coarse: COARSE, view: game.view, speed: game.speed, forced: perf.minInterval });
+const PANEL_MS = () => activeProfile().panelMs;
+// the picture's pixel budget and sharpness, from the profile (and from what the watcher has had to take away)
+function syncPerformance() {
+  const p = activeProfile();
+  const cap = perf.dprCap || 9;
+  renderer.maxDpr = Math.min(p.maxDpr, cap);
+  renderer.pixelBudget = p.budget2d;
+  renderer.resize();
+  if (game.scene3d) {
+    game.scene3d.maxDpr = Math.min(COARSE ? game.scene3d.maxDpr || 1.25 : Math.min(p.maxDpr, 1.5), cap);
+    game.scene3d.pixelBudget = p.budget3d;
+    game.scene3d.resize();
+  }
+}
 let lastDraw = 0;
 let lastPanel = 0;
 let lastSig = '';
@@ -1020,7 +1038,7 @@ let lastSig = '';
 // Visual effects: Fast (flat controls, no blur) or Full (glass). Automatic is Fast on touch devices.
 function applyEffects() {
   const pick = settings.effects || 'auto';
-  const fast = pick === 'fast' || (pick === 'auto' && (COARSE || perf.level >= 1));
+  const fast = pick === 'fast' || (pick === 'auto' && (COARSE || perf.level >= 1 || activeProfile().solid));
   document.documentElement.classList.toggle('solid', fast);
   $$('#effects button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.fx === pick)));
   $('#fx-note').textContent = pick === 'auto' ? `Automatic: ${fast ? 'Fast' : 'Full'} on this device${perf.level ? ' (the game lowered its detail because the device was struggling)' : ''}.`
@@ -1035,6 +1053,28 @@ $('#effects').addEventListener('click', (e) => {
   applyEffects();
 });
 applyEffects();
+
+// Performance: Automatic (by the device), Smooth (for old laptops and low-end phones: fewer pixels, 20 pictures a second, flat
+// controls, no anti-aliasing in 3D), Sharp (everything the screen can show)
+function applyPerformanceSetting() {
+  const pick = settings.performance || 'auto';
+  const p = activeProfile();
+  $$('#perfmode button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.perf === pick)));
+  const what = { smooth: 'Smooth: fewer pixels, 20 pictures a second, flat controls', balanced: 'Balanced: 30 pictures a second, a pixel budget for big screens', sharp: 'Sharp: every pixel the screen has, 60 pictures a second' }[p.mode];
+  $('#perf-note').textContent = pick === 'auto' ? `Automatic: this device looks ${p.device === 'low' ? 'modest' : p.device === 'high' ? 'powerful' : 'ordinary'}, so ${what}.` : `${what}.`;
+  syncPerformance();
+  applyEffects();
+}
+$('#perfmode').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-perf]');
+  if (!b) return;
+  settings.performance = b.dataset.perf;
+  perf.level = 0; perf.dprCap = 0; perf.minInterval = 0;
+  saveSettings();
+  applyPerformanceSetting();
+  lastSig = ''; // draw again now
+});
+applyPerformanceSetting();
 
 // the screen's frame rate over the last second or two; if it is low while playing, do less
 const deltas = [];
@@ -1054,10 +1094,8 @@ function watchFrameRate(delta) {
     applyEffects(); // 1: flat controls
     sys('The device is struggling, so the game switched to Fast visual effects.');
   } else if (renderer.maxDpr !== 1.25 && (renderer.maxDpr || 2) > 1.25) {
-    renderer.maxDpr = (renderer.maxDpr || 2) > 1.5 ? 1.5 : 1.25; // 2: fewer pixels
-    renderer.resize();
-    if (game.scene3d) game.scene3d.maxDpr = renderer.maxDpr;
-    game.scene3d?.resize();
+    perf.dprCap = (renderer.maxDpr || 2) > 1.5 ? 1.5 : 1.25; // 2: fewer pixels
+    syncPerformance();
     applyEffects();
     sys('The device is still struggling, so the game lowered the picture resolution.');
   } else if (perf.minInterval < 1000 / 15) {
@@ -1095,7 +1133,7 @@ function frame(now) {
       if (game.view === 'map') renderer.draw(w, { selectedId: game.selected, now, plan: game.plan?.result });
       else game.scene3d.draw(w, { selectedId: game.selected, now, theme: renderer.theme });
     }
-    if (now - lastPanel >= PANEL_MS) {
+    if (now - lastPanel >= PANEL_MS()) {
       lastPanel = now;
       renderPanel();
       const t = Math.floor(w.t);
@@ -1119,7 +1157,7 @@ function perfReport() {
     `Screen ${(stats.rafs / dt).toFixed(0)} frames/s, pictures ${(stats.draws / dt).toFixed(0)}/s${game.speed === 0 ? ' (paused)' : ''}`,
     `Game code (main thread): ${(stats.jsMs / dt / 10).toFixed(1)}% of a second`,
     `Speaking: ${((talk - stats.talk0) / dt / 10).toFixed(0)}% of the time${settings.builtinVoices ? `, built-in voices computing ${((work - stats.work0) / dt / 10).toFixed(0)}%` : ' (device voices)'}`,
-    `View ${game.view} · effects ${document.documentElement.classList.contains('solid') ? 'Fast' : 'Full'}${perf.level ? ` (lowered ${perf.level}x)` : ''} · resolution up to ${renderer.maxDpr || 2}x · radio sound ${settings.radioFx ? 'on' : 'off'} · audio engine ${speaker.fx.ctx?.state || 'off'}`,
+    `Performance ${activeProfile().mode}${activeProfile().pick === 'auto' ? ' (automatic)' : ''} · device ${device} · pixel ratio ${renderer.cv.width && renderer.w ? (renderer.cv.width / renderer.w).toFixed(2) : '?'} · View ${game.view} · effects ${document.documentElement.classList.contains('solid') ? 'Fast' : 'Full'}${perf.level ? ` (lowered ${perf.level}x)` : ''} · resolution up to ${renderer.maxDpr || 2}x · radio sound ${settings.radioFx ? 'on' : 'off'} · audio engine ${speaker.fx.ctx?.state || 'off'}`,
     `Aircraft ${game.world ? game.world.ac.length : 0} · game speed ${game.speed}x · touch device ${COARSE ? 'yes' : 'no'}`,
     `Version ${VERSION}`,
   ];
@@ -1163,4 +1201,4 @@ if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWor
 requestAnimationFrame(frame);
 
 // for the end-to-end test
-window.towerGame = { game, endGeometry, renderer, speaker };
+window.towerGame = { game, endGeometry, renderer, speaker, perf, stats, activeProfile };
