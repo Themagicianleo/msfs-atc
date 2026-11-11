@@ -10,13 +10,9 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: desktop-mac
-  cancel-in-progress: true
-
 jobs:
   build:
-    runs-on: macos-14   # Apple Silicon
+    runs-on: macos-15   # Apple Silicon (arm64)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
