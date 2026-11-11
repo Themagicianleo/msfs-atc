@@ -8,6 +8,7 @@ import { STATE_LABELS, edgeGroups } from './render.js';
 import { taxiDestination } from './world.js';
 import { M_PER_NM } from './geo.js';
 import { pixelRatio } from './lib/perf.js';
+import { MODEL_FILES, modelFor, placement } from './lib/models.js';
 
 const FT = 0.3048;
 const DEG = Math.PI / 180;
@@ -15,9 +16,9 @@ const W3 = (p, y = 0) => new THREE.Vector3(p[0], y, -p[1]);
 
 const THEMES = {
   light: { sky: 0xbcd3ea, fog: 0xc9d9ea, grass: 0x86a36c, apron: 0xb9b9bd, twy: 0x8e8e93, lane: 0xa3a3a8, runway: 0x48484c,
-    mark: 0xffffff, yellow: 0xe0b100, hold: 0xd70015, terminal: 0xdfe4ea, building: 0xc2bdb4, hemi: [0xffffff, 0x6f7a5c, 1.6], sun: 1.6 },
+    mark: 0xffffff, yellow: 0xe0b100, hold: 0xd70015, terminal: 0xdfe4ea, building: 0xc2bdb4, hemi: [0xffffff, 0x6f7a5c, 1.6], sun: 1.6, zenith: 0x5f98d6, glass: 0x4d7896, glassGlow: 0 },
   dark: { sky: 0x101826, fog: 0x141c2a, grass: 0x1d2a1f, apron: 0x2c2f35, twy: 0x23262c, lane: 0x292c33, runway: 0x18191c,
-    mark: 0xd9dde3, yellow: 0xc9a227, hold: 0xe5484d, terminal: 0x4a5566, building: 0x343a44, hemi: [0x9fb4d8, 0x1a2018, 0.9], sun: 0.6 },
+    mark: 0xd9dde3, yellow: 0xc9a227, hold: 0xe5484d, terminal: 0x4a5566, building: 0x343a44, hemi: [0x9fb4d8, 0x1a2018, 0.9], sun: 0.6, zenith: 0x04070d, glass: 0x2d4a63, glassGlow: 0.55 },
 };
 
 // Douglas-Peucker: a polyline with the points that matter (tol metres off a straight line)
@@ -104,13 +105,57 @@ function textPlane(text, height, color = '#ffffff') {
 }
 
 // extruded footprint, height h
-function block(ring, h, material) {
-  const pts = ring.map((p) => new THREE.Vector2(p[0], p[1]));
+function block(ring, h, material, y0 = 0, grow = 1) {
+  let pts = ring.map((p) => new THREE.Vector2(p[0], p[1]));
   if (pts.length > 2 && pts[0].equals(pts[pts.length - 1])) pts.pop();
   if (pts.length < 3) return null;
+  if (grow !== 1) { // a little bigger all round, so a glass band shows outside the wall
+    const cx = pts.reduce((a, q) => a + q.x, 0) / pts.length; const cy = pts.reduce((a, q) => a + q.y, 0) / pts.length;
+    pts = pts.map((q) => new THREE.Vector2(cx + (q.x - cx) * grow, cy + (q.y - cy) * grow));
+  }
   const g = new THREE.ExtrudeGeometry(new THREE.Shape(pts), { depth: h, bevelEnabled: false });
   g.rotateX(-Math.PI / 2);
+  if (y0) g.translate(0, y0, 0);
   return new THREE.Mesh(g, material);
+}
+
+// the point on a closed ring nearest to p, and its distance
+function nearestOnRing(ring, p) {
+  let best = null;
+  for (let i = 1; i < ring.length; i += 1) {
+    const [ax, ay] = ring[i - 1]; const [bx, by] = ring[i];
+    const dx = bx - ax; const dy = by - ay;
+    const l2 = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((p[0] - ax) * dx + (p[1] - ay) * dy) / l2));
+    const q = [ax + dx * t, ay + dy * t];
+    const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (!best || d < best.d) best = { q, d };
+  }
+  return best;
+}
+
+// a mottled grass texture, so the ground is not one flat colour
+function grassTexture(hex) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 256;
+  const c = cv.getContext('2d');
+  const col = new THREE.Color(hex);
+  c.fillStyle = `#${col.getHexString()}`;
+  c.fillRect(0, 0, 256, 256);
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 2600; i += 1) {
+    const k = rnd() < 0.5 ? 255 : 0;
+    c.fillStyle = `rgba(${k},${k},${k},${0.01 + rnd() * 0.022})`;
+    const r = 2 + rnd() * 10;
+    c.beginPath(); c.arc(rnd() * 256, rnd() * 256, r, 0, 7); c.fill();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  tex.repeat.set(600, 600);
+  return tex;
 }
 
 // ------------------------------------------------------------------ low-poly aircraft
@@ -210,10 +255,34 @@ export function aircraftGeometry(type) {
 const KIND_COLOUR = { arr: 0x2ea8ff, dep: 0xff3d9a };
 const kindBody = new Map();
 const kindDisc = new Map();
+const MODEL_SCALE = 2; // the real models are recognisable, so they need less enlarging than the plain shapes
 const AIRCRAFT_SCALE = 2.4; // bigger than life: a real 737 is a speck at the distance the airport is viewed from
 const tailMats = new Map();
-function makeAircraft(ac) {
+function makeAircraft(ac, pack = null) {
   const grp = new THREE.Group();
+  const real = pack?.[modelFor(ac.type?.code)];
+  if (real) {
+    // a real airliner model, scaled to the type's length (the models carry their own paint)
+    const pl = placement(real.box, ac.type?.length);
+    const holder = new THREE.Group();
+    const body = real.root.clone(true);
+    body.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    holder.add(body);
+    holder.scale.setScalar(pl.scale);
+    holder.position.set(...pl.offset);
+    grp.add(holder);
+    grp.userData.real = true;
+    const kind = ac.kind === 'arr' ? 'arr' : 'dep';
+    if (!kindDisc.has(kind)) kindDisc.set(kind, new THREE.MeshBasicMaterial({ color: KIND_COLOUR[kind], transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }));
+    const disc = new THREE.Mesh(new THREE.CircleGeometry((ac.type?.span || 36) * 0.75, 28), kindDisc.get(kind));
+    disc.rotation.x = -Math.PI / 2;
+    disc.position.y = 0.35;
+    disc.renderOrder = 6;
+    grp.add(disc);
+    grp.scale.setScalar(MODEL_SCALE);
+    grp.rotation.order = 'YZX';
+    return grp;
+  }
   if (!tailMats.has(ac.code)) tailMats.set(ac.code, new THREE.MeshLambertMaterial({ color: tailColour(ac.code) }));
   const kind = ac.kind === 'arr' ? 'arr' : 'dep';
   if (!kindBody.has(kind)) kindBody.set(kind, new THREE.MeshLambertMaterial({ color: KIND_COLOUR[kind], emissive: KIND_COLOUR[kind], emissiveIntensity: 0.25 }));
@@ -288,6 +357,8 @@ export class Scene3D {
     this.scene.add(this.hemi, this.sun);
     this.models = new Map();
     this.tags = new Map();
+    this.pack = null; // the real aircraft models, once loaded
+    this.quality = 'standard';
     this.mode = 'tower';
     this.follow = false;
     this.themeName = null;
@@ -304,6 +375,7 @@ export class Scene3D {
     this.reqRing = new THREE.Mesh(new THREE.RingGeometry(1, 1.05, 48), new THREE.MeshBasicMaterial({ color: 0xffd60a, side: THREE.DoubleSide, depthWrite: false }));
     this.reqRing.rotation.x = -Math.PI / 2;
     this.reqRing.renderOrder = 7;
+    this.setQuality(opts.quality || 'standard');
   }
 
   show(on) {
@@ -322,6 +394,80 @@ export class Scene3D {
     this.camera.updateProjectionMatrix();
   }
 
+  // 'high': real aircraft models, soft shadows, a sky, finer buildings and lights, film-like colour. 'standard': the light version.
+  setQuality(q) {
+    const high = q === 'high';
+    if (this.quality === q && this.qualitySet) return;
+    this.quality = q; this.qualitySet = true;
+    this.high = high;
+    this.gl.shadowMap.enabled = high;
+    this.gl.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.gl.toneMapping = high ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+    this.gl.toneMappingExposure = 1.05;
+    this.sun.castShadow = high;
+    if (high) {
+      this.sun.shadow.mapSize.set(2048, 2048);
+      this.sun.shadow.bias = -0.0004;
+      this.sun.shadow.normalBias = 0.6;
+      if (!this.sun.target.parent) this.scene.add(this.sun.target);
+      this.loadModels();
+    }
+    if (this.sky) this.sky.visible = high;
+    // everything is rebuilt in the new quality
+    for (const m of this.models.values()) this.scene.remove(m);
+    this.models.clear();
+    this.themeName = null; // the next picture rebuilds the airport (and the sky) in the new quality
+  }
+
+  // the real aircraft models are fetched once, after the 3D view is first opened in high quality
+  loadModels() {
+    if (this.pack || this.packing) return this.packing;
+    this.packing = (async () => {
+      const { GLTFLoader } = await import('./vendor/GLTFLoader.js');
+      const loader = new GLTFLoader();
+      const pack = {};
+      await Promise.all(MODEL_FILES.map(async (f) => {
+        try {
+          const g = await loader.loadAsync(new URL(`../assets/models/${f}.glb`, import.meta.url).href);
+          g.scene.updateMatrixWorld(true);
+          const b = new THREE.Box3().setFromObject(g.scene);
+          g.scene.traverse((o) => { if (o.isMesh && o.material?.map) o.material.map.anisotropy = 8; });
+          pack[f] = { root: g.scene, box: { min: b.min.toArray(), max: b.max.toArray() } };
+        } catch { /* that model stays the plain shape */ }
+      }));
+      this.pack = pack;
+      for (const m of this.models.values()) this.scene.remove(m); // aircraft are made again with the models
+      this.models.clear();
+      return pack;
+    })();
+    return this.packing;
+  }
+
+  // a dome of sky that follows the camera
+  makeSky() {
+    const g = new THREE.SphereGeometry(30000, 24, 12);
+    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 3), 3));
+    this.sky = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false, toneMapped: false }));
+    this.sky.renderOrder = -10;
+    this.sky.frustumCulled = false;
+    this.scene.add(this.sky);
+  }
+
+  paintSky() {
+    if (!this.high) return;
+    if (!this.sky) this.makeSky();
+    const T = this.T;
+    const top = new THREE.Color(T.zenith); const hor = new THREE.Color(T.fog); const c = new THREE.Color();
+    const pos = this.sky.geometry.attributes.position; const col = this.sky.geometry.attributes.color;
+    for (let i = 0; i < pos.count; i += 1) {
+      const h = Math.max(0, pos.getY(i) / 30000);
+      c.copy(hor).lerp(top, Math.pow(h, 0.55));
+      col.setXYZ(i, c.r, c.g, c.b);
+    }
+    col.needsUpdate = true;
+    this.sky.visible = true;
+  }
+
   setTheme(name) {
     const t = THEMES[name === 'light' ? 'light' : 'dark'];
     if (this.themeName === name) return;
@@ -329,8 +475,11 @@ export class Scene3D {
     this.T = t;
     this.scene.background = new THREE.Color(t.sky);
     this.scene.fog = new THREE.Fog(t.fog, 6000, 32000);
-    this.hemi.color.set(t.hemi[0]); this.hemi.groundColor.set(t.hemi[1]); this.hemi.intensity = t.hemi[2];
-    this.sun.intensity = t.sun;
+    // film-like colour (high quality) darkens night scenes, so moonlight is lifted to keep the airport readable
+    const lift = this.high && name !== 'light' ? 2.6 : 1;
+    this.hemi.color.set(t.hemi[0]); this.hemi.groundColor.set(t.hemi[1]); this.hemi.intensity = t.hemi[2] * lift;
+    this.sun.intensity = t.sun * (lift > 1 ? 2.4 : 1);
+    this.paintSky();
     if (this.L) this.build(this.L, true);
   }
 
@@ -358,9 +507,18 @@ export class Scene3D {
     const cy = all.reduce((s, p) => s + p[1], 0) / all.length;
     this.centre = [cx, cy];
 
-    const grass = new Flat();
-    grass.quad([cx - 30000, cy], [cx + 30000, cy], 60000, 0);
-    grp.add(grass.mesh(T.grass, 0));
+    const high = this.high;
+    if (high) {
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000), new THREE.MeshLambertMaterial({ map: grassTexture(T.grass), depthWrite: false }));
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.set(cx, 0, -cy);
+      ground.renderOrder = 0;
+      grp.add(ground);
+    } else {
+      const grass = new Flat();
+      grass.quad([cx - 30000, cy], [cx + 30000, cy], 60000, 0);
+      grp.add(grass.mesh(T.grass, 0));
+    }
     const apron = new Flat();
     for (const ring of L.aprons || [L.apron].filter(Boolean)) apron.ring(ring, 0);
     grp.add(apron.mesh(T.apron, 1));
@@ -446,8 +604,27 @@ export class Scene3D {
 
     const termMat = new THREE.MeshLambertMaterial({ color: T.terminal });
     const bldMat = new THREE.MeshLambertMaterial({ color: T.building });
-    for (const ring of (L.terminals?.length ? L.terminals : [L.terminal].filter(Boolean))) { const m = block(ring, L.real ? 22 : 15, termMat); if (m) grp.add(m); }
-    for (const ring of L.buildings || []) { const m = block(ring, 16, bldMat); if (m) grp.add(m); }
+    const termRings = L.terminals?.length ? L.terminals : [L.terminal].filter(Boolean);
+    const glassMat = new THREE.MeshLambertMaterial({ color: T.glass, emissive: 0xffd9a0, emissiveIntensity: T.glassGlow });
+    const roofMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(T.terminal).multiplyScalar(0.7) });
+    for (const ring of termRings) {
+      const h = L.real ? 22 : 15;
+      const m = block(ring, h, termMat);
+      if (m) grp.add(m);
+      if (high && m) { // a band of glass round the walls, and a darker roof
+        const gl = block(ring, h - 8, glassMat, 4, 1.004); if (gl) grp.add(gl);
+        const rf = block(ring, 1.4, roofMat, h, 1.006); if (rf) grp.add(rf);
+      }
+    }
+    let n = 0;
+    for (const ring of L.buildings || []) {
+      n += 1;
+      const hgt = high ? 9 + ((n * 7919) % 17) : 16; // not all the same height
+      const m = block(ring, hgt, bldMat);
+      if (m) grp.add(m);
+      if (high && m) { const rf = block(ring, 0.8, roofMat, hgt, 1.01); if (rf) grp.add(rf); }
+    }
+    if (high) this.addDetail(grp, L, T, groups, runways);
 
     // the control tower: shaft, cab and its glass
     const tp = this.towerSpot(L);
@@ -463,10 +640,85 @@ export class Scene3D {
     this.setMode(this.mode);
     this.tower = tp;
 
+    if (high) grp.traverse((o) => { if (o.isMesh && !o.userData.noShadow) o.receiveShadow = true; });
     this.static = grp;
     this.scene.add(grp);
     this.scene.add(this.selRing, this.reqRing);
     this.reset();
+  }
+
+  // high quality only: jet bridges, taxiway edge lights, approach lights and apron floodlights
+  addDetail(grp, L, T, groups, runways) {
+    const nodes = L.graph.nodes;
+    const rings = (L.terminals?.length ? L.terminals : [L.terminal].filter(Boolean));
+    // jet bridges: from the terminal wall to the aircraft's door, one instanced box each
+    const bridges = [];
+    for (const g of L.gates || []) {
+      const nd = nodes[g.node];
+      if (!nd) continue;
+      const p = nd.p;
+      let best = null;
+      for (const r of rings) { const q = nearestOnRing(r, p); if (q && (!best || q.d < best.d)) best = q; }
+      if (!best || best.d > 90 || best.d < 14) continue;
+      const hd = (g.heading ?? 0) * DEG; // compass heading the aircraft faces when parked
+      const fwd = [Math.sin(hd), Math.cos(hd)];
+      const side = Math.sign((best.q[0] - p[0]) * fwd[1] - (best.q[1] - p[1]) * fwd[0]) || 1; // which side the terminal is on
+      const nx = fwd[1] * side * -1; const ny = fwd[0] * side; // unit vector toward the terminal
+      const door = [p[0] + fwd[0] * 9 + nx * 2.8, p[1] + fwd[1] * 9 + ny * 2.8];
+      bridges.push({ a: best.q, b: door });
+    }
+    if (bridges.length) {
+      const mat = new THREE.MeshLambertMaterial({ color: new THREE.Color(T.terminal).multiplyScalar(0.85) });
+      const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), mat, bridges.length);
+      const m4 = new THREE.Matrix4(); const q = new THREE.Quaternion(); const e = new THREE.Euler(); const sc = new THREE.Vector3(); const ps = new THREE.Vector3();
+      bridges.forEach((b, i) => {
+        const dx = b.b[0] - b.a[0]; const dy = b.b[1] - b.a[1];
+        const len = Math.hypot(dx, dy);
+        e.set(0, Math.atan2(dy, dx), 0); // x → east, north → −z: rotation about y by the bearing
+        q.setFromEuler(e);
+        sc.set(len, 3.4, 3.2);
+        ps.set((b.a[0] + b.b[0]) / 2, 5.2, -(b.a[1] + b.b[1]) / 2);
+        m4.compose(ps, q, sc);
+        inst.setMatrixAt(i, m4);
+      });
+      inst.castShadow = true;
+      grp.add(inst);
+    }
+    // taxiway edge lights (blue) and runway approach lights (white): points, so they cost almost nothing
+    const dark = this.themeName !== 'light';
+    const edge = [];
+    for (const ch of groups.twyChains) {
+      const pts = simplify(ch.pts, 3);
+      let carry = 0;
+      for (let i = 1; i < pts.length; i += 1) {
+        const dx = pts[i][0] - pts[i - 1][0]; const dy = pts[i][1] - pts[i - 1][1];
+        const len = Math.hypot(dx, dy) || 1;
+        for (let s0 = carry; s0 < len; s0 += 30) {
+          for (const o of [11.8, -11.8]) edge.push(pts[i - 1][0] + (dx / len) * s0 - (dy / len) * o, 0.4, -(pts[i - 1][1] + (dy / len) * s0 + (dx / len) * o));
+          carry = s0 + 30 - len;
+        }
+      }
+    }
+    if (edge.length) {
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(edge, 3));
+      grp.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x4aa8ff, size: dark ? 2.6 : 1.4, sizeAttenuation: false, transparent: true, opacity: dark ? 1 : 0.5, toneMapped: false })));
+    }
+    const appr = [];
+    for (const r of runways) {
+      const len = Math.hypot(r.b[0] - r.a[0], r.b[1] - r.a[1]);
+      const d = r.dir || [(r.b[0] - r.a[0]) / len, (r.b[1] - r.a[1]) / len];
+      for (const [p0, sgn] of [[r.a, -1], [r.b, 1]]) {
+        for (let s0 = 30; s0 <= 720; s0 += 30) {
+          const base = [p0[0] + d[0] * s0 * sgn, p0[1] + d[1] * s0 * sgn];
+          appr.push(base[0], 1.2, -base[1]);
+          if (s0 % 150 === 0) for (const o of [-9, -6, -3, 3, 6, 9]) appr.push(base[0] - d[1] * o, 1.2, -(base[1] + d[0] * o));
+        }
+      }
+    }
+    if (appr.length) {
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(appr, 3));
+      grp.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0xfff6dd, size: dark ? 3.2 : 1.8, sizeAttenuation: false, transparent: true, opacity: dark ? 1 : 0.6, toneMapped: false })));
+    }
   }
 
   // looking from the tower at the middle of the runways; the orbit around the airport
@@ -579,7 +831,7 @@ export class Scene3D {
     for (const ac of world.ac) {
       seen.add(ac.id);
       let m = this.models.get(ac.id);
-      if (!m) { m = makeAircraft(ac); this.models.set(ac.id, m); this.scene.add(m); }
+      if (!m) { m = makeAircraft(ac, this.high ? this.pack : null); this.models.set(ac.id, m); this.scene.add(m); }
       const y = (ac.alt || 0) * FT;
       m.position.set(ac.p[0], y, -ac.p[1]);
       m.rotation.y = (90 - ac.hdg) * DEG;
@@ -605,8 +857,31 @@ export class Scene3D {
     }
 
     this.placeCamera(world, selectedId);
+    if (this.high) this.followLight();
     this.gl.render(this.scene, this.camera);
     this.drawTags(world, selectedId, now);
+  }
+
+  // the shadow map covers the part of the airport being looked at, so it stays sharp
+  followLight() {
+    const cam = this.camera;
+    if (this.sky) this.sky.position.copy(cam.position);
+    let target; let half;
+    if (this.mode === 'tower') {
+      const dir = new THREE.Vector3(); cam.getWorldDirection(dir);
+      const reach = Math.min(900, Math.max(250, this.look.fov * 22));
+      target = cam.position.clone().addScaledVector(dir, reach); target.y = 0; half = Math.max(250, reach * 0.9);
+    } else {
+      target = this.orbit.target.clone(); target.y = 0; half = Math.max(120, Math.min(1800, this.orbit.d * 0.7));
+    }
+    const sc = this.sun.shadow.camera;
+    if (Math.abs(sc.right - half) > 1) { sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half; sc.near = 50; sc.far = 9000; sc.updateProjectionMatrix(); }
+    // snap to the shadow texels so shadows do not shimmer as the camera moves
+    const step = (half * 2) / this.sun.shadow.mapSize.x;
+    target.x = Math.round(target.x / step) * step; target.z = Math.round(target.z / step) * step;
+    this.sun.target.position.copy(target);
+    this.sun.position.set(target.x - 3000, 5200, target.z + 2000);
+    this.sun.target.updateMatrixWorld();
   }
 
   // HTML callsign tags over each aircraft

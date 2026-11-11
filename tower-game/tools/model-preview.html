@@ -1,0 +1,20 @@
+<!doctype html><meta charset="utf-8"><title>model preview</title>
+<style>body{margin:0;background:#789}canvas{display:block}</style>
+<script type="module">
+// Dev tool: ?m=A320 draws a model beside axes and prints its bounding box (node tools/model-preview.mjs)
+import * as THREE from '../js/vendor/three.module.min.js';
+import { GLTFLoader } from '../js/vendor/GLTFLoader.js';
+const q = new URLSearchParams(location.search);
+const gl = new THREE.WebGLRenderer({ antialias: true }); gl.setSize(900, 600); document.body.append(gl.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x8aa0b8);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x556644, 1.6)); const sun = new THREE.DirectionalLight(0xffffff, 2); sun.position.set(30, 60, 40); scene.add(sun);
+scene.add(new THREE.AxesHelper(40)); // x red, y green, z blue
+const gltf = await new GLTFLoader().loadAsync(`../assets/models/${q.get('m') || 'A320'}.glb`);
+scene.add(gltf.scene);
+const box = new THREE.Box3().setFromObject(gltf.scene); const size = box.getSize(new THREE.Vector3()); const c = box.getCenter(new THREE.Vector3());
+window.info = { size: size.toArray(), center: c.toArray(), min: box.min.toArray(), max: box.max.toArray() };
+const cam = new THREE.PerspectiveCamera(40, 1.5, 0.1, 2000); const d = Math.max(size.x, size.y, size.z) * 1.6;
+const v = q.get('v') || 'iso';
+cam.position.copy(v === 'top' ? c.clone().add(new THREE.Vector3(0, d, 0.01)) : v === 'side' ? c.clone().add(new THREE.Vector3(0, 0, d)) : c.clone().add(new THREE.Vector3(d * 0.7, d * 0.5, d * 0.7)));
+cam.lookAt(c); gl.render(scene, cam); window.done = true;
+</script>

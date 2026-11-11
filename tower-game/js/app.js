@@ -8,6 +8,7 @@ import { nearestTaxiway, taxiwayNames } from './layout.js';
 import { Speaker } from './lib/speech.js';
 import { AiRecognizer, MODEL as AI_MODEL, aiModelCached, aiSupport, deleteAiModel } from './lib/whisper.js';
 import { correctTranscript } from './lib/asr-correct.js';
+import { qualityFor } from './lib/models.js';
 import { deviceClass, drawInterval as pickInterval, profileFor } from './lib/perf.js';
 import { MODELS, NeuralVoices, cachedModels, deleteVoices, modelsFor } from './lib/neural.js';
 import { Listener, voiceSupport } from './lib/voice.js';
@@ -29,7 +30,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(`tower.${k}`, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
-const settings = { effects: 'auto', voiceQuality: 'best', tts: true, performance: 'auto', radioFx: true, pacing: true, accents: true, builtinVoices: false, aiVoice: !!window.towerDesktop, autoRunways: false, events: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
+const settings = { effects: 'auto', voiceQuality: 'best', tts: true, performance: 'auto', quality3d: 'auto', radioFx: true, pacing: true, accents: true, builtinVoices: false, aiVoice: !!window.towerDesktop, autoRunways: false, events: true, rate: 1.15, lang: 'en-US', airport: '', traffic: 'normal', liveWeather: true, ...store.get('settings', {}) };
 const saveSettings = () => store.set('settings', settings);
 // voices vary per aircraft; the Speaker reads these keys
 const speakerSettings = { efficient: settings.voiceQuality === 'efficient', tts: settings.tts, radioFx: settings.radioFx, pacing: settings.pacing, accents: settings.accents, builtinVoices: settings.builtinVoices, rate: settings.rate, pitch: 1, varyVoices: true, voiceURI: '' };
@@ -368,7 +369,7 @@ async function setView(view) {
   if (view !== 'map' && !game.scene3d) {
     try {
       const { Scene3D } = await import('./scene3d.js');
-      game.scene3d = new Scene3D($('.map-wrap'), { antialias: activeProfile().antialias });
+      game.scene3d = new Scene3D($('.map-wrap'), { antialias: activeProfile().antialias || quality3d() === 'high', quality: quality3d() });
       syncPerformance();
       game.scene3d.onTap = (q) => {
         if (!game.world) return;
@@ -1018,6 +1019,8 @@ const activeProfile = () => profileFor(settings.performance || 'auto', device);
 // you pan or zoom every frame is drawn); a touch device keeps its own pacing; a struggling device is slowed further.
 const drawInterval = () => pickInterval({ profile: activeProfile(), coarse: COARSE, view: game.view, speed: game.speed, forced: perf.minInterval });
 const PANEL_MS = () => activeProfile().panelMs;
+// 3D quality: Automatic is High in the Mac app (real aircraft models, shadows, sky, finer airport) and Standard in a browser
+const quality3d = () => qualityFor(settings.quality3d || 'auto', { desktop: !!window.towerDesktop, device });
 // the picture's pixel budget and sharpness, from the profile (and from what the watcher has had to take away)
 function syncPerformance() {
   const p = activeProfile();
@@ -1026,8 +1029,9 @@ function syncPerformance() {
   renderer.pixelBudget = p.budget2d;
   renderer.resize();
   if (game.scene3d) {
-    game.scene3d.maxDpr = Math.min(COARSE ? game.scene3d.maxDpr || 1.25 : Math.min(p.maxDpr, 1.5), cap);
-    game.scene3d.pixelBudget = p.budget3d;
+    const high = quality3d() === 'high' && !COARSE; // a Mac in high quality draws the 3D view at the screen's own sharpness
+    game.scene3d.maxDpr = Math.min(COARSE ? game.scene3d.maxDpr || 1.25 : Math.min(high ? 2 : p.maxDpr, high ? 2 : 1.5), cap);
+    game.scene3d.pixelBudget = high ? Math.max(p.budget3d, 9e6) : p.budget3d;
     game.scene3d.resize();
   }
 }
@@ -1075,6 +1079,25 @@ $('#perfmode').addEventListener('click', (e) => {
   lastSig = ''; // draw again now
 });
 applyPerformanceSetting();
+
+function applyQualitySetting() {
+  const pick = settings.quality3d || 'auto';
+  const q = quality3d();
+  $$('#quality3d button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.q3 === pick)));
+  $('#q3-note').textContent = (pick === 'auto' ? `Automatic: ${q === 'high' ? 'High' : 'Standard'} on this device. ` : '')
+    + (q === 'high' ? 'High: real airliner models, soft shadows, sky, glass terminals, jet bridges and lights. Needs a good graphics chip.' : 'Standard: simple aircraft shapes and a light airport, easy on the battery.');
+  game.scene3d?.setQuality(q);
+  syncPerformance();
+}
+$('#quality3d').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-q3]');
+  if (!b) return;
+  settings.quality3d = b.dataset.q3;
+  saveSettings();
+  applyQualitySetting();
+  lastSig = '';
+});
+applyQualitySetting();
 
 // the screen's frame rate over the last second or two; if it is low while playing, do less
 const deltas = [];
