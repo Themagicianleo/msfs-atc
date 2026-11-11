@@ -20,7 +20,7 @@ let win = null;
 function createWindow() {
   win = new BrowserWindow({
     width: 1440, height: 900, minWidth: 820, minHeight: 600, show: false, backgroundColor: '#0b0b0d', title: 'Tower Controller',
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, spellcheck: false, backgroundThrottling: false },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, spellcheck: false, backgroundThrottling: true },
   });
   win.once('ready-to-show', () => win.show());
   win.loadURL(`${ORIGIN}/index.html`);

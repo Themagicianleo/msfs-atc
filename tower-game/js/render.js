@@ -3,6 +3,7 @@
 import { M_PER_NM, add, dist, fromHeading, mul, perp, sub, norm } from './geo.js';
 import { endGeometry } from './layout.js';
 import { destinationPoint, taxiDestination } from './world.js';
+import { pixelRatio } from './lib/perf.js';
 
 // radar-style (dark) and airport-diagram style ("chart") colours
 const DARK = {
@@ -101,8 +102,8 @@ export class Renderer {
 
   // maxDpr: how many pixels per screen point at most (2 is sharp; less is faster)
   resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr || 2);
     const r = this.cv.getBoundingClientRect();
+    const dpr = pixelRatio({ devicePixelRatio: window.devicePixelRatio, maxDpr: this.maxDpr, cssW: r.width, cssH: r.height, budget: this.pixelBudget });
     this.w = r.width;
     this.h = r.height;
     this.cv.width = Math.round(r.width * dpr);
