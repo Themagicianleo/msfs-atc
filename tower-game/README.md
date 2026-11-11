@@ -162,6 +162,20 @@ lets you pick them:
 
   **Fit** resets the camera. You can select aircraft by tapping them in every view.
 
+### 3D quality (Settings > 3D quality)
+
+Automatic is **High** in the Mac app and **Standard** in a browser (and on a modest device). High adds, in the 3D and tower views:
+
+- real airliner models (A320, A350, A380, B737, B787 shapes, each scaled to the type's real length; a type with no close match, such as a turboprop, keeps the plain shape),
+- soft sun shadows that follow the part of the airport you are looking at,
+- a sky dome, film-like colour, mottled grass,
+- glass-band terminals with lit windows at night, roofs, buildings of different heights, jet bridges on the gates,
+- taxiway edge lights and runway approach lights.
+
+Models: [amvlab/aircraft-models](https://github.com/amvlab/aircraft-models), **CC BY 4.0** (`assets/models/LICENSE-amvlab.txt`), the logo-free variants, unchanged apart from being scaled when loaded. They are only fetched when High is on. Standard looks and costs what it did before.
+
+`node tools/shot3d.mjs ZBAD high orbit out.png dark` takes a picture of the 3D view; `node tools/model-preview.mjs A320 top out.png` shows one model and its size.
+
 ### 3D views
 
 The 3D views use [three.js](https://threejs.org/) (MIT licence, included as `js/vendor/`). It loads only

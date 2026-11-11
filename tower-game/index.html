@@ -180,6 +180,12 @@
             </span>
             <p id="perf-note" class="muted small"></p>
           </div>
+          <div class="field"><span class="label">3D quality</span>
+            <span class="seg" id="quality3d" role="group" aria-label="3D quality">
+              <button type="button" data-q3="auto" aria-pressed="true">Automatic</button><button type="button" data-q3="standard" aria-pressed="false">Standard</button><button type="button" data-q3="high" aria-pressed="false">High</button>
+            </span>
+            <p id="q3-note" class="muted small"></p>
+          </div>
           <div class="field"><span class="label">Visual effects</span>
             <span class="seg" id="effects" role="group" aria-label="Visual effects">
               <button type="button" data-fx="auto" aria-pressed="true">Automatic</button><button type="button" data-fx="fast" aria-pressed="false">Fast</button><button type="button" data-fx="full" aria-pressed="false">Full</button>
@@ -195,6 +201,7 @@
           <div class="field"><span class="label">Performance <button id="perf-copy" class="btn btn-small" type="button">Copy</button></span>
             <pre id="perf-report" class="perf muted small">Open this section while playing to see it.</pre>
             <p id="version" class="muted small"></p>
+            <p class="muted small">Airliner models in High 3D quality: <a href="https://github.com/amvlab/aircraft-models" target="_blank" rel="noopener">amvlab 3d Aircraft Models</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, used as published (scaled to each type's real length). 3D engine: three.js (MIT).</p>
           </div>
           <label class="check"><input type="checkbox" id="set-events" checked> Real-life events: wind shifts, pilots going around, priority arrivals, aircraft not ready</label>
           <label class="check"><input type="checkbox" id="set-askrwy" checked> Ask which runways to use when a shift starts</label>
