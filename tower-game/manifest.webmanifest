@@ -1,6 +1,6 @@
 {
-  "name": "Tower Controller",
-  "short_name": "Tower",
+  "name": "Clear to Land",
+  "short_name": "Clear to Land",
   "description": "Be the tower controller at a real airport, with voice commands.",
   "start_url": "./",
   "scope": "./",

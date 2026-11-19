@@ -1,4 +1,4 @@
-/* Tower Controller layout, on top of efb-glass.css (the EFB's design language). */
+/* Clear to Land layout, on top of efb-glass.css (the EFB's design language). */
 
 /* aircraft colours, the same on the map, in 3D, in the lists and the tags: arrivals blue, departures magenta */
 :root { --arr: #0a6cff; --dep: #e0007a; }
