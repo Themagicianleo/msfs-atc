@@ -1,4 +1,4 @@
-// Tower Controller: the game page. Wires the simulation, the map, the radio
+// Clear to Land: the game page. Wires the simulation, the map, the radio
 // log, speech output, push-to-talk voice input, typing and buttons.
 // A static site: everything it needs is in this folder.
 
