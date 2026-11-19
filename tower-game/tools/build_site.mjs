@@ -16,6 +16,7 @@ export function buildSite(out) {
   mkdirSync(out, { recursive: true });
   for (const name of readdirSync(ROOT)) {
     if (SKIP.has(name)) continue;
+    if (resolve(join(ROOT, name)) === resolve(out)) continue; // output folder inside the project (Vercel: dist)
     cpSync(join(ROOT, name), join(out, name), { recursive: true });
   }
   // raw OpenStreetMap extracts are only needed to build data/hq
